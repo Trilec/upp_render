@@ -1,0 +1,8 @@
+uses
+	Core,
+	Draw,
+	RenderCore;
+
+file
+	RenderCanvas.h,
+	RenderCanvas.cpp;

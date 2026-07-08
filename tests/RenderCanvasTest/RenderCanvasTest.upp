@@ -1,0 +1,13 @@
+uses
+	Core,
+	Draw,
+	Painter,
+	RenderCore,
+	RenderCanvas,
+	RenderSoftware;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";

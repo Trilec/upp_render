@@ -1,0 +1,10 @@
+uses
+	Core,
+	Draw,
+	Painter,
+	RenderCore,
+	RenderCanvas;
+
+file
+	RenderSoftware.h,
+	RenderSoftware.cpp;

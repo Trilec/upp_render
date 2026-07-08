@@ -1,0 +1,15 @@
+uses
+	Core,
+	Draw,
+	CtrlCore,
+	CtrlLib,
+	Painter,
+	RenderCore,
+	RenderCanvas,
+	RenderSoftware;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

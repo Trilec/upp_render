@@ -1,0 +1,7 @@
+uses
+	Core,
+	Draw;
+
+file
+	RenderCore.h,
+	RenderCore.cpp;
