@@ -1,0 +1,1864 @@
+﻿diff --git a/.gitignore b/.gitignore
+index 4f8e78d..7981666 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -40,8 +40,7 @@
+ *.app
+ 
+ # Build directories
+-build/
+-build/
++/build/
+ build-*/
+ 
+ # CMake generated files
+@@ -68,4 +67,3 @@ vcpkg_installed/
+ Testing/
+ .cache/
+ /upp_guides
+-
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..b631832
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,36 @@
++# upp_render
++
++`upp_render` is intended to become the rendering layer for Ultimate++.
++This repository is currently in the Stage 1 foundation phase.
++
++The first planned GPU backend is Vulkan, but this stage is backend-neutral.
++It establishes value types, display-list recording, deterministic inspection,
++software replay, tests, and a visual demo before any GPU API is introduced.
++
++## Current packages
++
++- `render/RenderCore`
++- `render/RenderCanvas`
++- `render/RenderSoftware`
++- `examples/DisplayListDemo`
++- `tests/RenderCanvasTest`
++
++## Build
++
++Build the packages in the Windows `CLANGx64` configuration using TheIDE.
++The expected outputs are:
++
++- `build/RenderCanvasTest.exe`
++- `build/DisplayListDemo.exe`
++
++## Run
++
++Run the test and demo executables after building.
++
++## Current limitations
++
++- no Vulkan backend yet
++- no other GPU backend yet
++- no U++ control integration yet
++- no text, image, gradient, shadow, or shader pipeline yet
++- no speculative backend packages are present
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index c4e62ba..1eee47d 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -1,615 +1,99 @@
+ # Architecture
+ 
+-`upp_render` is layered to keep upstream validation, application-facing APIs, testing, and diagnostics separate.
++## Stage 1 Goal
+ 
+-# upp_render Project Plan
++Stage 1 proves the backend-neutral rendering foundation before any GPU backend.
++It focuses on recording, inspection, deterministic replay, and a software
++reference path.
+ 
+-**Status:** Initial architecture plan
+-**Repository:** `Trilec/upp_render`
+-**First platform:** Windows 11, CLANGx64
+-**First GPU backend:** Vulkan
+-**Initial Vulkan baseline:** Vulkan 1.3
+-**Project manager and publisher:** Repository owner
+-**Technical supervisor:** ChatGPT
+-**Initial implementer:** Gary, intern programmer
+-
+----
+-
+-## 1. Project purpose
+-
+-`upp_render` will provide a modern rendering architecture for Ultimate++ while preserving the existing U++ control, layout, input, event and theming systems.
+-
+-The intended pipeline is:
++## Pipeline
+ 
+ ```text
+-Ctrl::Paint
+-    Γåô
+-UiPaintContext
++Drawing caller
+     Γåô
+ UiCanvas
+     Γåô
+-UiDisplayList
+-    Γåô
+-UiRenderer2D
++UiDisplayListBuilder
+     Γåô
+-GpuRhi
++UiDisplayList
+     Γåô
+-Vulkan / Metal / WebGPU / OpenGL
++SoftwareUiRenderer
+ ```
+ 
+-Existing U++ controls should not need to understand Vulkan or another native graphics API.
+-
+-The existing `Draw` and software rendering paths will remain useful for:
+-
+-* compatibility;
+-* printing;
+-* image generation;
+-* reference rendering;
+-* unsupported hardware;
+-* testing and diagnostics.
+-
+-The GPU renderer is an additional modern rendering path, not an immediate deletion of the existing U++ rendering system.
+-
+----
+-
+-## 2. Project roles
+-
+-### Project manager and publisher
+-
+-The manager:
+-
+-* approves scope and architectural direction;
+-* decides when work is published;
+-* owns repository releases and public communication;
+-* may assign additional reviewers or agents;
+-* has final authority over changes.
+-
+-### Technical supervisor
+-
+-The supervisor:
+-
+-* maintains the architecture and roadmap;
+-* writes implementation tasks;
+-* reviews GaryΓÇÖs work;
+-* checks tests, documentation and architecture boundaries;
+-* accepts, rejects or returns work for correction;
+-* prepares the next task after acceptance.
+-
+-### Gary ΓÇö intern programmer
+-
+-Gary:
+-
+-* implements only the assigned task;
+-* works from the written specification;
+-* reports uncertainties rather than inventing architecture;
+-* builds and tests locally;
+-* may make local commits;
+-* must not push, publish, merge, tag or create releases;
+-* supplies a patch, changed files and validation report to the manager.
+-
+-### Additional programmers or agents
+-
+-Additional contributors may review or implement isolated tasks, but they must follow the same architecture and task boundaries. Architectural changes require manager and supervisor approval.
+-
+----
+-
+-## 3. Architectural rules
+-
+-### 3.1 Backend-neutral public API
+-
+-No Vulkan, Metal, WebGPU, OpenGL or native platform type may appear in:
+-
+-* `RenderCore`;
+-* `RenderCanvas`;
+-* `Render2D`;
+-* U++ control APIs;
+-* public display-list commands.
+-
+-Native API types remain inside their backend package.
+-
+-### 3.2 Recorded drawing
+-
+-Controls record drawing operations into an immutable `UiDisplayList`.
+-
+-A display list must be:
+-
+-* deterministic;
+-* replayable;
+-* inspectable in tests;
+-* independent of the active GPU backend;
+-* immutable once recording is finished.
+-
+-### 3.3 Separate high-level and low-level layers
+-
+-`UiCanvas` describes 2D drawing intent.
+-
+-`GpuRhi` describes low-level GPU resources and commands.
+-
+-These are deliberately separate. A button should request a rounded rectangle and text; it should not create pipelines, descriptors or Vulkan command buffers.
+-
+-### 3.4 Resource ownership
+-
+-GPU resources will use explicit handles and well-defined ownership.
+-
+-The design must account for:
+-
+-* resource creation and destruction;
+-* resources still being used by queued GPU work;
+-* deferred destruction;
+-* device loss;
+-* surface destruction;
+-* swapchain recreation;
+-* multiple top-level windows.
+-
+-### 3.5 One renderer, multiple surfaces
+-
+-The expected model is:
+-
+-```text
+-GpuInstance
+-    ΓööΓöÇΓöÇ GpuDevice
+-          Γö£ΓöÇΓöÇ GpuSurface ΓÇö window 1
+-          Γö£ΓöÇΓöÇ GpuSurface ΓÇö window 2
+-          ΓööΓöÇΓöÇ OffscreenRenderTarget
+-```
+-
+-There should normally be one selected GPU device for the application and one surface/swapchain for each GPU-rendered top-level window.
+-
+-Ordinary child controls do not receive separate swapchains.
+-
+-### 3.6 Capability-based features
+-
+-Backends expose capabilities rather than pretending every API and GPU behaves identically.
+-
+-Examples include:
+-
+-* timestamp queries;
+-* compute support;
+-* texture formats;
+-* maximum texture size;
+-* multisampling;
+-* storage images;
+-* descriptor limits;
+-* optional Vulkan 1.4 features.
+-
+-Higher layers must test capabilities before using optional functionality.
+-
+-### 3.7 Predictable shaders
+-
+-Shaders will be compiled offline during development or packaging.
+-
+-The initial path will be:
++The future GPU path is intentionally separate:
+ 
+ ```text
+-Shader source
++UiDisplayList
+     Γåô
+-Offline compiler
++UiRenderer2D
+     Γåô
+-SPIR-V and reflection metadata
++GpuRhi
+     Γåô
+-Packaged shader assets
+-```
+-
+-Runtime shader compilation is not part of the normal rendering path.
+-
+-The first implementation may use GLSL and `glslc`. Slang may be evaluated later, but it must not become an early dependency before the basic architecture is proven.
+-
+-### 3.8 Correct colour and alpha handling
+-
+-The renderer must define and test:
+-
+-* premultiplied alpha;
+-* linear versus sRGB operations;
+-* texture colour-space metadata;
+-* blending behaviour;
+-* transparent window and layer behaviour.
+-
+-These rules must not be left to accidental backend defaults.
+-
+----
+-
+-## 4. Repository structure
+-
+-The anticipated package structure is:
+-
+-```text
+-README.md
+-docs/
+-    PROJECT_PLAN.md
+-    ARCHITECTURE.md
+-    ROADMAP.md
+-    decisions/
+-    tasks/
+-
+-RenderCore/
+-RenderCanvas/
+-RenderSoftware/
+-RenderRhi/
+-RenderNull/
+-RenderVulkan/
+-Render2D/
+-RenderUpp/
+-RenderShaders/
+-
+-examples/
+-    DisplayListDemo/
+-    VulkanSurfaceDemo/
+-    Render2DDemo/
+-    UppRenderDemo/
+-
+-tests/
+-    RenderCanvasTest/
+-    RenderRhiTest/
+-    RenderVulkanTest/
+-    Render2DGoldenTest/
+-
+-thirdparty/
+-```
+-
+-Packages will be added only when their stage begins. Empty speculative packages should not be generated merely to make the repository look busy.
+-
+----
+-
+-## 5. Development stages
+-
+-## Stage 1 ΓÇö Rendering foundation
+-
+-This stage contains no Vulkan implementation.
+-
+-Its purpose is to prove the high-level architecture before committing to a native backend.
+-
+-Deliverables:
+-
+-* `RenderCore`;
+-* `RenderCanvas`;
+-* `RenderSoftware`;
+-* immutable `UiDisplayList`;
+-* recording `UiCanvas`;
+-* deterministic display-list dump;
+-* software reference replay;
+-* unit tests;
+-* small visual demonstration;
+-* initial architecture documentation.
+-
+-Exit criteria:
+-
+-* display lists record and replay correctly;
+-* state, clipping and transforms are tested;
+-* the software reference image is stable;
+-* no native graphics API leaks into the interfaces;
+-* all packages compile under CLANGx64.
+-
+-## Stage 2 ΓÇö RHI contracts and Null backend
+-
+-Define the narrow GPU abstraction without implementing Vulkan details in higher layers.
+-
+-Initial concepts:
+-
+-* adapter;
+-* device;
+-* queue;
+-* surface;
+-* swapchain;
+-* buffer;
+-* texture;
+-* sampler;
+-* shader;
+-* graphics pipeline;
+-* compute pipeline;
+-* command encoder;
+-* render pass;
+-* resource upload;
+-* synchronization token;
+-* capabilities.
+-
+-`RenderNull` will validate command ordering and resource lifetime without requiring a GPU.
+-
+-Exit criteria:
+-
+-* invalid resource usage is detected;
+-* command sequences can be tested headlessly;
+-* no Vulkan types appear in RHI-facing clients;
+-* the RHI remains intentionally smaller than Vulkan.
+-
+-## Stage 3 ΓÇö Vulkan backend bootstrap
+-
+-This is the first GPU implementation stage.
+-
+-Deliverables:
+-
+-* Vulkan instance and validation setup;
+-* physical-device enumeration and selection;
+-* logical device and queue creation;
+-* Windows surface creation;
+-* swapchain creation and recreation;
+-* resize, minimise and restoration handling;
+-* frames in flight;
+-* command pools and command buffers;
+-* resource upload path;
+-* deferred resource destruction;
+-* Dynamic Rendering;
+-* Synchronization2;
+-* debug names and debug markers;
+-* pipeline cache support;
+-* GPU timestamps where available;
+-* clean shutdown;
+-* basic offscreen target;
+-* validation-clean clear, rectangle and textured-quad demonstrations.
+-
+-Rules:
+-
+-* no `vkDeviceWaitIdle()` during ordinary frame rendering;
+-* no per-frame recreation of stable resources;
+-* no CPU framebuffer readback for normal presentation;
+-* swapchain out-of-date and surface-lost states must be handled;
+-* validation-layer errors are release blockers during development.
+-
+-## Stage 4 ΓÇö GPU 2D renderer
+-
+-Implement `UiRenderer2D` over `GpuRhi`.
+-
+-Initial functionality:
+-
+-* solid rectangles;
+-* borders;
+-* rounded rectangles;
+-* clipping rectangles;
+-* transforms;
+-* opacity;
+-* images;
+-* batching;
+-* texture atlases;
+-* offscreen layers;
+-* premultiplied-alpha compositing.
+-
+-The first target is a reliable UI renderer, not a general 3D engine.
+-
+-## Stage 5 ΓÇö Text and vector rendering
+-
+-Add:
+-
+-* font shaping integration;
+-* glyph caching;
+-* grayscale glyph atlas;
+-* subpixel positioning where appropriate;
+-* vector paths;
+-* fills and strokes;
+-* gradients;
+-* anti-aliasing;
+-* icons and SVG-derived geometry.
+-
+-Software and GPU outputs should be compared using controlled golden-image tolerances.
+-
+-## Stage 6 ΓÇö U++ integration
+-
+-Add the bridge to existing U++ painting.
+-
+-Expected components:
+-
+-```text
+-UiPaintContext
+-LegacyDrawRecorder
+-RenderUppSurface
+-GpuTopWindow integration
+-Software fallback
++Vulkan / Metal / WebGPU / OpenGL
+ ```
+ 
+-The integration must preserve:
+-
+-* control hierarchy;
+-* layout;
+-* focus;
+-* input;
+-* invalidation;
+-* themes;
+-* existing software rendering;
+-* printing.
++`UiRenderer2D` and `GpuRhi` are not implemented in this task.
+ 
+-Migration will begin with selected controls and demonstrations rather than converting the entire U++ control library at once.
++## Package Responsibilities
+ 
+-## Stage 7 ΓÇö Effects, compute and specialised views
++### RenderCore
+ 
+-After the UI core is stable:
++Small backend-neutral value types shared by the rendering packages.
++It currently carries `Rgba8`, `Transform2D`, and `RoundedRect`.
+ 
+-* shadows and blur;
+-* image-processing passes;
+-* colour transforms;
+-* playback surfaces;
+-* waveform and scope rendering;
+-* custom GPU views;
+-* optional compute operations.
++### RenderCanvas
+ 
+-Compute is for operations that benefit from it. It should not be used simply because the GPU has a compute queue and looks lonely.
++The high-level recording API and immutable display list.
++`UiCanvas` is separate from the future RHI because it describes drawing intent,
++not GPU resources or command buffers.
+ 
+-## Stage 8 ΓÇö Hardening and additional backends
++### RenderSoftware
+ 
+-Hardening includes:
++A correctness-oriented replay path that interprets the display list using U++
++software painting primitives.
+ 
+-* device-loss recovery;
+-* memory-pressure behaviour;
+-* multi-window testing;
+-* high-DPI testing;
+-* Intel, AMD and NVIDIA testing;
+-* performance regression tests;
+-* Linux Vulkan surface support;
+-* packaging and deployment documentation.
++### DisplayListDemo
+ 
+-Later backends may include:
++A plain visual check that shows the direct reference rendering beside the
++recorded-and-replayed result, along with the deterministic display-list dump.
+ 
+-* Metal;
+-* WebGPU;
+-* OpenGL fallback.
++### RenderCanvasTest
+ 
+-They must implement the established RHI rather than altering the public rendering model around their individual preferences.
++Unit tests for ordering, value preservation, validity handling, determinism,
++and software replay.
+ 
+----
++## Why Display Lists Are Immutable
+ 
+-## 6. Testing strategy
+-
+-The project will use several types of tests.
+-
+-### Unit tests
+-
+-Cover:
+-
+-* display-list ordering;
+-* state-stack balance;
+-* clipping;
+-* transforms;
+-* resource-handle validation;
+-* capability handling;
+-* deterministic output;
+-* invalid command sequences.
+-
+-### Reference and golden tests
+-
+-The software renderer provides a reference output.
+-
+-Golden tests will cover:
+-
+-* geometry;
+-* alpha blending;
+-* rounded corners;
+-* text;
+-* clipping;
+-* gradients;
+-* images;
+-* shadows.
+-
+-GPU comparisons will use a documented tolerance where exact pixel equivalence is unrealistic.
+-
+-### Vulkan validation
+-
+-Development builds will use Vulkan validation layers.
+-
+-A test is not considered successful merely because a window appeared. Validation errors, incorrect lifetime handling and synchronization faults must be resolved.
+-
+-### Behaviour tests
+-
+-Test at minimum:
+-
+-* initial window creation;
+-* resize;
+-* minimise and restore;
+-* maximise;
+-* repeated open and close;
+-* multiple windows;
+-* DPI changes;
+-* swapchain recreation;
+-* unavailable optional capabilities;
+-* clean application shutdown.
+-
+-### Performance baselines
+-
+-Before broad integration, record:
+-
+-* frame CPU time;
+-* GPU time where supported;
+-* draw and batch counts;
+-* uploaded bytes;
+-* transient allocations;
+-* texture-atlas use;
+-* resource creation counts.
+-
+-Performance work should be based on measurements rather than graphics folklore.
+-
+----
+-
+-## 7. Dependency policy
+-
+-Third-party dependencies must be:
+-
+-* necessary;
+-* actively maintained;
+-* licence-compatible;
+-* pinned to a known version;
+-* documented;
+-* isolated from public project APIs.
+-
+-Likely Vulkan-stage dependencies may include:
+-
+-* Vulkan headers and loader;
+-* an approved Vulkan memory allocator;
+-* an offline shader compiler;
+-* validation layers for development.
+-
+-No dependency is added during Stage 1 unless it is required for the software reference implementation.
+-
+----
+-
+-## 8. Deliberate exclusions from the first stages
+-
+-The initial project is not intended to become:
+-
+-* a full 3D game engine;
+-* a scene-graph replacement;
+-* a ray-tracing framework;
+-* a general render graph;
+-* a Vulkan tutorial collection;
+-* a wrapper exposing every Vulkan function;
+-* an immediate rewrite of every U++ control.
+-
+-Those areas may be revisited only when the 2D rendering and U++ integration foundations are stable.
+-
+----
+-
+-## 9. Contribution and publication workflow
+-
+-Each implementation task will contain:
+-
+-* task identifier;
+-* objective;
+-* allowed files;
+-* expected interfaces;
+-* exclusions;
+-* build requirements;
+-* tests;
+-* acceptance criteria;
+-* reporting requirements.
+-
+-Gary must work on a local task branch:
+-
+-```text
+-task/NNN-short-description
+-```
++The recording model must remain stable after completion so tests and future
++tools can inspect it without hidden mutation or backend coupling.
+ 
+-Gary must not:
++## Why Deterministic Inspection Is Required
+ 
+-* push to GitHub;
+-* alter the published `main` branch;
+-* merge branches;
+-* create tags or releases;
+-* close tasks;
+-* modify another repository unless explicitly instructed.
++Deterministic dumps make it possible to compare recordings, diagnose regressions,
++and create stable test expectations without relying on pointer values or runtime
++addresses.
+ 
+-At task completion Gary supplies:
++## Why The Software Renderer Exists
+ 
+-* local branch name;
+-* local commit hash or hashes;
+-* complete patch against `main`;
+-* list of changed files;
+-* build commands used;
+-* test results;
+-* screenshots where applicable;
+-* known limitations;
+-* questions or recommended follow-up work.
++The software renderer is the reference implementation for correctness. It lets
++the project validate recording semantics, replay order, clipping, transforms,
++and state restoration before a GPU backend exists.
+ 
+-The supervisor reviews the result. The manager alone decides whether and how it is published.
++## Deferred Features
+ 
+----
++This task deliberately defers:
+ 
+-## 10. Definition of done
++- Vulkan and all other GPU backends
++- text rendering
++- images and textures
++- gradients
++- shadows
++- paths beyond simple rectangle and rounded-rectangle primitives
++- U++ control integration
++- speculative backend packages
+ 
+-A task is complete only when:
++## Expected Next Stage
+ 
+-* its stated scope is implemented;
+-* affected packages build under CLANGx64;
+-* required tests pass;
+-* no unapproved dependencies were introduced;
+-* no native backend types leaked across architecture boundaries;
+-* documentation matches the implementation;
+-* temporary files and generated build output are excluded;
+-* validation results are reported honestly;
+-* the completion report is supplied;
+-* the supervisor accepts the work;
+-* the manager approves publication.
++The next architectural stage is the RHI contract layer and a null backend.
++That stage will define GPU-facing abstractions without leaking Vulkan into the
++high-level recording model.
+diff --git a/examples/DisplayListDemo/DisplayListDemo.upp b/examples/DisplayListDemo/DisplayListDemo.upp
+new file mode 100644
+index 0000000..767fb42
+--- /dev/null
++++ b/examples/DisplayListDemo/DisplayListDemo.upp
+@@ -0,0 +1,15 @@
++uses
++	Core,
++	Draw,
++	CtrlCore,
++	CtrlLib,
++	Painter,
++	RenderCore,
++	RenderCanvas,
++	RenderSoftware;
++
++file
++	main.cpp;
++
++mainconfig
++	"" = "GUI";
+diff --git a/examples/DisplayListDemo/main.cpp b/examples/DisplayListDemo/main.cpp
+new file mode 100644
+index 0000000..6f4e250
+--- /dev/null
++++ b/examples/DisplayListDemo/main.cpp
+@@ -0,0 +1,171 @@
++#include <CtrlLib/CtrlLib.h>
++#include <RenderSoftware/RenderSoftware.h>
++
++using namespace Upp;
++
++namespace {
++
++struct DemoScene {
++	Size size = Size(360, 240);
++	String dump;
++	Image direct;
++	Image replayed;
++};
++
++static Rectf FRect(double x, double y, double cx, double cy)
++{
++	return Rectf(x, y, x + cx, y + cy);
++}
++
++static Xform2D ToXform(const Transform2D& m)
++{
++	Xform2D x;
++	x.x = m.x;
++	x.y = m.y;
++	x.t = m.t;
++	return x;
++}
++
++static RGBA MakeRgba(byte r, byte g, byte b, byte a = 255)
++{
++	RGBA c;
++	c.r = r;
++	c.g = g;
++	c.b = b;
++	c.a = a;
++	return c;
++}
++
++static struct RoundedRect MakeRoundedRect(const Rectf& rect, double radius)
++{
++	struct RoundedRect rr(rect, radius);
++	return rr;
++}
++
++static void PaintScene(Painter& p)
++{
++	p.DrawRect(Rect(0, 0, 360, 240), Color(24, 28, 34));
++
++	p.Draw::Clip(Rect(20, 20, 340, 180));
++	p.Transform(ToXform(Transform2D::Translation(24, 20)));
++	p.Rectangle(FRect(0, 0, 160, 100));
++	p.Fill(MakeRgba(40, 70, 120));
++	p.Rectangle(FRect(24, 18, 120, 44));
++	p.Fill(MakeRgba(220, 90, 70, 180));
++	p.RoundedRectangle(FRect(20, 60, 96, 30), 10);
++	p.Fill(MakeRgba(70, 170, 120, 220));
++	p.Begin();
++	p.Transform(ToXform(Transform2D::Scale(1.25, 0.85)));
++	p.RoundedRectangle(FRect(98, 42, 72, 48), 14);
++	p.Fill(MakeRgba(210, 200, 90, 180));
++	p.End();
++	p.Rectangle(FRect(8, 8, 128, 84));
++	p.Stroke(3, MakeRgba(240, 240, 245));
++	p.End();
++
++	p.Rectangle(FRect(214, 28, 88, 88));
++	p.Fill(MakeRgba(90, 130, 240, 140));
++	p.RoundedRectangle(FRect(230, 44, 84, 64), 18);
++	p.Fill(MakeRgba(240, 110, 170, 180));
++}
++
++static void RecordScene(UiCanvas& canvas)
++{
++	canvas.FillRect(FRect(0, 0, 360, 240), Rgba8(24, 28, 34, 255));
++	canvas.Save();
++	canvas.ClipRect(Rectf(20, 20, 340, 180));
++	canvas.ConcatTransform(Transform2D::Translation(24, 20));
++	canvas.FillRect(FRect(0, 0, 160, 100), Rgba8(40, 70, 120, 255));
++	canvas.FillRect(FRect(24, 18, 120, 44), Rgba8(220, 90, 70, 180));
++	canvas.FillRoundedRect(MakeRoundedRect(FRect(20, 60, 96, 30), 10), Rgba8(70, 170, 120, 220));
++	canvas.Save();
++	canvas.ConcatTransform(Transform2D::Scale(1.25, 0.85));
++	canvas.FillRoundedRect(MakeRoundedRect(FRect(98, 42, 72, 48), 14), Rgba8(210, 200, 90, 180));
++	canvas.Restore();
++	canvas.StrokeRect(FRect(8, 8, 128, 84), 3, Rgba8(240, 240, 245, 255));
++	canvas.Restore();
++	canvas.FillRect(FRect(214, 28, 88, 88), Rgba8(90, 130, 240, 140));
++	canvas.FillRoundedRect(MakeRoundedRect(FRect(230, 44, 84, 64), 18), Rgba8(240, 110, 170, 180));
++}
++
++static Image RenderDirect(Size size)
++{
++	ImagePainter p(size);
++	PaintScene(p);
++	return p.GetResult();
++}
++
++static Image RenderRecorded(Size size, String& dump)
++{
++	UiDisplayListBuilder builder;
++	RecordScene(builder);
++	UiDisplayList list;
++	if(!builder.Finish(list))
++		throw Exc(builder.GetError());
++	dump = list.Dump();
++	ImagePainter p(size);
++	p.DrawRect(Rect(0, 0, size.cx, size.cy), Color(24, 28, 34));
++	SoftwareUiRenderer renderer;
++	if(!renderer.Replay(list, p))
++		throw Exc(renderer.GetError());
++	return p.GetResult();
++}
++
++static DemoScene BuildScene()
++{
++	DemoScene s;
++	s.direct = RenderDirect(s.size);
++	s.replayed = RenderRecorded(s.size, s.dump);
++	return s;
++}
++
++class DemoView : public Ctrl {
++public:
++	DemoView() {
++		NoWantFocus();
++		scene_ = BuildScene();
++		Cout() << scene_.dump << EOL;
++	}
++
++	virtual void Paint(Draw& w) override
++	{
++		Rect r = GetSize();
++		w.DrawRect(r, Color(30, 32, 36));
++		Font title = SansSerifZ(DPI(12));
++		Font mono = MonospaceZ(DPI(10));
++
++		w.DrawText(DPI(16), DPI(14), "Direct reference", title, SWhite());
++		w.DrawText(DPI(390), DPI(14), "Recorded and replayed", title, SWhite());
++
++		Rect left(DPI(16), DPI(36), DPI(16) + scene_.size.cx, DPI(36) + scene_.size.cy);
++		Rect right(DPI(390), DPI(36), DPI(390) + scene_.size.cx, DPI(36) + scene_.size.cy);
++		w.DrawRect(left, Color(10, 10, 10));
++		w.DrawRect(right, Color(10, 10, 10));
++		w.DrawImage(left, scene_.direct);
++		w.DrawImage(right, scene_.replayed);
++
++		Rect dump_rc(DPI(16), DPI(300), GetSize().cx - DPI(16), GetSize().cy - DPI(16));
++		w.DrawText(dump_rc.left, dump_rc.top - DPI(6), "Display list dump", title, SWhite());
++		int y = dump_rc.top;
++		for(const String& line : Split(scene_.dump, '\n')) {
++			w.DrawText(dump_rc.left, y, line, mono, Color(180, 220, 255));
++			y += DPI(14);
++		}
++	}
++
++private:
++	DemoScene scene_;
++};
++
++}
++
++GUI_APP_MAIN
++{
++	TopWindow win;
++	win.Title("DisplayListDemo");
++	win.Sizeable().Zoomable();
++	DemoView view;
++	win.Add(view.SizePos());
++	win.SetRect(0, 0, DPI(780), DPI(560));
++	win.Run();
++}
+diff --git a/render/RenderCanvas/RenderCanvas.cpp b/render/RenderCanvas/RenderCanvas.cpp
+new file mode 100644
+index 0000000..3ddcf2b
+--- /dev/null
++++ b/render/RenderCanvas/RenderCanvas.cpp
+@@ -0,0 +1,221 @@
++#include "RenderCanvas.h"
++
++namespace Upp {
++
++static String StableDouble(double value)
++{
++	if(fabs(value) < 0.0000005)
++		return "0";
++
++	String s = FormatDoubleFix(value, 6);
++	int dot = s.Find('.');
++	if(dot >= 0) {
++		while(s.GetCount() > dot + 1 && s[s.GetCount() - 1] == '0')
++			s.Trim(s.GetCount() - 1);
++		if(s.GetCount() > 0 && s[s.GetCount() - 1] == '.')
++			s.Trim(s.GetCount() - 1);
++	}
++	return s;
++}
++
++static String DumpColor(Rgba8 color)
++{
++	return "rgba(" + AsString((int)color.r) + "," + AsString((int)color.g) + "," +
++	       AsString((int)color.b) + "," + AsString((int)color.a) + ")";
++}
++
++static String DumpRect(const Rectf& rect)
++{
++	return StableDouble(rect.left) + " " + StableDouble(rect.top) + " " +
++	       StableDouble(rect.right) + " " + StableDouble(rect.bottom);
++}
++
++static String DumpTransform(const Transform2D& transform)
++{
++	return StableDouble(transform.x.x) + " " + StableDouble(transform.x.y) + " " +
++	       StableDouble(transform.y.x) + " " + StableDouble(transform.y.y) + " " +
++	       StableDouble(transform.t.x) + " " + StableDouble(transform.t.y);
++}
++
++bool UiDisplayOp::operator==(const UiDisplayOp& other) const
++{
++	return type == other.type && rect.left == other.rect.left && rect.top == other.rect.top &&
++	       rect.right == other.rect.right && rect.bottom == other.rect.bottom &&
++	       width == other.width && transform == other.transform && color == other.color &&
++	       rounded == other.rounded;
++}
++
++UiDisplayList::UiDisplayList()
++{
++}
++
++void UiDisplayList::SetValid(Vector<UiDisplayOp>&& source)
++{
++	ops = pick(source);
++	valid = true;
++	error.Clear();
++}
++
++void UiDisplayList::SetInvalid(String message, Vector<UiDisplayOp>&& source)
++{
++	ops = pick(source);
++	valid = false;
++	error = pick(message);
++}
++
++String UiDisplayList::Dump() const
++{
++	String sb;
++	for(int i = 0; i < ops.GetCount(); ++i) {
++		const UiDisplayOp& op = ops[i];
++		sb << i << ' ';
++		switch(op.type) {
++		case UiDisplayOpType::Save:
++			sb << "Save";
++			break;
++		case UiDisplayOpType::Restore:
++			sb << "Restore";
++			break;
++		case UiDisplayOpType::ClipRect:
++			sb << "ClipRect " << DumpRect(op.rect);
++			break;
++		case UiDisplayOpType::ConcatTransform:
++			sb << "ConcatTransform " << DumpTransform(op.transform);
++			break;
++		case UiDisplayOpType::FillRect:
++			sb << "FillRect " << DumpRect(op.rect) << ' ' << DumpColor(op.color);
++			break;
++		case UiDisplayOpType::StrokeRect:
++			sb << "StrokeRect " << DumpRect(op.rect) << ' ' << StableDouble(op.width) << ' '
++			   << DumpColor(op.color);
++			break;
++		case UiDisplayOpType::FillRoundedRect:
++			sb << "FillRoundedRect " << DumpRect(op.rounded.rect) << ' '
++			   << StableDouble(op.rounded.radius) << ' ' << DumpColor(op.color);
++			break;
++		}
++		if(i + 1 < ops.GetCount())
++			sb << '\n';
++	}
++	if(!valid) {
++		if(ops.GetCount())
++			sb << '\n';
++		sb << "INVALID " << error;
++	}
++	return sb;
++}
++
++UiDisplayListBuilder::UiDisplayListBuilder()
++{
++}
++
++void UiDisplayListBuilder::Fail(const String& message)
++{
++	if(error.IsEmpty())
++		error = message;
++	finished = true;
++}
++
++void UiDisplayListBuilder::Append(const UiDisplayOp& op)
++{
++	if(!CanRecord())
++		return;
++	ops.Add(op);
++}
++
++void UiDisplayListBuilder::Save()
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::Save;
++	Append(op);
++	++save_depth;
++}
++
++void UiDisplayListBuilder::Restore()
++{
++	if(!CanRecord())
++		return;
++	if(save_depth <= 0) {
++		Fail("restore without matching save");
++		return;
++	}
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::Restore;
++	Append(op);
++	--save_depth;
++}
++
++void UiDisplayListBuilder::ClipRect(const Rectf& rect)
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::ClipRect;
++	op.rect = rect;
++	Append(op);
++}
++
++void UiDisplayListBuilder::ConcatTransform(const Transform2D& transform)
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::ConcatTransform;
++	op.transform = transform;
++	Append(op);
++}
++
++void UiDisplayListBuilder::FillRect(const Rectf& rect, Rgba8 color)
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::FillRect;
++	op.rect = rect;
++	op.color = color;
++	Append(op);
++}
++
++void UiDisplayListBuilder::StrokeRect(const Rectf& rect, double width, Rgba8 color)
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::StrokeRect;
++	op.rect = rect;
++	op.width = width;
++	op.color = color;
++	Append(op);
++}
++
++void UiDisplayListBuilder::FillRoundedRect(const RoundedRect& rect, Rgba8 color)
++{
++	if(!CanRecord())
++		return;
++	UiDisplayOp op;
++	op.type = UiDisplayOpType::FillRoundedRect;
++	op.rounded = rect;
++	op.color = color;
++	Append(op);
++}
++
++bool UiDisplayListBuilder::Finish(UiDisplayList& out)
++{
++	if(finished && error.IsEmpty() && save_depth == 0) {
++		out.SetInvalid("builder already finished", Vector<UiDisplayOp>());
++		return false;
++	}
++	if(save_depth != 0 && error.IsEmpty())
++		Fail("unbalanced save depth at finish");
++	finished = true;
++	if(error.IsEmpty()) {
++		out.SetValid(pick(ops));
++		return true;
++	}
++	out.SetInvalid(error, pick(ops));
++	return false;
++}
++
++}
+diff --git a/render/RenderCanvas/RenderCanvas.h b/render/RenderCanvas/RenderCanvas.h
+new file mode 100644
+index 0000000..787fdb2
+--- /dev/null
++++ b/render/RenderCanvas/RenderCanvas.h
+@@ -0,0 +1,100 @@
++#pragma once
++
++#include <Core/Core.h>
++#include <RenderCore/RenderCore.h>
++
++namespace Upp {
++
++class UiDisplayList;
++
++// Backend-neutral drawing contract used for recording.
++class UiCanvas {
++public:
++	virtual ~UiCanvas() {}
++
++	virtual void Save() = 0;
++	virtual void Restore() = 0;
++
++	virtual void ClipRect(const Rectf& rect) = 0;
++	virtual void ConcatTransform(const Transform2D& transform) = 0;
++
++	virtual void FillRect(const Rectf& rect, Rgba8 color) = 0;
++	virtual void StrokeRect(const Rectf& rect, double width, Rgba8 color) = 0;
++	virtual void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) = 0;
++};
++
++enum class UiDisplayOpType {
++	Save,
++	Restore,
++	ClipRect,
++	ConcatTransform,
++	FillRect,
++	StrokeRect,
++	FillRoundedRect,
++};
++
++struct UiDisplayOp : Moveable<UiDisplayOp> {
++	UiDisplayOpType type = UiDisplayOpType::Save;
++	Rectf rect = Rectf(0, 0, 0, 0);
++	double width = 0;
++	Transform2D transform;
++	Rgba8 color;
++	struct RoundedRect rounded;
++
++	bool operator==(const UiDisplayOp& other) const;
++	bool operator!=(const UiDisplayOp& other) const { return !(*this == other); }
++};
++
++// Immutable display list produced by the builder.
++class UiDisplayList {
++public:
++	UiDisplayList();
++
++	bool IsValid() const { return valid; }
++	const String& GetError() const { return error; }
++	int GetCount() const { return ops.GetCount(); }
++	const UiDisplayOp& operator[](int i) const { return ops[i]; }
++	String Dump() const;
++
++private:
++	Vector<UiDisplayOp> ops;
++	bool valid = true;
++	String error;
++
++	void SetValid(Vector<UiDisplayOp>&& source);
++	void SetInvalid(String message, Vector<UiDisplayOp>&& source);
++
++	friend class UiDisplayListBuilder;
++	friend class SoftwareUiRenderer;
++};
++
++// Records UiCanvas operations into a display list.
++class UiDisplayListBuilder : public UiCanvas {
++public:
++	UiDisplayListBuilder();
++
++	void Save() override;
++	void Restore() override;
++	void ClipRect(const Rectf& rect) override;
++	void ConcatTransform(const Transform2D& transform) override;
++	void FillRect(const Rectf& rect, Rgba8 color) override;
++	void StrokeRect(const Rectf& rect, double width, Rgba8 color) override;
++	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) override;
++
++	bool Finish(UiDisplayList& out);
++	bool IsFinished() const { return finished; }
++	const String& GetError() const { return error; }
++	int GetSaveDepth() const { return save_depth; }
++
++private:
++	Vector<UiDisplayOp> ops;
++	int save_depth = 0;
++	bool finished = false;
++	String error;
++
++	bool CanRecord() const { return !finished && error.IsEmpty(); }
++	void Fail(const String& message);
++	void Append(const UiDisplayOp& op);
++};
++
++}
+diff --git a/render/RenderCanvas/RenderCanvas.upp b/render/RenderCanvas/RenderCanvas.upp
+new file mode 100644
+index 0000000..44c8825
+--- /dev/null
++++ b/render/RenderCanvas/RenderCanvas.upp
+@@ -0,0 +1,8 @@
++uses
++	Core,
++	Draw,
++	RenderCore;
++
++file
++	RenderCanvas.h,
++	RenderCanvas.cpp;
+diff --git a/render/RenderCore/RenderCore.cpp b/render/RenderCore/RenderCore.cpp
+new file mode 100644
+index 0000000..78fb5a0
+--- /dev/null
++++ b/render/RenderCore/RenderCore.cpp
+@@ -0,0 +1,78 @@
++#include "RenderCore.h"
++
++namespace Upp {
++
++Transform2D::Transform2D()
++{
++	x.x = 1;
++	y.y = 1;
++	x.y = 0;
++	y.x = 0;
++	t.x = 0;
++	t.y = 0;
++}
++
++bool Transform2D::operator==(const Transform2D& other) const
++{
++	return x.x == other.x.x && x.y == other.x.y &&
++	       y.x == other.y.x && y.y == other.y.y &&
++	       t.x == other.t.x && t.y == other.t.y;
++}
++
++Transform2D Transform2D::Identity()
++{
++	return Transform2D();
++}
++
++Transform2D Transform2D::Translation(double dx, double dy)
++{
++	Transform2D m;
++	m.t = Pointf(dx, dy);
++	return m;
++}
++
++Transform2D Transform2D::Scale(double sx, double sy)
++{
++	Transform2D m;
++	m.x.x = sx;
++	m.y.y = sy;
++	return m;
++}
++
++Transform2D Transform2D::Scale(double s)
++{
++	return Scale(s, s);
++}
++
++Transform2D operator*(const Transform2D& a, const Transform2D& b)
++{
++	Transform2D r;
++	r.x.x = a.x.x * b.x.x + a.y.x * b.x.y;
++	r.x.y = a.x.y * b.x.x + a.y.y * b.x.y;
++	r.y.x = a.x.x * b.y.x + a.y.x * b.y.y;
++	r.y.y = a.x.y * b.y.x + a.y.y * b.y.y;
++	r.t.x = a.t.x * b.x.x + a.t.y * b.x.y + b.t.x;
++	r.t.y = a.t.x * b.y.x + a.t.y * b.y.y + b.t.y;
++	return r;
++}
++
++RoundedRect::RoundedRect()
++{
++	rect = Rectf(0, 0, 0, 0);
++	radius = 0;
++}
++
++RoundedRect::RoundedRect(const Rectf& r, double corner_radius)
++{
++	rect = r;
++	radius = corner_radius < 0 ? 0 : corner_radius;
++}
++
++bool RoundedRect::operator==(const RoundedRect& other) const
++{
++	return rect.left == other.rect.left && rect.top == other.rect.top &&
++	       rect.right == other.rect.right && rect.bottom == other.rect.bottom &&
++	       radius == other.radius;
++}
++
++}
+diff --git a/render/RenderCore/RenderCore.h b/render/RenderCore/RenderCore.h
+new file mode 100644
+index 0000000..db358f9
+--- /dev/null
++++ b/render/RenderCore/RenderCore.h
+@@ -0,0 +1,70 @@
++#pragma once
++
++#include <Core/Core.h>
++#include <Draw/Draw.h>
++
++namespace Upp {
++
++// Eight-bit RGBA color with explicit value semantics.
++struct Rgba8 : Moveable<Rgba8> {
++	byte r = 0;
++	byte g = 0;
++	byte b = 0;
++	byte a = 255;
++
++	Rgba8() = default;
++	explicit Rgba8(byte red, byte green, byte blue, byte alpha = 255)
++		: r(red), g(green), b(blue), a(alpha)
++	{}
++
++	bool operator==(const Rgba8& other) const {
++		return r == other.r && g == other.g && b == other.b && a == other.a;
++	}
++
++	bool operator!=(const Rgba8& other) const {
++		return !(*this == other);
++	}
++
++	Color ToColor() const { RGBA rgba; rgba.r = r; rgba.g = g; rgba.b = b; rgba.a = a; return Color(rgba); }
++	static Rgba8 FromColor(Color c) { RGBA rgba = c; return Rgba8(rgba.r, rgba.g, rgba.b, rgba.a); }
++	static Rgba8 Opaque(byte red, byte green, byte blue) { return Rgba8(red, green, blue, 255); }
++	static Rgba8 Transparent(byte red = 0, byte green = 0, byte blue = 0) { return Rgba8(red, green, blue, 0); }
++};
++
++// 2D affine transform using the same row-vector convention as U++ Painter.
++struct Transform2D : Moveable<Transform2D> {
++	Pointf x;
++	Pointf y;
++	Pointf t;
++
++	Transform2D();
++
++	Pointf TransformPoint(const Pointf& p) const {
++		return Pointf(p.x * x.x + p.y * x.y + t.x,
++		              p.x * y.x + p.y * y.y + t.y);
++	}
++
++	bool operator==(const Transform2D& other) const;
++	bool operator!=(const Transform2D& other) const { return !(*this == other); }
++
++	static Transform2D Identity();
++	static Transform2D Translation(double dx, double dy);
++	static Transform2D Scale(double sx, double sy);
++	static Transform2D Scale(double s);
++};
++
++Transform2D operator*(const Transform2D& a, const Transform2D& b);
++
++// Rectangle bounds plus a uniform corner radius.
++struct RoundedRect : Moveable<struct RoundedRect> {
++	Rectf rect;
++	double radius = 0;
++
++	RoundedRect();
++	explicit RoundedRect(const Rectf& r, double corner_radius);
++
++	bool operator==(const RoundedRect& other) const;
++	bool operator!=(const RoundedRect& other) const { return !(*this == other); }
++};
++
++}
+diff --git a/render/RenderCore/RenderCore.upp b/render/RenderCore/RenderCore.upp
+new file mode 100644
+index 0000000..776ee69
+--- /dev/null
++++ b/render/RenderCore/RenderCore.upp
+@@ -0,0 +1,7 @@
++uses
++	Core,
++	Draw;
++
++file
++	RenderCore.h,
++	RenderCore.cpp;
+diff --git a/render/RenderSoftware/RenderSoftware.cpp b/render/RenderSoftware/RenderSoftware.cpp
+new file mode 100644
+index 0000000..3695020
+--- /dev/null
++++ b/render/RenderSoftware/RenderSoftware.cpp
+@@ -0,0 +1,107 @@
++#include "RenderSoftware.h"
++
++namespace Upp {
++
++static Rect ToRect(const Rectf& r)
++{
++	return Rect((int)r.left, (int)r.top, (int)r.right, (int)r.bottom);
++}
++
++static RGBA ToRgba(const Rgba8& c)
++{
++	RGBA rgba;
++	rgba.r = c.r;
++	rgba.g = c.g;
++	rgba.b = c.b;
++	rgba.a = c.a;
++	return rgba;
++}
++
++static Xform2D ToXform(const Transform2D& m)
++{
++	Xform2D x;
++	x.x = m.x;
++	x.y = m.y;
++	x.t = m.t;
++	return x;
++}
++
++bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
++{
++	error.Clear();
++	if(!list.IsValid()) {
++		error = list.GetError();
++		return false;
++	}
++
++	struct StateGuard {
++		Painter& painter;
++		int& depth;
++		bool active = true;
++		StateGuard(Painter& p, int& d) : painter(p), depth(d) {}
++		~StateGuard() {
++			if(active) {
++				while(depth > 0) {
++					painter.End();
++					--depth;
++				}
++			}
++		}
++	};
++
++	int depth = 0;
++	Vector<int> save_targets;
++	StateGuard guard(painter, depth);
++
++	for(int i = 0; i < list.GetCount(); ++i) {
++		const UiDisplayOp& op = list[i];
++		switch(op.type) {
++		case UiDisplayOpType::Save:
++			save_targets.Add(depth);
++			painter.Begin();
++			++depth;
++			break;
++		case UiDisplayOpType::Restore:
++			if(save_targets.IsEmpty()) {
++				error = "restore without matching save during replay";
++				return false;
++			}
++			{
++				int target = save_targets.Pop();
++				while(depth > target) {
++					painter.End();
++					--depth;
++				}
++			}
++			break;
++		case UiDisplayOpType::ClipRect:
++			painter.Draw::Clip(ToRect(op.rect));
++			++depth;
++			break;
++		case UiDisplayOpType::ConcatTransform:
++			painter.Transform(ToXform(op.transform));
++			break;
++		case UiDisplayOpType::FillRect:
++			painter.DrawRect(ToRect(op.rect), op.color.ToColor());
++			break;
++		case UiDisplayOpType::StrokeRect:
++			painter.Rectangle(op.rect);
++			painter.Stroke(op.width, ToRgba(op.color));
++			break;
++		case UiDisplayOpType::FillRoundedRect:
++			painter.RoundedRectangle(op.rounded.rect, op.rounded.radius);
++			painter.Fill(ToRgba(op.color));
++			break;
++		}
++	}
++
++	if(depth != 0) {
++		error = "replay ended with unbalanced painter state";
++		return false;
++	}
++
++	guard.active = false;
++	return true;
++}
++
++}
+diff --git a/render/RenderSoftware/RenderSoftware.h b/render/RenderSoftware/RenderSoftware.h
+new file mode 100644
+index 0000000..d904743
+--- /dev/null
++++ b/render/RenderSoftware/RenderSoftware.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++#include <Painter/Painter.h>
++#include <RenderCanvas/RenderCanvas.h>
++
++namespace Upp {
++
++// Software reference replay for UiDisplayList.
++class SoftwareUiRenderer {
++public:
++	bool Replay(const UiDisplayList& list, Painter& painter);
++	const String& GetError() const { return error; }
++
++private:
++	String error;
++};
++
++}
+diff --git a/render/RenderSoftware/RenderSoftware.upp b/render/RenderSoftware/RenderSoftware.upp
+new file mode 100644
+index 0000000..327dd4b
+--- /dev/null
++++ b/render/RenderSoftware/RenderSoftware.upp
+@@ -0,0 +1,10 @@
++uses
++	Core,
++	Draw,
++	Painter,
++	RenderCore,
++	RenderCanvas;
++
++file
++	RenderSoftware.h,
++	RenderSoftware.cpp;
+diff --git a/tests/RenderCanvasTest/RenderCanvasTest.upp b/tests/RenderCanvasTest/RenderCanvasTest.upp
+new file mode 100644
+index 0000000..e6e23af
+--- /dev/null
++++ b/tests/RenderCanvasTest/RenderCanvasTest.upp
+@@ -0,0 +1,13 @@
++uses
++	Core,
++	Draw,
++	Painter,
++	RenderCore,
++	RenderCanvas,
++	RenderSoftware;
++
++file
++	main.cpp;
++
++mainconfig
++	"" = "CONSOLE";
+diff --git a/tests/RenderCanvasTest/main.cpp b/tests/RenderCanvasTest/main.cpp
+new file mode 100644
+index 0000000..d7d90a1
+--- /dev/null
++++ b/tests/RenderCanvasTest/main.cpp
+@@ -0,0 +1,230 @@
++#include <Painter/Painter.h>
++#include <RenderSoftware/RenderSoftware.h>
++
++using namespace Upp;
++
++static bool Check(bool cond, const char *msg)
++{
++	if(!cond)
++		Cout() << "FAIL: " << msg << EOL;
++	return cond;
++}
++
++static Rectf FRect(double x, double y, double cx, double cy)
++{
++	return Rectf(x, y, x + cx, y + cy);
++}
++
++static RGBA MakeRgba(byte r, byte g, byte b, byte a = 255)
++{
++	RGBA c;
++	c.r = r;
++	c.g = g;
++	c.b = b;
++	c.a = a;
++	return c;
++}
++
++static struct RoundedRect MakeRoundedRect(const Rectf& rect, double radius)
++{
++	struct RoundedRect rr(rect, radius);
++	return rr;
++}
++
++static void BuildRecordedScene(UiCanvas& c)
++{
++	c.Save();
++	c.ClipRect(Rectf(0, 0, 64, 64));
++	c.ConcatTransform(Transform2D::Translation(4, 5));
++	c.FillRect(FRect(0, 0, 20, 20), Rgba8(10, 20, 30, 40));
++	c.FillRoundedRect(MakeRoundedRect(FRect(6, 7, 8, 9), 3), Rgba8(50, 60, 70, 80));
++	c.StrokeRect(FRect(2, 3, 10, 11), 2.5, Rgba8(90, 100, 110, 120));
++	c.Restore();
++}
++
++static bool TestRecording()
++{
++	UiDisplayListBuilder builder;
++	BuildRecordedScene(builder);
++	UiDisplayList list;
++	if(!Check(builder.Finish(list), "balanced builder should finish")) return false;
++	if(!Check(list.IsValid(), "finished list should be valid")) return false;
++	if(!Check(list.GetCount() == 7, "operation count")) return false;
++	if(!Check(list[0].type == UiDisplayOpType::Save, "save op type")) return false;
++	if(!Check(list[1].type == UiDisplayOpType::ClipRect, "clip op type")) return false;
++	if(!Check(list[2].type == UiDisplayOpType::ConcatTransform, "transform op type")) return false;
++	if(!Check(list[3].type == UiDisplayOpType::FillRect, "fill op type")) return false;
++	if(!Check(list[4].type == UiDisplayOpType::FillRoundedRect, "rounded fill op type")) return false;
++	if(!Check(list[5].type == UiDisplayOpType::StrokeRect, "stroke op type")) return false;
++	if(!Check(list[6].type == UiDisplayOpType::Restore, "restore op type")) return false;
++	if(!Check(list[3].rect.left == 0 && list[3].rect.bottom == 20, "rect values preserved")) return false;
++	if(!Check(list[4].rounded.radius == 3, "rounded radius preserved")) return false;
++	if(!Check(list[5].width == 2.5, "stroke width preserved")) return false;
++	if(!Check(list[3].color.a == 40, "alpha preserved")) return false;
++	String dump = list.Dump();
++	if(!Check(dump.Find("FillRect") >= 0, "dump contains operations")) return false;
++	UiDisplayListBuilder closed;
++	BuildRecordedScene(closed);
++	UiDisplayList closed_list;
++	if(!Check(closed.Finish(closed_list), "closed builder should finish")) return false;
++	String before = closed_list.Dump();
++	closed.Save();
++	closed.FillRect(FRect(9, 9, 9, 9), Rgba8(1, 2, 3, 4));
++	closed.Restore();
++	UiDisplayList ignored;
++	if(!Check(!closed.Finish(ignored), "finished builder must reject further recording")) return false;
++	if(!Check(before == closed_list.Dump(), "completed list must remain immutable")) return false;
++	return true;
++}
++
++static bool TestSaveRestore()
++{
++	UiDisplayListBuilder builder;
++	builder.Restore();
++	UiDisplayList bad;
++	if(!Check(!builder.Finish(bad), "restore underflow should fail")) return false;
++	if(!Check(!bad.IsValid(), "failed builder should not be valid")) return false;
++	if(!Check(!bad.GetError().IsEmpty(), "failed builder should report error")) return false;
++
++	UiDisplayListBuilder nested;
++	nested.Save();
++	nested.Save();
++	nested.FillRect(FRect(0, 0, 1, 1), Rgba8());
++	UiDisplayList unfinished;
++	if(!Check(!nested.Finish(unfinished), "unfinished save depth should fail")) return false;
++	if(!Check(!unfinished.IsValid(), "unfinished list should be invalid")) return false;
++	return true;
++}
++
++static bool TestTransforms()
++{
++	Transform2D id = Transform2D::Identity();
++	Transform2D t = Transform2D::Translation(10, 20);
++	Transform2D s = Transform2D::Scale(2, 3);
++	Pointf p(1, 2);
++	Pointf pi = id.TransformPoint(p);
++	Pointf pt = t.TransformPoint(p);
++	Pointf ps = s.TransformPoint(p);
++	Transform2D ts = s * t;
++	Pointf pts = ts.TransformPoint(p);
++	if(!Check(pi == p, "identity transform")) return false;
++	if(!Check(pt.x == 11 && pt.y == 22, "translation transform")) return false;
++	if(!Check(ps.x == 2 && ps.y == 6, "scale transform")) return false;
++	if(!Check(pts.x == 12 && pts.y == 26, "concatenation order")) return false;
++	return true;
++}
++
++static bool TestDeterminism()
++{
++	UiDisplayListBuilder a;
++	BuildRecordedScene(a);
++	UiDisplayList la;
++	if(!Check(a.Finish(la), "first recording should finish")) return false;
++	UiDisplayListBuilder b;
++	BuildRecordedScene(b);
++	UiDisplayList lb;
++	if(!Check(b.Finish(lb), "second recording should finish")) return false;
++	String da = la.Dump();
++	String db = lb.Dump();
++	if(!Check(da == db, "equivalent dumps should match")) return false;
++	if(!Check(da == la.Dump(), "repeated dump should match")) return false;
++	if(!Check(da.Find("0x") < 0, "dump should not contain pointer-like values")) return false;
++	UiDisplayListBuilder fmt;
++	fmt.ConcatTransform(Transform2D::Translation(1.25, 2.0));
++	UiDisplayList formatted;
++	if(!Check(fmt.Finish(formatted), "format recording should finish")) return false;
++	String fdump = formatted.Dump();
++	if(!Check(fdump.Find("1.25") >= 0, "dump should show trimmed float text")) return false;
++	if(!Check(fdump.Find("1.250000") < 0, "dump should not keep trailing zeros")) return false;
++	return true;
++}
++
++static Xform2D ToXform(const Transform2D& m)
++{
++	Xform2D x;
++	x.x = m.x;
++	x.y = m.y;
++	x.t = m.t;
++	return x;
++}
++
++static Image RenderSceneDirect()
++{
++	ImagePainter p(Size(64, 64));
++	p.DrawRect(Rect(0, 0, 64, 64), Color(0, 0, 0));
++	p.Rectangle(Rectf(0, 0, 64, 64));
++	p.Fill(MakeRgba(0, 0, 0));
++	p.Begin();
++	p.Draw::Clip(Rect(0, 0, 32, 32));
++	p.Rectangle(Rectf(0, 0, 64, 64));
++	p.Fill(MakeRgba(255, 0, 0));
++	p.End();
++	p.Begin();
++	p.Transform(ToXform(Transform2D::Translation(10, 0)));
++	p.DrawRect(Rect(0, 0, 10, 10), Color(0, 255, 0));
++	p.End();
++	return p.GetResult();
++}
++
++static Image RenderSceneRecorded(bool valid)
++{
++	UiDisplayListBuilder builder;
++	if(valid) {
++		builder.FillRect(Rectf(0, 0, 64, 64), Rgba8(0, 0, 0, 255));
++		builder.Save();
++		builder.ClipRect(Rectf(0, 0, 32, 32));
++		builder.FillRect(Rectf(0, 0, 64, 64), Rgba8(255, 0, 0, 255));
++		builder.Restore();
++		builder.Save();
++		builder.ConcatTransform(Transform2D::Translation(10, 0));
++		builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(0, 255, 0, 255));
++		builder.Restore();
++	}
++	else {
++		builder.Restore();
++	}
++	UiDisplayList list;
++	builder.Finish(list);
++	ImagePainter p(Size(64, 64));
++	p.DrawRect(Rect(0, 0, 64, 64), Color(0, 0, 0));
++	SoftwareUiRenderer renderer;
++	if(valid)
++		Check(renderer.Replay(list, p), "valid list should replay");
++	else
++		Check(!renderer.Replay(list, p), "invalid list should reject");
++	return p.GetResult();
++}
++
++static bool TestReplay()
++{
++	Image direct = RenderSceneDirect();
++	Image replayed = RenderSceneRecorded(true);
++	if(!Check(direct[5][5] == MakeRgba(255, 0, 0), "clipped red pixel")) return false;
++	if(!Check(direct[40][40] == MakeRgba(0, 0, 0), "outside clip remains background")) return false;
++	if(!Check(direct[1][1] == MakeRgba(255, 0, 0), "direct clip applies")) return false;
++	if(!(direct[5][15] == MakeRgba(0, 255, 0))) {
++		RGBA px = direct[5][15];
++		Cout() << "translated pixel = " << (int)px.r << ',' << (int)px.g << ',' << (int)px.b << ',' << (int)px.a << EOL;
++		return Check(false, "translated green pixel");
++	}
++	if(!Check(replayed[5][5] == direct[5][5], "replay matches clip pixel")) return false;
++	if(!Check(replayed[5][15] == direct[5][15], "replay matches translated pixel")) return false;
++	Image invalid = RenderSceneRecorded(false);
++	if(!Check(invalid[1][1] == MakeRgba(0, 0, 0), "invalid replay should leave output untouched")) return false;
++	return true;
++}
++
++CONSOLE_APP_MAIN
++{
++	bool ok = true;
++	ok &= TestRecording();
++	ok &= TestSaveRestore();
++	ok &= TestTransforms();
++	ok &= TestDeterminism();
++	ok &= TestReplay();
++	if(!ok) {
++		SetExitCode(1);
++		return;
++	}
++	Cout() << "RenderCanvasTest passed" << EOL;
++}
