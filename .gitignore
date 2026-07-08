@@ -41,7 +41,7 @@
 
 # Build directories
 build/
-Build/
+build/
 build-*/
 
 # CMake generated files
@@ -67,3 +67,5 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+/upp_guides
+
