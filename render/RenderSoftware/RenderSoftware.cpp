@@ -38,7 +38,10 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 		Painter& painter;
 		int& depth;
 		bool active = true;
-		StateGuard(Painter& p, int& d) : painter(p), depth(d) {}
+		StateGuard(Painter& p, int& d) : painter(p), depth(d) {
+			painter.Begin();
+			++depth;
+		}
 		~StateGuard() {
 			if(active) {
 				while(depth > 0) {
@@ -68,15 +71,16 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			}
 			{
 				int target = save_targets.Pop();
-				while(depth > target) {
+				while(depth > target + 1) {
 					painter.End();
 					--depth;
 				}
+				painter.End();
+				--depth;
 			}
 			break;
 		case UiDisplayOpType::ClipRect:
 			painter.Draw::Clip(ToRect(op.rect));
-			++depth;
 			break;
 		case UiDisplayOpType::ConcatTransform:
 			painter.Transform(ToXform(op.transform));
@@ -95,10 +99,12 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 		}
 	}
 
-	if(depth != 0) {
+	if(depth != 1) {
 		error = "replay ended with unbalanced painter state";
 		return false;
 	}
+	painter.End();
+	--depth;
 
 	guard.active = false;
 	return true;

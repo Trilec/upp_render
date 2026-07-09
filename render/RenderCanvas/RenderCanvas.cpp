@@ -47,6 +47,8 @@ bool UiDisplayOp::operator==(const UiDisplayOp& other) const
 
 UiDisplayList::UiDisplayList()
 {
+	valid = false;
+	error = "display list not built";
 }
 
 void UiDisplayList::SetValid(Vector<UiDisplayOp>&& source)

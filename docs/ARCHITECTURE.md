@@ -97,3 +97,5 @@ This task deliberately defers:
 The next architectural stage is the RHI contract layer and a null backend.
 That stage will define GPU-facing abstractions without leaking Vulkan into the
 high-level recording model.
+
+For the broader roadmap, see `docs/PROJECT_PLAN.md`.

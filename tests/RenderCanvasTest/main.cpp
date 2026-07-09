@@ -31,6 +31,17 @@ static struct RoundedRect MakeRoundedRect(const Rectf& rect, double radius)
 	return rr;
 }
 
+static bool ImagesEqual(const Image& a, const Image& b)
+{
+	if(a.GetSize() != b.GetSize())
+		return false;
+	for(int y = 0; y < a.GetHeight(); ++y)
+		for(int x = 0; x < a.GetWidth(); ++x)
+			if(a[y][x] != b[y][x])
+				return false;
+	return true;
+}
+
 static void BuildRecordedScene(UiCanvas& c)
 {
 	c.Save();
@@ -44,6 +55,16 @@ static void BuildRecordedScene(UiCanvas& c)
 
 static bool TestRecording()
 {
+	UiDisplayList empty;
+	if(!Check(!empty.IsValid(), "default display list should start invalid")) return false;
+	if(!Check(!empty.GetError().IsEmpty(), "default display list should explain invalid state")) return false;
+
+	UiDisplayListBuilder empty_builder;
+	UiDisplayList empty_list;
+	if(!Check(empty_builder.Finish(empty_list), "empty builder should finish")) return false;
+	if(!Check(empty_list.IsValid(), "finished empty list should be valid")) return false;
+	if(!Check(empty_list.GetCount() == 0, "finished empty list should be empty")) return false;
+
 	UiDisplayListBuilder builder;
 	BuildRecordedScene(builder);
 	UiDisplayList list;
@@ -200,16 +221,57 @@ static bool TestReplay()
 {
 	Image direct = RenderSceneDirect();
 	Image replayed = RenderSceneRecorded(true);
+	if(!Check(ImagesEqual(direct, replayed), "direct and replayed images should match")) return false;
+
+	UiDisplayListBuilder root_clip_builder;
+	root_clip_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(0, 0, 0, 255));
+	root_clip_builder.ClipRect(Rectf(0, 0, 8, 8));
+	root_clip_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(255, 255, 255, 255));
+	UiDisplayList root_clip_list;
+	if(!Check(root_clip_builder.Finish(root_clip_list), "root clip list should finish")) return false;
+	ImagePainter root_clip_painter(Size(32, 32));
+	root_clip_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	SoftwareUiRenderer renderer;
+	if(!Check(renderer.Replay(root_clip_list, root_clip_painter), "root clip replay should succeed")) return false;
+	root_clip_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image root_clip = root_clip_painter.GetResult();
+	if(!Check(root_clip[0][0] == MakeRgba(255, 255, 255), "root clip should not leak after replay")) return false;
+	if(!Check(root_clip[31][31] == MakeRgba(255, 255, 255), "root clip isolation should cover full image")) return false;
+
+	UiDisplayListBuilder root_transform_builder;
+	root_transform_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(0, 0, 0, 255));
+	root_transform_builder.ConcatTransform(Transform2D::Translation(8, 0));
+	root_transform_builder.FillRect(Rectf(0, 0, 8, 8), Rgba8(255, 255, 255, 255));
+	UiDisplayList root_transform_list;
+	if(!Check(root_transform_builder.Finish(root_transform_list), "root transform list should finish")) return false;
+	ImagePainter root_transform_painter(Size(32, 32));
+	root_transform_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	if(!Check(renderer.Replay(root_transform_list, root_transform_painter), "root transform replay should succeed")) return false;
+	root_transform_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image root_transform = root_transform_painter.GetResult();
+	if(!Check(root_transform[0][0] == MakeRgba(255, 255, 255), "root transform should not leak after replay")) return false;
+	if(!Check(root_transform[31][31] == MakeRgba(255, 255, 255), "root transform isolation should cover full image")) return false;
+
 	if(!Check(direct[5][5] == MakeRgba(255, 0, 0), "clipped red pixel")) return false;
 	if(!Check(direct[40][40] == MakeRgba(0, 0, 0), "outside clip remains background")) return false;
 	if(!Check(direct[1][1] == MakeRgba(255, 0, 0), "direct clip applies")) return false;
 	if(!(direct[5][15] == MakeRgba(0, 255, 0))) {
 		return Check(false, "translated green pixel");
 	}
-	if(!Check(replayed[5][5] == direct[5][5], "replay matches clip pixel")) return false;
-	if(!Check(replayed[5][15] == direct[5][15], "replay matches translated pixel")) return false;
-	Image invalid = RenderSceneRecorded(false);
-	if(!Check(invalid[1][1] == MakeRgba(0, 0, 0), "invalid replay should leave output untouched")) return false;
+
+	UiDisplayListBuilder invalid_builder;
+	invalid_builder.Save();
+	invalid_builder.ClipRect(Rectf(0, 0, 8, 8));
+	invalid_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(255, 0, 0, 255));
+	UiDisplayList invalid_list;
+	if(!Check(!invalid_builder.Finish(invalid_list), "unfinished list should fail")) return false;
+	ImagePainter invalid_painter(Size(32, 32));
+	invalid_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	if(!Check(!renderer.Replay(invalid_list, invalid_painter), "invalid replay should reject")) return false;
+	invalid_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image invalid = invalid_painter.GetResult();
+	if(!Check(invalid[0][0] == MakeRgba(255, 255, 255), "failed replay should not leak state")) return false;
+	if(!Check(invalid[31][31] == MakeRgba(255, 255, 255), "failed replay isolation should cover full image")) return false;
 	return true;
 }
 
