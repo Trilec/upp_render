@@ -18,6 +18,9 @@ software replay, tests, and a visual demo before any GPU API is introduced.
 ## Build
 
 Build the packages in the Windows `CLANGx64` configuration using TheIDE.
+`GitHubOut.var.example` uses `<path-to-uppsrc>` as a placeholder, because the
+real U++ source tree is local to each machine and pretending otherwise is how
+machines start developing personality.
 The expected outputs are:
 
 - `build/RenderCanvasTest.exe`

@@ -233,10 +233,16 @@ static bool TestReplay()
 	root_clip_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
 	SoftwareUiRenderer renderer;
 	if(!Check(renderer.Replay(root_clip_list, root_clip_painter), "root clip replay should succeed")) return false;
-	root_clip_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
 	Image root_clip = root_clip_painter.GetResult();
-	if(!Check(root_clip[0][0] == MakeRgba(255, 255, 255), "root clip should not leak after replay")) return false;
-	if(!Check(root_clip[31][31] == MakeRgba(255, 255, 255), "root clip isolation should cover full image")) return false;
+	if(!Check(root_clip[0][0] == MakeRgba(255, 255, 255), "root clip inside pixel should change")) return false;
+	if(!Check(root_clip[20][20] == MakeRgba(0, 0, 0), "root clip outside pixel should not change")) return false;
+
+	ImagePainter root_clip_after(Size(32, 32));
+	root_clip_after.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	if(!Check(renderer.Replay(root_clip_list, root_clip_after), "root clip replay should still succeed")) return false;
+	root_clip_after.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image root_clip_isolation = root_clip_after.GetResult();
+	if(!Check(root_clip_isolation[20][20] == MakeRgba(255, 255, 255), "root clip should not leak after replay")) return false;
 
 	UiDisplayListBuilder root_transform_builder;
 	root_transform_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(0, 0, 0, 255));
@@ -247,10 +253,29 @@ static bool TestReplay()
 	ImagePainter root_transform_painter(Size(32, 32));
 	root_transform_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
 	if(!Check(renderer.Replay(root_transform_list, root_transform_painter), "root transform replay should succeed")) return false;
-	root_transform_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
 	Image root_transform = root_transform_painter.GetResult();
-	if(!Check(root_transform[0][0] == MakeRgba(255, 255, 255), "root transform should not leak after replay")) return false;
-	if(!Check(root_transform[31][31] == MakeRgba(255, 255, 255), "root transform isolation should cover full image")) return false;
+	if(!Check(root_transform[0][8] == MakeRgba(255, 255, 255), "root transform translated pixel should change")) return false;
+	if(!Check(root_transform[0][0] == MakeRgba(0, 0, 0), "root transform original pixel should stay unchanged")) return false;
+
+	ImagePainter root_transform_after(Size(32, 32));
+	root_transform_after.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	if(!Check(renderer.Replay(root_transform_list, root_transform_after), "root transform replay should still succeed")) return false;
+	root_transform_after.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image root_transform_isolation = root_transform_after.GetResult();
+	if(!Check(root_transform_isolation[0][0] == MakeRgba(255, 255, 255), "root transform should not leak after replay")) return false;
+
+	ImagePainter invalid_after(Size(32, 32));
+	invalid_after.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
+	UiDisplayListBuilder invalid_builder;
+	invalid_builder.Save();
+	invalid_builder.ClipRect(Rectf(0, 0, 8, 8));
+	invalid_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(255, 0, 0, 255));
+	UiDisplayList invalid_list;
+	if(!Check(!invalid_builder.Finish(invalid_list), "unfinished list should fail")) return false;
+	if(!Check(!renderer.Replay(invalid_list, invalid_after), "invalid replay should reject")) return false;
+	invalid_after.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
+	Image invalid_isolation = invalid_after.GetResult();
+	if(!Check(invalid_isolation[0][0] == MakeRgba(255, 255, 255), "failed replay should not leak state")) return false;
 
 	if(!Check(direct[5][5] == MakeRgba(255, 0, 0), "clipped red pixel")) return false;
 	if(!Check(direct[40][40] == MakeRgba(0, 0, 0), "outside clip remains background")) return false;
@@ -258,20 +283,6 @@ static bool TestReplay()
 	if(!(direct[5][15] == MakeRgba(0, 255, 0))) {
 		return Check(false, "translated green pixel");
 	}
-
-	UiDisplayListBuilder invalid_builder;
-	invalid_builder.Save();
-	invalid_builder.ClipRect(Rectf(0, 0, 8, 8));
-	invalid_builder.FillRect(Rectf(0, 0, 32, 32), Rgba8(255, 0, 0, 255));
-	UiDisplayList invalid_list;
-	if(!Check(!invalid_builder.Finish(invalid_list), "unfinished list should fail")) return false;
-	ImagePainter invalid_painter(Size(32, 32));
-	invalid_painter.DrawRect(Rect(0, 0, 32, 32), Color(0, 0, 0));
-	if(!Check(!renderer.Replay(invalid_list, invalid_painter), "invalid replay should reject")) return false;
-	invalid_painter.DrawRect(Rect(0, 0, 32, 32), Color(255, 255, 255));
-	Image invalid = invalid_painter.GetResult();
-	if(!Check(invalid[0][0] == MakeRgba(255, 255, 255), "failed replay should not leak state")) return false;
-	if(!Check(invalid[31][31] == MakeRgba(255, 255, 255), "failed replay isolation should cover full image")) return false;
 	return true;
 }
 

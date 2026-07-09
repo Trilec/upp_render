@@ -3,6 +3,25 @@
 `upp_render` is being built in staged layers so the recording model can settle
 before any GPU backend is bolted on with wishful thinking.
 
+## Workflow Rules
+
+- Curt is the project manager and publisher.
+- Contributors implement assigned work only.
+- Work currently happens directly on local `main`.
+- No task branches unless Curt later changes the workflow.
+- Contributors may commit locally.
+- Contributors must not push, publish, tag, release or create pull requests.
+- Completion reports should include summary, files changed, validation,
+  remaining issues and the recommended next step.
+
+## Architecture Rules
+
+- no Vulkan, Metal, WebGPU or OpenGL types in public Stage 1/2 APIs
+- `UiCanvas` records drawing intent
+- `GpuRhi` is the lower-level GPU contract
+- display lists are immutable after build
+- software replay remains the correctness reference
+
 ## Stage 1 - Backend-Neutral Foundation
 
 Done or underway:

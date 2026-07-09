@@ -1,2 +1,2 @@
-UPP = "render;examples;tests;E:/upp-18468/uppsrc";
+UPP = "render;examples;tests;tools;<path-to-uppsrc>";
 OUTPUT = "build";
