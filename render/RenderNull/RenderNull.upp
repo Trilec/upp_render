@@ -1,0 +1,7 @@
+uses
+	Core,
+	RenderRhi;
+
+file
+	RenderNull.h,
+	RenderNull.cpp;

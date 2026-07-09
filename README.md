@@ -12,8 +12,11 @@ software replay, tests, and a visual demo before any GPU API is introduced.
 - `render/RenderCore`
 - `render/RenderCanvas`
 - `render/RenderSoftware`
+- `render/RenderRhi`
+- `render/RenderNull`
 - `examples/DisplayListDemo`
 - `tests/RenderCanvasTest`
+- `tests/RenderRhiTest`
 
 ## Build
 
@@ -24,6 +27,7 @@ machines start developing personality.
 The expected outputs are:
 
 - `build/RenderCanvasTest.exe`
+- `build/RenderRhiTest.exe`
 - `build/DisplayListDemo.exe`
 
 ## Run

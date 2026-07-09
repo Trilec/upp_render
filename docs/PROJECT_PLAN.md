@@ -38,6 +38,8 @@ Done or underway:
 Define `GpuRhi` as the minimal GPU-facing contract and implement `RenderNull`
 for headless validation of command ordering, lifetime rules, and state handling.
 
+- TASK-002 is underway.
+
 ## Stage 3 - Vulkan Bootstrap
 
 Add the first GPU backend:

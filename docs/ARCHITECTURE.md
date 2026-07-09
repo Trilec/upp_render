@@ -92,10 +92,9 @@ This task deliberately defers:
 - U++ control integration
 - speculative backend packages
 
-## Expected Next Stage
+## Stage 2
 
-The next architectural stage is the RHI contract layer and a null backend.
-That stage will define GPU-facing abstractions without leaking Vulkan into the
-high-level recording model.
+Add the minimal `GpuRhi` contract and a headless `RenderNull` backend without
+pulling Vulkan into the recording layer.
 
 For the broader roadmap, see `docs/PROJECT_PLAN.md`.

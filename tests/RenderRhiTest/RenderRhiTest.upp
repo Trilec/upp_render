@@ -1,0 +1,11 @@
+uses
+	Core,
+	RenderCanvas,
+	RenderRhi,
+	RenderNull;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";
