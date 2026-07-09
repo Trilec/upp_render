@@ -92,7 +92,7 @@ private:
 	bool finished = false;
 	String error;
 
-	bool CanRecord() const { return !finished && error.IsEmpty(); }
+	bool CanRecord();
 	void Fail(const String& message);
 	void Append(const UiDisplayOp& op);
 };

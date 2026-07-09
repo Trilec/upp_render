@@ -73,6 +73,7 @@ static bool TestRecording()
 	closed.Restore();
 	UiDisplayList ignored;
 	if(!Check(!closed.Finish(ignored), "finished builder must reject further recording")) return false;
+	if(!Check(!closed.GetError().IsEmpty(), "finished builder should explain rejection")) return false;
 	if(!Check(before == closed_list.Dump(), "completed list must remain immutable")) return false;
 	return true;
 }
@@ -203,8 +204,6 @@ static bool TestReplay()
 	if(!Check(direct[40][40] == MakeRgba(0, 0, 0), "outside clip remains background")) return false;
 	if(!Check(direct[1][1] == MakeRgba(255, 0, 0), "direct clip applies")) return false;
 	if(!(direct[5][15] == MakeRgba(0, 255, 0))) {
-		RGBA px = direct[5][15];
-		Cout() << "translated pixel = " << (int)px.r << ',' << (int)px.g << ',' << (int)px.b << ',' << (int)px.a << EOL;
 		return Check(false, "translated green pixel");
 	}
 	if(!Check(replayed[5][5] == direct[5][5], "replay matches clip pixel")) return false;

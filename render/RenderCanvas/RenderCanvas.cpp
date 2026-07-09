@@ -116,6 +116,16 @@ void UiDisplayListBuilder::Fail(const String& message)
 	finished = true;
 }
 
+bool UiDisplayListBuilder::CanRecord()
+{
+	if(finished) {
+		if(error.IsEmpty())
+			error = "builder already finished";
+		return false;
+	}
+	return error.IsEmpty();
+}
+
 void UiDisplayListBuilder::Append(const UiDisplayOp& op)
 {
 	if(!CanRecord())
