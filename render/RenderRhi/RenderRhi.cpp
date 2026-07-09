@@ -14,6 +14,9 @@ String GpuTextureId::Dump() const { return DumpId("Texture", value); }
 String GpuShaderId::Dump() const { return DumpId("Shader", value); }
 String GpuPipelineId::Dump() const { return DumpId("Pipeline", value); }
 String GpuCommandListId::Dump() const { return DumpId("Cmd", value); }
+String GpuSurfaceId::Dump() const { return DumpId("Surface", value); }
+String GpuSwapchainId::Dump() const { return DumpId("Swapchain", value); }
+String GpuFrameId::Dump() const { return DumpId("Frame", value); }
 
 String DumpGpuBackendKind(GpuBackendKind kind)
 {

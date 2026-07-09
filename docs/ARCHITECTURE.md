@@ -96,5 +96,7 @@ This task deliberately defers:
 
 Add the minimal `GpuRhi` contract and a headless `RenderNull` backend without
 pulling Vulkan into the recording layer.
+This stage now also covers surface, swapchain, and frame lifecycle so the next
+step is not starting from a blank screen and a shrug.
 
 For the broader roadmap, see `docs/PROJECT_PLAN.md`.

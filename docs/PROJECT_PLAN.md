@@ -39,6 +39,7 @@ Define `GpuRhi` as the minimal GPU-facing contract and implement `RenderNull`
 for headless validation of command ordering, lifetime rules, and state handling.
 
 - TASK-002 is underway.
+- TASK-004 is underway.
 
 ## Stage 3 - Vulkan Bootstrap
 

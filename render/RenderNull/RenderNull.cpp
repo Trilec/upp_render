@@ -49,6 +49,57 @@ bool NullGpuDevice::CheckTextureExists(GpuTextureId id) const
 	return id.IsValid() && textures.Find(id.value) >= 0;
 }
 
+bool NullGpuDevice::CheckSurfaceExists(GpuSurfaceId id) const
+{
+	return id.IsValid() && surfaces.Find(id.value) >= 0;
+}
+
+bool NullGpuDevice::CheckSwapchainExists(GpuSwapchainId id) const
+{
+	return id.IsValid() && swapchains.Find(id.value) >= 0;
+}
+
+bool NullGpuDevice::CheckFrameExists(GpuFrameId id) const
+{
+	return id.IsValid() && frames.Find(id.value) >= 0;
+}
+
+NullGpuDevice::TextureState *NullGpuDevice::FindTextureState(GpuTextureId id)
+{
+	int index = textures.Find(id.value);
+	return index >= 0 ? &textures[index] : nullptr;
+}
+
+const NullGpuDevice::TextureState *NullGpuDevice::FindTextureState(GpuTextureId id) const
+{
+	int index = textures.Find(id.value);
+	return index >= 0 ? &textures[index] : nullptr;
+}
+
+NullGpuDevice::SwapchainState *NullGpuDevice::FindSwapchainState(GpuSwapchainId id)
+{
+	int index = swapchains.Find(id.value);
+	return index >= 0 ? &swapchains[index] : nullptr;
+}
+
+const NullGpuDevice::SwapchainState *NullGpuDevice::FindSwapchainState(GpuSwapchainId id) const
+{
+	int index = swapchains.Find(id.value);
+	return index >= 0 ? &swapchains[index] : nullptr;
+}
+
+NullGpuDevice::FrameState *NullGpuDevice::FindFrameState(GpuFrameId id)
+{
+	int index = frames.Find(id.value);
+	return index >= 0 ? &frames[index] : nullptr;
+}
+
+const NullGpuDevice::FrameState *NullGpuDevice::FindFrameState(GpuFrameId id) const
+{
+	int index = frames.Find(id.value);
+	return index >= 0 ? &frames[index] : nullptr;
+}
+
 bool NullGpuDevice::CheckPipelineExists(GpuPipelineId id) const
 {
 	return id.IsValid() && pipelines.Find(id.value) >= 0;
@@ -166,8 +217,211 @@ GpuResult NullGpuDevice::DestroyTexture(GpuTextureId id)
 		Fail("DestroyTexture id=" + id.Dump() + " reason=unknown");
 		return GpuResult::InvalidHandle;
 	}
+	if(textures[index].swapchain_backbuffer) {
+		Fail("DestroyTexture id=" + id.Dump() + " reason=swapchain_backbuffer");
+		return GpuResult::InvalidState;
+	}
 	textures.Remove(index);
 	AppendLog("DestroyTexture id=" + id.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out)
+{
+	if(desc.size.cx <= 0 || desc.size.cy <= 0) {
+		Fail("CreateSurface size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " reason=invalid_size");
+		out = GpuSurfaceId();
+		return GpuResult::InvalidArgument;
+	}
+	GpuSurfaceId id;
+	id.value = next_surface_id++;
+	SurfaceState& state = surfaces.Add(id.value, SurfaceState());
+	state.desc = desc;
+	state.alive = true;
+	state.live_swapchains = 0;
+	out = id;
+	AppendLog("CreateSurface id=" + id.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::DestroySurface(GpuSurfaceId id)
+{
+	int index = surfaces.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("DestroySurface id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	if(surfaces[index].live_swapchains > 0) {
+		Fail("DestroySurface id=" + id.Dump() + " reason=live_swapchain");
+		return GpuResult::InvalidState;
+	}
+	surfaces.Remove(index);
+	AppendLog("DestroySurface id=" + id.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::CreateSwapchain(const GpuSwapchainDesc& desc, GpuSwapchainId& out)
+{
+	if(!CheckSurfaceExists(desc.surface)) {
+		Fail("CreateSwapchain surface=" + desc.surface.Dump() + " reason=unknown_surface");
+		out = GpuSwapchainId();
+		return GpuResult::InvalidHandle;
+	}
+	if(desc.size.cx <= 0 || desc.size.cy <= 0) {
+		Fail("CreateSwapchain surface=" + desc.surface.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " reason=invalid_size");
+		out = GpuSwapchainId();
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.color_format == GpuFormat::Unknown) {
+		Fail("CreateSwapchain surface=" + desc.surface.Dump() + " format=Unknown reason=invalid_format");
+		out = GpuSwapchainId();
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.image_count < 2) {
+		Fail("CreateSwapchain surface=" + desc.surface.Dump() + " images=" + AsString(desc.image_count) + " reason=image_count_too_small");
+		out = GpuSwapchainId();
+		return GpuResult::InvalidArgument;
+	}
+	GpuSwapchainId id;
+	id.value = next_swapchain_id++;
+	SwapchainState& state = swapchains.Add(id.value, SwapchainState());
+	state.desc = desc;
+	state.alive = true;
+	state.active_frame = GpuFrameId();
+
+	GpuTextureId backbuffer;
+	backbuffer.value = next_texture_id++;
+	TextureState& tex = textures.Add(backbuffer.value, TextureState());
+	tex.desc.size = desc.size;
+	tex.desc.format = desc.color_format;
+	tex.desc.usage = GpuTextureUsage_ColorAttachment;
+	tex.desc.label = desc.label;
+	tex.alive = true;
+	tex.swapchain_backbuffer = true;
+	tex.owner_swapchain = id;
+	tex.owner_frame = GpuFrameId();
+	tex.renderable = false;
+
+	state.backbuffer = backbuffer;
+	int surface_index = surfaces.Find(desc.surface.value);
+	if(surface_index >= 0)
+		surfaces[surface_index].live_swapchains++;
+	out = id;
+	AppendLog("CreateSwapchain id=" + id.Dump() + " surface=" + desc.surface.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " format=" + DumpGpuFormat(desc.color_format) + " images=" + AsString(desc.image_count));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::DestroySwapchain(GpuSwapchainId id)
+{
+	int index = swapchains.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("DestroySwapchain id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	SwapchainState& state = swapchains[index];
+	if(state.active_frame.IsValid()) {
+		Fail("DestroySwapchain id=" + id.Dump() + " reason=active_frame");
+		return GpuResult::InvalidState;
+	}
+	int surface_index = surfaces.Find(state.desc.surface.value);
+	if(surface_index >= 0)
+		surfaces[surface_index].live_swapchains--;
+	int tex_index = textures.Find(state.backbuffer.value);
+	if(tex_index >= 0)
+		textures.Remove(tex_index);
+	swapchains.Remove(index);
+	AppendLog("DestroySwapchain id=" + id.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::ResizeSwapchain(GpuSwapchainId id, Size size)
+{
+	int index = swapchains.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("ResizeSwapchain id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	SwapchainState& state = swapchains[index];
+	if(state.active_frame.IsValid()) {
+		Fail("ResizeSwapchain id=" + id.Dump() + " reason=frame_active");
+		return GpuResult::InvalidState;
+	}
+	if(size.cx <= 0 || size.cy <= 0) {
+		Fail("ResizeSwapchain id=" + id.Dump() + " size=" + AsString(size.cx) + "x" + AsString(size.cy) + " reason=invalid_size");
+		return GpuResult::InvalidArgument;
+	}
+	state.desc.size = size;
+	TextureState *tex = FindTextureState(state.backbuffer);
+	if(tex) {
+		tex->desc.size = size;
+		tex->renderable = false;
+	}
+	AppendLog("ResizeSwapchain id=" + id.Dump() + " size=" + AsString(size.cx) + "x" + AsString(size.cy));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out)
+{
+	SwapchainState *state = FindSwapchainState(swapchain);
+	if(!swapchain.IsValid() || !state) {
+		Fail("BeginFrame swapchain=" + swapchain.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	if(state->active_frame.IsValid()) {
+		Fail("BeginFrame swapchain=" + swapchain.Dump() + " reason=frame_already_active");
+		return GpuResult::InvalidState;
+	}
+	TextureState *tex = FindTextureState(state->backbuffer);
+	if(!tex || !tex->alive) {
+		Fail("BeginFrame swapchain=" + swapchain.Dump() + " reason=missing_backbuffer");
+		return GpuResult::InvalidState;
+	}
+	GpuFrameId frame;
+	frame.value = next_frame_id++;
+	FrameState& frame_state = frames.Add(frame.value, FrameState());
+	frame_state.swapchain = swapchain;
+	frame_state.color_target = state->backbuffer;
+	frame_state.active = true;
+	frame_state.presented = false;
+	state->active_frame = frame;
+	tex->owner_frame = frame;
+	tex->renderable = true;
+	out.frame = frame;
+	out.swapchain = swapchain;
+	out.color_target = state->backbuffer;
+	out.size = state->desc.size;
+	out.color_format = state->desc.color_format;
+	AppendLog("BeginFrame id=" + frame.Dump() + " swapchain=" + swapchain.Dump() + " target=" + state->backbuffer.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::Present(GpuFrameId frame)
+{
+	FrameState *state = FindFrameState(frame);
+	if(!frame.IsValid() || !state) {
+		Fail("Present frame=" + frame.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	if(state->presented) {
+		Fail("Present frame=" + frame.Dump() + " reason=frame_already_presented");
+		return GpuResult::InvalidState;
+	}
+	if(!state->active) {
+		Fail("Present frame=" + frame.Dump() + " reason=frame_not_active");
+		return GpuResult::InvalidState;
+	}
+	SwapchainState *swapchain = FindSwapchainState(state->swapchain);
+	if(!swapchain || swapchain->active_frame.value != frame.value) {
+		Fail("Present frame=" + frame.Dump() + " reason=frame_not_active");
+		return GpuResult::InvalidState;
+	}
+	TextureState *tex = FindTextureState(state->color_target);
+	if(tex)
+		tex->renderable = false;
+	state->active = false;
+	state->presented = true;
+	swapchain->active_frame = GpuFrameId();
+	AppendLog("Present frame=" + frame.Dump());
 	return GpuResult::Ok;
 }
 
@@ -245,7 +499,15 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 		Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " reason=unknown_texture");
 		return GpuResult::InvalidHandle;
 	}
-	const TextureState *texture = &textures[textures.Find(desc.color_target.value)];
+	const TextureState *texture = FindTextureState(desc.color_target);
+	if(texture && texture->swapchain_backbuffer) {
+		SwapchainState *swapchain = FindSwapchainState(texture->owner_swapchain);
+		const FrameState *frame = FindFrameState(texture->owner_frame);
+		if(!texture->renderable || !swapchain || !frame || !frame->active || frame->presented || swapchain->active_frame.value != texture->owner_frame.value) {
+			Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " reason=backbuffer_not_active");
+			return GpuResult::InvalidState;
+		}
+	}
 	if(desc.color_format == GpuFormat::Unknown || desc.color_format != texture->desc.format) {
 		Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " format=" + DumpGpuFormat(desc.color_format) + " reason=format_mismatch");
 		return GpuResult::InvalidArgument;

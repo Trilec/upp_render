@@ -97,6 +97,9 @@ GPU_DEFINE_ID(GpuTextureId)
 GPU_DEFINE_ID(GpuShaderId)
 GPU_DEFINE_ID(GpuPipelineId)
 GPU_DEFINE_ID(GpuCommandListId)
+GPU_DEFINE_ID(GpuSurfaceId)
+GPU_DEFINE_ID(GpuSwapchainId)
+GPU_DEFINE_ID(GpuFrameId)
 
 #undef GPU_DEFINE_ID
 
@@ -141,6 +144,27 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	String label;
 };
 
+struct GpuSurfaceDesc : Moveable<GpuSurfaceDesc> {
+	String label;
+	Size size = Size(0, 0);
+};
+
+struct GpuSwapchainDesc : Moveable<GpuSwapchainDesc> {
+	String label;
+	GpuSurfaceId surface;
+	Size size = Size(0, 0);
+	GpuFormat color_format = GpuFormat::RGBA8;
+	int image_count = 2;
+};
+
+struct GpuFrameInfo : Moveable<GpuFrameInfo> {
+	GpuFrameId frame;
+	GpuSwapchainId swapchain;
+	GpuTextureId color_target;
+	Size size = Size(0, 0);
+	GpuFormat color_format = GpuFormat::Unknown;
+};
+
 class GpuDevice {
 public:
 	virtual ~GpuDevice() {}
@@ -154,6 +178,16 @@ public:
 
 	virtual GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) = 0;
 	virtual GpuResult DestroyTexture(GpuTextureId id) = 0;
+
+	virtual GpuResult CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out) = 0;
+	virtual GpuResult DestroySurface(GpuSurfaceId id) = 0;
+
+	virtual GpuResult CreateSwapchain(const GpuSwapchainDesc& desc, GpuSwapchainId& out) = 0;
+	virtual GpuResult DestroySwapchain(GpuSwapchainId id) = 0;
+	virtual GpuResult ResizeSwapchain(GpuSwapchainId id, Size size) = 0;
+
+	virtual GpuResult BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out) = 0;
+	virtual GpuResult Present(GpuFrameId frame) = 0;
 
 	virtual GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) = 0;
 	virtual GpuResult DestroyPipeline(GpuPipelineId id) = 0;
