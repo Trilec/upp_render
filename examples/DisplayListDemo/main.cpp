@@ -42,56 +42,65 @@ static struct RoundedRect MakeRoundedRect(const Rectf& rect, double radius)
 	return rr;
 }
 
-static void PaintScene(Painter& p)
+template <class T>
+static void DrawScene(T& p)
 {
-	p.DrawRect(Rect(0, 0, 360, 240), Color(24, 28, 34));
-
-	p.Draw::Clip(Rect(20, 20, 340, 180));
-	p.Transform(ToXform(Transform2D::Translation(24, 20)));
-	p.Rectangle(FRect(0, 0, 160, 100));
-	p.Fill(MakeRgba(40, 70, 120));
-	p.Rectangle(FRect(24, 18, 120, 44));
-	p.Fill(MakeRgba(220, 90, 70, 180));
-	p.RoundedRectangle(FRect(20, 60, 96, 30), 10);
-	p.Fill(MakeRgba(70, 170, 120, 220));
-	p.Begin();
-	p.Transform(ToXform(Transform2D::Scale(1.25, 0.85)));
-	p.RoundedRectangle(FRect(98, 42, 72, 48), 14);
-	p.Fill(MakeRgba(210, 200, 90, 180));
-	p.End();
-	p.Rectangle(FRect(8, 8, 128, 84));
-	p.Stroke(3, MakeRgba(240, 240, 245));
-	p.End();
-
-	p.Rectangle(FRect(214, 28, 88, 88));
-	p.Fill(MakeRgba(90, 130, 240, 140));
-	p.RoundedRectangle(FRect(230, 44, 84, 64), 18);
-	p.Fill(MakeRgba(240, 110, 170, 180));
+	p.FillRect(FRect(0, 0, 360, 240), Rgba8(24, 28, 34, 255));
+	p.Save();
+	p.ClipRect(Rectf(20, 20, 340, 180));
+	p.ConcatTransform(Transform2D::Translation(24, 20));
+	p.FillRect(FRect(0, 0, 160, 100), Rgba8(40, 70, 120, 255));
+	p.FillRect(FRect(24, 18, 120, 44), Rgba8(220, 90, 70, 180));
+	p.FillRoundedRect(MakeRoundedRect(FRect(20, 60, 96, 30), 10), Rgba8(70, 170, 120, 220));
+	p.Save();
+	p.ConcatTransform(Transform2D::Scale(1.25, 0.85));
+	p.FillRoundedRect(MakeRoundedRect(FRect(98, 42, 72, 48), 14), Rgba8(210, 200, 90, 180));
+	p.Restore();
+	p.StrokeRect(FRect(8, 8, 128, 84), 3, Rgba8(240, 240, 245, 255));
+	p.Restore();
+	p.FillRect(FRect(214, 28, 88, 88), Rgba8(90, 130, 240, 140));
+	p.FillRoundedRect(MakeRoundedRect(FRect(230, 44, 84, 64), 18), Rgba8(240, 110, 170, 180));
 }
+
+struct PainterSink {
+	explicit PainterSink(Painter& painter) : p(painter) {}
+
+	void FillRect(const Rectf& rect, Rgba8 color) { p.DrawRect(Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom), Color(MakeRgba(color.r, color.g, color.b, color.a))); }
+	void Save() { p.Begin(); }
+	void Restore() { p.End(); }
+	void ClipRect(const Rectf& rect) { p.Draw::Clip(Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom)); }
+	void ConcatTransform(const Transform2D& transform) { p.Transform(ToXform(transform)); }
+	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) { p.RoundedRectangle(rect.rect, rect.radius); p.Fill(MakeRgba(color.r, color.g, color.b, color.a)); }
+	void StrokeRect(const Rectf& rect, double width, Rgba8 color) { p.Rectangle(rect); p.Stroke(width, MakeRgba(color.r, color.g, color.b, color.a)); }
+
+	Painter& p;
+};
+
+struct CanvasSink {
+	explicit CanvasSink(UiCanvas& canvas) : c(canvas) {}
+
+	void FillRect(const Rectf& rect, Rgba8 color) { c.FillRect(rect, color); }
+	void Save() { c.Save(); }
+	void Restore() { c.Restore(); }
+	void ClipRect(const Rectf& rect) { c.ClipRect(rect); }
+	void ConcatTransform(const Transform2D& transform) { c.ConcatTransform(transform); }
+	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) { c.FillRoundedRect(rect, color); }
+	void StrokeRect(const Rectf& rect, double width, Rgba8 color) { c.StrokeRect(rect, width, color); }
+
+	UiCanvas& c;
+};
 
 static void RecordScene(UiCanvas& canvas)
 {
-	canvas.FillRect(FRect(0, 0, 360, 240), Rgba8(24, 28, 34, 255));
-	canvas.Save();
-	canvas.ClipRect(Rectf(20, 20, 340, 180));
-	canvas.ConcatTransform(Transform2D::Translation(24, 20));
-	canvas.FillRect(FRect(0, 0, 160, 100), Rgba8(40, 70, 120, 255));
-	canvas.FillRect(FRect(24, 18, 120, 44), Rgba8(220, 90, 70, 180));
-	canvas.FillRoundedRect(MakeRoundedRect(FRect(20, 60, 96, 30), 10), Rgba8(70, 170, 120, 220));
-	canvas.Save();
-	canvas.ConcatTransform(Transform2D::Scale(1.25, 0.85));
-	canvas.FillRoundedRect(MakeRoundedRect(FRect(98, 42, 72, 48), 14), Rgba8(210, 200, 90, 180));
-	canvas.Restore();
-	canvas.StrokeRect(FRect(8, 8, 128, 84), 3, Rgba8(240, 240, 245, 255));
-	canvas.Restore();
-	canvas.FillRect(FRect(214, 28, 88, 88), Rgba8(90, 130, 240, 140));
-	canvas.FillRoundedRect(MakeRoundedRect(FRect(230, 44, 84, 64), 18), Rgba8(240, 110, 170, 180));
+	CanvasSink sink(canvas);
+	DrawScene(sink);
 }
 
 static Image RenderDirect(Size size)
 {
 	ImagePainter p(size);
-	PaintScene(p);
+	PainterSink sink(p);
+	DrawScene(sink);
 	return p.GetResult();
 }
 
