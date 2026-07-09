@@ -155,8 +155,14 @@ public:
 	virtual GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) = 0;
 	virtual GpuResult DestroyTexture(GpuTextureId id) = 0;
 
+	virtual GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) = 0;
+	virtual GpuResult DestroyPipeline(GpuPipelineId id) = 0;
+
 	virtual GpuResult BeginCommands(GpuCommandListId& out) = 0;
 	virtual GpuResult BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc) = 0;
+	virtual GpuResult SetPipeline(GpuCommandListId list, GpuPipelineId pipeline) = 0;
+	virtual GpuResult SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer) = 0;
+	virtual GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) = 0;
 	virtual GpuResult EndRenderPass(GpuCommandListId list) = 0;
 	virtual GpuResult EndCommands(GpuCommandListId list) = 0;
 	virtual GpuResult Submit(GpuCommandListId list) = 0;

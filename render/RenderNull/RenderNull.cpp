@@ -2,9 +2,14 @@
 
 namespace Upp {
 
-static String ResultLine(const String& op, GpuResult result)
+static bool IsValidTopology(GpuPrimitiveTopology topology)
 {
-	return op + " result=" + DumpGpuResult(result);
+	switch(topology) {
+	case GpuPrimitiveTopology::TriangleList:
+	case GpuPrimitiveTopology::LineList:
+		return true;
+	}
+	return false;
 }
 
 NullGpuDevice::NullGpuDevice()
@@ -44,6 +49,11 @@ bool NullGpuDevice::CheckTextureExists(GpuTextureId id) const
 	return id.IsValid() && textures.Find(id.value) >= 0;
 }
 
+bool NullGpuDevice::CheckPipelineExists(GpuPipelineId id) const
+{
+	return id.IsValid() && pipelines.Find(id.value) >= 0;
+}
+
 NullGpuDevice::CommandState *NullGpuDevice::FindCommandState(GpuCommandListId id)
 {
 	int index = command_lists.Find(id.value);
@@ -68,11 +78,15 @@ bool NullGpuDevice::CanUseCommandList(GpuCommandListId id, const CommandState*& 
 		return false;
 	}
 	if(state->submitted) {
-		reason = "command list already submitted";
+		reason = "command_list_already_submitted";
+		return false;
+	}
+	if(state->ended) {
+		reason = "command_list_already_ended";
 		return false;
 	}
 	if(!state->begun) {
-		reason = "command list not begun";
+		reason = "command_list_not_begun";
 		return false;
 	}
 	out_state = state;
@@ -157,6 +171,40 @@ GpuResult NullGpuDevice::DestroyTexture(GpuTextureId id)
 	return GpuResult::Ok;
 }
 
+GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out)
+{
+	if(desc.color_format == GpuFormat::Unknown) {
+		Fail("CreatePipeline format=Unknown reason=invalid_format");
+		out = GpuPipelineId();
+		return GpuResult::InvalidArgument;
+	}
+	if(!IsValidTopology(desc.topology)) {
+		Fail("CreatePipeline topology=Invalid reason=invalid_topology");
+		out = GpuPipelineId();
+		return GpuResult::InvalidArgument;
+	}
+	GpuPipelineId id;
+	id.value = next_pipeline_id++;
+	PipelineState& state = pipelines.Add(id.value, PipelineState());
+	state.desc = desc;
+	state.alive = true;
+	out = id;
+	AppendLog("CreatePipeline id=" + id.Dump() + " topology=" + DumpGpuPrimitiveTopology(desc.topology) + " format=" + DumpGpuFormat(desc.color_format));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::DestroyPipeline(GpuPipelineId id)
+{
+	int index = pipelines.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("DestroyPipeline id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	pipelines.Remove(index);
+	AppendLog("DestroyPipeline id=" + id.Dump());
+	return GpuResult::Ok;
+}
+
 GpuResult NullGpuDevice::BeginCommands(GpuCommandListId& out)
 {
 	if(active_command_list.IsValid()) {
@@ -168,9 +216,12 @@ GpuResult NullGpuDevice::BeginCommands(GpuCommandListId& out)
 	id.value = next_command_list_id++;
 	CommandState& state = command_lists.Add(id.value, CommandState());
 	state.begun = true;
-	state.render_pass_active = false;
 	state.ended = false;
 	state.submitted = false;
+	state.render_pass_active = false;
+	state.pipeline = GpuPipelineId();
+	state.vertex_buffer = GpuBufferId();
+	state.draw_count = 0;
 	active_command_list = id;
 	out = id;
 	AppendLog("BeginCommands id=" + id.Dump());
@@ -201,7 +252,89 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 	}
 	mutable_state.render_pass_active = true;
 	mutable_state.pass_desc = desc;
-	AppendLog("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " format=" + DumpGpuFormat(desc.color_format) + " load=" + DumpGpuLoadOp(desc.color_load) + " store=" + DumpGpuStoreOp(desc.color_store));
+	mutable_state.pipeline = GpuPipelineId();
+	mutable_state.vertex_buffer = GpuBufferId();
+	mutable_state.draw_count = 0;
+	AppendLog("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " color_format=" + DumpGpuFormat(desc.color_format) + " load=" + DumpGpuLoadOp(desc.color_load) + " store=" + DumpGpuStoreOp(desc.color_store));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipeline)
+{
+	const CommandState *state = nullptr;
+	String reason;
+	if(!CanUseCommandList(list, state, reason)) {
+		Fail("SetPipeline list=" + list.Dump() + " reason=" + reason);
+		return GpuResult::InvalidState;
+	}
+	CommandState& mutable_state = *FindCommandState(list);
+	if(!mutable_state.render_pass_active) {
+		Fail("SetPipeline list=" + list.Dump() + " reason=render_pass_required");
+		return GpuResult::InvalidState;
+	}
+	if(!CheckPipelineExists(pipeline)) {
+		Fail("SetPipeline list=" + list.Dump() + " pipeline=" + pipeline.Dump() + " reason=unknown_pipeline");
+		return GpuResult::InvalidHandle;
+	}
+	const PipelineState& pipeline_state = pipelines[pipelines.Find(pipeline.value)];
+	if(pipeline_state.desc.color_format != mutable_state.pass_desc.color_format) {
+		Fail("SetPipeline list=" + list.Dump() + " pipeline=" + pipeline.Dump() + " reason=pipeline_format_mismatch");
+		return GpuResult::InvalidArgument;
+	}
+	mutable_state.pipeline = pipeline;
+	AppendLog("SetPipeline list=" + list.Dump() + " pipeline=" + pipeline.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer)
+{
+	const CommandState *state = nullptr;
+	String reason;
+	if(!CanUseCommandList(list, state, reason)) {
+		Fail("SetVertexBuffer list=" + list.Dump() + " reason=" + reason);
+		return GpuResult::InvalidState;
+	}
+	CommandState& mutable_state = *FindCommandState(list);
+	if(!mutable_state.render_pass_active) {
+		Fail("SetVertexBuffer list=" + list.Dump() + " reason=render_pass_required");
+		return GpuResult::InvalidState;
+	}
+	if(!CheckBufferExists(buffer)) {
+		Fail("SetVertexBuffer list=" + list.Dump() + " buffer=" + buffer.Dump() + " reason=unknown_buffer");
+		return GpuResult::InvalidHandle;
+	}
+	mutable_state.vertex_buffer = buffer;
+	AppendLog("SetVertexBuffer list=" + list.Dump() + " buffer=" + buffer.Dump());
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first_vertex)
+{
+	const CommandState *state = nullptr;
+	String reason;
+	if(!CanUseCommandList(list, state, reason)) {
+		Fail("Draw list=" + list.Dump() + " reason=" + reason);
+		return GpuResult::InvalidState;
+	}
+	CommandState& mutable_state = *FindCommandState(list);
+	if(!mutable_state.render_pass_active) {
+		Fail("Draw list=" + list.Dump() + " reason=render_pass_required");
+		return GpuResult::InvalidState;
+	}
+	if(!mutable_state.pipeline.IsValid()) {
+		Fail("Draw list=" + list.Dump() + " reason=pipeline_required");
+		return GpuResult::InvalidState;
+	}
+	if(vertex_count <= 0) {
+		Fail("Draw list=" + list.Dump() + " reason=invalid_vertex_count");
+		return GpuResult::InvalidArgument;
+	}
+	if(mutable_state.vertex_buffer.IsValid() && !CheckBufferExists(mutable_state.vertex_buffer)) {
+		Fail("Draw list=" + list.Dump() + " buffer=" + mutable_state.vertex_buffer.Dump() + " reason=unknown_vertex_buffer");
+		return GpuResult::InvalidHandle;
+	}
+	mutable_state.draw_count += 1;
+	AppendLog("Draw list=" + list.Dump() + " vertices=" + AsString(vertex_count) + " first=" + AsString(first_vertex));
 	return GpuResult::Ok;
 }
 
@@ -219,28 +352,40 @@ GpuResult NullGpuDevice::EndRenderPass(GpuCommandListId list)
 		return GpuResult::InvalidState;
 	}
 	mutable_state.render_pass_active = false;
+	mutable_state.pipeline = GpuPipelineId();
+	mutable_state.vertex_buffer = GpuBufferId();
 	AppendLog("EndRenderPass list=" + list.Dump());
 	return GpuResult::Ok;
 }
 
 GpuResult NullGpuDevice::EndCommands(GpuCommandListId list)
 {
-	const CommandState *state = nullptr;
-	String reason;
-	if(!CanUseCommandList(list, state, reason)) {
-		Fail("EndCommands list=" + list.Dump() + " reason=" + reason);
+	if(!list.IsValid()) {
+		Fail("EndCommands list=" + list.Dump() + " reason=invalid command list");
 		return GpuResult::InvalidState;
 	}
-	CommandState& mutable_state = *FindCommandState(list);
-	if(mutable_state.render_pass_active) {
+	CommandState *state = FindCommandState(list);
+	if(!state) {
+		Fail("EndCommands list=" + list.Dump() + " reason=unknown command list");
+		return GpuResult::InvalidState;
+	}
+	if(state->submitted) {
+		Fail("EndCommands list=" + list.Dump() + " reason=command_list_already_submitted");
+		return GpuResult::InvalidState;
+	}
+	if(state->ended) {
+		Fail("EndCommands list=" + list.Dump() + " reason=command_list_already_ended");
+		return GpuResult::InvalidState;
+	}
+	if(state->render_pass_active) {
 		Fail("EndCommands list=" + list.Dump() + " reason=render_pass_still_active");
 		return GpuResult::InvalidState;
 	}
-	if(mutable_state.ended) {
-		Fail("EndCommands list=" + list.Dump() + " reason=already_ended");
+	if(!state->begun) {
+		Fail("EndCommands list=" + list.Dump() + " reason=command_list_not_begun");
 		return GpuResult::InvalidState;
 	}
-	mutable_state.ended = true;
+	state->ended = true;
 	active_command_list = GpuCommandListId();
 	AppendLog("EndCommands id=" + list.Dump());
 	return GpuResult::Ok;
@@ -248,22 +393,24 @@ GpuResult NullGpuDevice::EndCommands(GpuCommandListId list)
 
 GpuResult NullGpuDevice::Submit(GpuCommandListId list)
 {
-	const CommandState *state = nullptr;
-	String reason;
-	if(!CanUseCommandList(list, state, reason)) {
-		Fail("Submit list=" + list.Dump() + " reason=" + reason);
+	if(!list.IsValid()) {
+		Fail("Submit list=" + list.Dump() + " reason=invalid command list");
 		return GpuResult::InvalidState;
 	}
-	CommandState& mutable_state = *FindCommandState(list);
-	if(!mutable_state.ended) {
-		Fail("Submit list=" + list.Dump() + " reason=unfinished_command_list");
+	CommandState *state = FindCommandState(list);
+	if(!state) {
+		Fail("Submit list=" + list.Dump() + " reason=unknown command list");
 		return GpuResult::InvalidState;
 	}
-	if(mutable_state.submitted) {
-		Fail("Submit list=" + list.Dump() + " reason=already_submitted");
+	if(state->submitted) {
+		Fail("Submit list=" + list.Dump() + " reason=command_list_already_submitted");
 		return GpuResult::InvalidState;
 	}
-	mutable_state.submitted = true;
+	if(!state->ended) {
+		Fail("Submit list=" + list.Dump() + " reason=command_list_not_ended");
+		return GpuResult::InvalidState;
+	}
+	state->submitted = true;
 	AppendLog("Submit id=" + list.Dump());
 	return GpuResult::Ok;
 }

@@ -19,8 +19,14 @@ public:
 	GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) override;
 	GpuResult DestroyTexture(GpuTextureId id) override;
 
+	GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) override;
+	GpuResult DestroyPipeline(GpuPipelineId id) override;
+
 	GpuResult BeginCommands(GpuCommandListId& out) override;
 	GpuResult BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc) override;
+	GpuResult SetPipeline(GpuCommandListId list, GpuPipelineId pipeline) override;
+	GpuResult SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer) override;
+	GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) override;
 	GpuResult EndRenderPass(GpuCommandListId list) override;
 	GpuResult EndCommands(GpuCommandListId list) override;
 	GpuResult Submit(GpuCommandListId list) override;
@@ -43,7 +49,15 @@ private:
 		bool render_pass_active = false;
 		bool ended = false;
 		bool submitted = false;
+		GpuPipelineId pipeline;
+		GpuBufferId vertex_buffer;
+		int draw_count = 0;
 		GpuRenderPassDesc pass_desc;
+	};
+
+	struct PipelineState : Moveable<PipelineState> {
+		GpuPipelineDesc desc;
+		bool alive = true;
 	};
 
 	GpuDeviceDesc device_desc;
@@ -51,9 +65,11 @@ private:
 	GpuAdapterInfo adapter_info;
 	int next_buffer_id = 1;
 	int next_texture_id = 1;
+	int next_pipeline_id = 1;
 	int next_command_list_id = 1;
 	VectorMap<int, BufferState> buffers;
 	VectorMap<int, TextureState> textures;
+	VectorMap<int, PipelineState> pipelines;
 	VectorMap<int, CommandState> command_lists;
 	Vector<String> log;
 	GpuCommandListId active_command_list;
@@ -62,6 +78,7 @@ private:
 	void Fail(const String& line);
 	bool CheckBufferExists(GpuBufferId id) const;
 	bool CheckTextureExists(GpuTextureId id) const;
+	bool CheckPipelineExists(GpuPipelineId id) const;
 	CommandState *FindCommandState(GpuCommandListId id);
 	const CommandState *FindCommandState(GpuCommandListId id) const;
 	bool CanUseCommandList(GpuCommandListId id, const CommandState*& out_state, String& reason) const;
