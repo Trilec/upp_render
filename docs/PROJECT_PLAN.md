@@ -24,7 +24,7 @@ before any GPU backend is bolted on with wishful thinking.
 
 ## Stage 1 - Backend-Neutral Foundation
 
-Done or underway:
+Done:
 
 - `RenderCore` value types
 - `UiCanvas` recording API
@@ -38,8 +38,10 @@ Done or underway:
 Define `GpuRhi` as the minimal GPU-facing contract and implement `RenderNull`
 for headless validation of command ordering, lifetime rules, and state handling.
 
-- TASK-002 is underway.
-- TASK-004 is underway.
+- TASK-002 completed.
+- TASK-003 completed.
+- TASK-004 completed.
+- TASK-004A completed.
 
 ## Stage 3 - Vulkan Bootstrap
 
@@ -50,6 +52,17 @@ Add the first GPU backend:
 - surface and swapchain management
 - frame submission and synchronization
 - resource upload and deferred destruction
+
+TASK-005A is the current milestone: Vulkan preflight and loader integration.
+It uses Vulkan 1.3 as the baseline and keeps the SDK header path local via a
+build method copied from `E:\upp-18468\CLANGx64.bm` with `INCLUDE` extended
+by `C:\VulkanSDK\1.4.350.0\Include`.
+
+Successful local build command:
+
+```text
+E:\upp-18468\umk.exe render,examples,tests,tools,E:\upp-18468\uppsrc VulkanProbe C:\Users\admin\AppData\Local\Temp\opencode\CLANGx64_Vulkan.bm --out-dir build
+```
 
 ## Stage 4 - GPU 2D Renderer
 

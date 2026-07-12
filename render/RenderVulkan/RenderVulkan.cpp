@@ -1,8 +1,109 @@
 #include "RenderVulkan.h"
 
-#include <vulkan/vulkan.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 namespace Upp {
+
+namespace {
+
+struct VulkanLoader {
+	HMODULE module = nullptr;
+	PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
+	PFN_vkEnumerateInstanceVersion enumerate_instance_version = nullptr;
+	PFN_vkEnumerateInstanceLayerProperties enumerate_instance_layer_properties = nullptr;
+	PFN_vkEnumerateInstanceExtensionProperties enumerate_instance_extension_properties = nullptr;
+	PFN_vkCreateInstance create_instance = nullptr;
+	PFN_vkDestroyInstance destroy_instance = nullptr;
+	PFN_vkEnumeratePhysicalDevices enumerate_physical_devices = nullptr;
+	PFN_vkGetPhysicalDeviceProperties get_physical_device_properties = nullptr;
+	PFN_vkGetPhysicalDeviceQueueFamilyProperties get_physical_device_queue_family_properties = nullptr;
+	PFN_vkEnumerateDeviceExtensionProperties enumerate_device_extension_properties = nullptr;
+	PFN_vkGetPhysicalDeviceFeatures2 get_physical_device_features2 = nullptr;
+
+	void Reset()
+	{
+		get_instance_proc_addr = nullptr;
+		enumerate_instance_version = nullptr;
+		enumerate_instance_layer_properties = nullptr;
+		enumerate_instance_extension_properties = nullptr;
+		create_instance = nullptr;
+		destroy_instance = nullptr;
+		enumerate_physical_devices = nullptr;
+		get_physical_device_properties = nullptr;
+		get_physical_device_queue_family_properties = nullptr;
+		enumerate_device_extension_properties = nullptr;
+		get_physical_device_features2 = nullptr;
+		if(module) {
+			FreeLibrary(module);
+			module = nullptr;
+		}
+	}
+};
+
+template <class T>
+static bool LoadProc(T& fn, PFN_vkGetInstanceProcAddr gpa, VkInstance instance, const char *name)
+{
+	fn = reinterpret_cast<T>(gpa(instance, name));
+	return fn != nullptr;
+}
+
+template <class T, class Enumerator>
+static bool EnumerateResult(Vector<T>& out, Enumerator enumerator, const char *what, String& error)
+{
+	for(int attempt = 0; attempt < 8; ++attempt) {
+		uint32_t count = 0;
+		VkResult vr = enumerator(&count, nullptr);
+		if(vr != VK_SUCCESS && vr != VK_INCOMPLETE) {
+			error = String(what) + " count query failed: " + AsString((int)vr);
+			return false;
+		}
+
+		out.SetCount((int)count);
+		if(count == 0)
+			return true;
+
+		vr = enumerator(&count, out.Begin());
+		if(vr == VK_SUCCESS) {
+			out.SetCount((int)count);
+			return true;
+		}
+		if(vr != VK_INCOMPLETE) {
+			error = String(what) + " enumeration failed: " + AsString((int)vr);
+			return false;
+		}
+	}
+
+	error = String(what) + " enumeration kept returning VK_INCOMPLETE";
+	return false;
+}
+
+template <class T, class Enumerator>
+static bool EnumerateVoid(Vector<T>& out, Enumerator enumerator, const char *what, String& error)
+{
+	for(int attempt = 0; attempt < 8; ++attempt) {
+		uint32_t count = 0;
+		enumerator(&count, nullptr);
+		out.SetCount((int)count);
+		if(count == 0)
+			return true;
+
+		uint32_t requested = count;
+		enumerator(&count, out.Begin());
+		if(count == requested)
+			return true;
+	}
+
+	error = String(what) + " enumeration kept changing";
+	return false;
+}
+
+static String ApiResultText(VkResult vr)
+{
+	return AsString((int)vr);
+}
+
+} // namespace
 
 VulkanPreflight::VulkanPreflight()
 {
@@ -17,10 +118,14 @@ String VulkanPreflight::StatusText(VulkanProbeStatus status)
 {
 	switch(status) {
 	case VulkanProbeStatus::Ok: return "ok";
-	case VulkanProbeStatus::LoaderUnavailable: return "loader unavailable";
+	case VulkanProbeStatus::RuntimeUnavailable: return "runtime unavailable";
+	case VulkanProbeStatus::RequiredLoaderFunctionUnavailable: return "required loader function unavailable";
 	case VulkanProbeStatus::LoaderTooOld: return "loader api version older than Vulkan 1.3";
+	case VulkanProbeStatus::LayerEnumerationFailed: return "layer enumeration failed";
+	case VulkanProbeStatus::ExtensionEnumerationFailed: return "extension enumeration failed";
 	case VulkanProbeStatus::ValidationUnavailable: return "validation layer unavailable";
 	case VulkanProbeStatus::InstanceCreationFailed: return "instance creation failed";
+	case VulkanProbeStatus::PhysicalDeviceEnumerationFailed: return "physical device enumeration failed";
 	case VulkanProbeStatus::NoPhysicalDevices: return "no physical devices";
 	case VulkanProbeStatus::NoSuitableDevices: return "no suitable devices";
 	}
@@ -30,11 +135,6 @@ String VulkanPreflight::StatusText(VulkanProbeStatus status)
 String VulkanPreflight::FormatVersion(uint32_t version)
 {
 	return AsString((int)VK_VERSION_MAJOR(version)) + "." + AsString((int)VK_VERSION_MINOR(version)) + "." + AsString((int)VK_VERSION_PATCH(version));
-}
-
-String VulkanPreflight::FormatDeviceType(String type)
-{
-	return type;
 }
 
 String VulkanPreflight::DeviceTypeText(VkPhysicalDeviceType type)
@@ -69,14 +169,6 @@ bool VulkanPreflight::HasExtension(const Vector<VulkanExtensionInfo>& extensions
 	return false;
 }
 
-bool VulkanPreflight::HasLayer(const Vector<VulkanLayerInfo>& layers, const char *name)
-{
-	for(const auto& layer : layers)
-		if(layer.name == name)
-			return true;
-	return false;
-}
-
 void VulkanPreflight::AppendMissing(VulkanDeviceInfo& device, const char *text)
 {
 	device.missing_requirements.Add(text);
@@ -107,22 +199,68 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 	VulkanPreflightReport report;
 	report.validation_requested = request_validation;
 
-	uint32_t loader_version = VK_API_VERSION_1_0;
-	VkResult vr = vkEnumerateInstanceVersion(&loader_version);
-	if(vr != VK_SUCCESS) {
-		report.status = VulkanProbeStatus::LoaderUnavailable;
-		report.status_text = StatusText(report.status);
-		return report;
-	}
+	VulkanLoader loader;
+	VkInstance instance = VK_NULL_HANDLE;
+	auto set_error = [&](VulkanProbeStatus status, const String& error) {
+		switch(status) {
+		case VulkanProbeStatus::RuntimeUnavailable: report.runtime_error = error; break;
+		case VulkanProbeStatus::RequiredLoaderFunctionUnavailable:
+		case VulkanProbeStatus::LoaderTooOld: report.loader_error = error; break;
+		case VulkanProbeStatus::LayerEnumerationFailed: report.layer_error = error; break;
+		case VulkanProbeStatus::ExtensionEnumerationFailed: report.extension_error = error; break;
+		case VulkanProbeStatus::PhysicalDeviceEnumerationFailed: report.physical_device_error = error; break;
+		case VulkanProbeStatus::InstanceCreationFailed: report.instance_error = error; break;
+		case VulkanProbeStatus::ValidationUnavailable:
+		case VulkanProbeStatus::NoPhysicalDevices:
+		case VulkanProbeStatus::NoSuitableDevices:
+		case VulkanProbeStatus::Ok:
+			report.instance_error = error;
+			break;
+		}
+	};
+	auto fail = [&](VulkanProbeStatus status, const String& error, bool has_instance = false) {
+		report.status = status;
+		report.status_text = StatusText(status);
+		if(!error.IsEmpty())
+			set_error(status, error);
+		bool clean = !has_instance || loader.destroy_instance != nullptr;
+		if(has_instance && loader.destroy_instance && instance)
+			loader.destroy_instance(instance, nullptr);
+		loader.Reset();
+		report.clean_shutdown = clean;
+		return pick(report);
+	};
 
+	loader.module = LoadLibraryW(L"vulkan-1.dll");
+	if(!loader.module)
+		return fail(VulkanProbeStatus::RuntimeUnavailable, "LoadLibraryW(vulkan-1.dll) failed");
+
+	loader.get_instance_proc_addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(GetProcAddress(loader.module, "vkGetInstanceProcAddr"));
+	if(!loader.get_instance_proc_addr)
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkGetInstanceProcAddr unavailable");
+
+	if(!LoadProc(loader.enumerate_instance_version, loader.get_instance_proc_addr, VK_NULL_HANDLE, "vkEnumerateInstanceVersion"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkEnumerateInstanceVersion unavailable");
+	if(!LoadProc(loader.enumerate_instance_layer_properties, loader.get_instance_proc_addr, VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkEnumerateInstanceLayerProperties unavailable");
+	if(!LoadProc(loader.enumerate_instance_extension_properties, loader.get_instance_proc_addr, VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkEnumerateInstanceExtensionProperties unavailable");
+	if(!LoadProc(loader.create_instance, loader.get_instance_proc_addr, VK_NULL_HANDLE, "vkCreateInstance"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkCreateInstance unavailable");
+	LoadProc(loader.destroy_instance, loader.get_instance_proc_addr, VK_NULL_HANDLE, "vkDestroyInstance");
+
+	uint32_t loader_version = VK_API_VERSION_1_0;
+	VkResult vr = loader.enumerate_instance_version(&loader_version);
+	if(vr != VK_SUCCESS)
+		return fail(VulkanProbeStatus::LoaderTooOld, String("vkEnumerateInstanceVersion failed: ") + ApiResultText(vr));
 	report.loader_available = true;
 	report.loader_version = loader_version;
 
-	uint32_t layer_count = 0;
-	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-	Vector<VkLayerProperties> layers(layer_count);
-	if(layer_count)
-		vkEnumerateInstanceLayerProperties(&layer_count, layers.Begin());
+	Vector<VkLayerProperties> layers;
+	if(!EnumerateResult<VkLayerProperties>(layers,
+		[&](uint32_t *count, VkLayerProperties *data) { return loader.enumerate_instance_layer_properties(count, data); },
+		"instance layer", report.layer_error))
+		return fail(VulkanProbeStatus::LayerEnumerationFailed, report.layer_error);
 	for(const auto& layer : layers) {
 		VulkanLayerInfo info;
 		info.name = LayerName(layer);
@@ -130,15 +268,16 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 		info.spec_version = LayerVersionToUInt(layer);
 		report.instance_layers.Add() = pick(info);
 	}
+
 	for(const auto& layer : report.instance_layers)
 		if(layer.name == "VK_LAYER_KHRONOS_validation")
 			report.validation_available = true;
 
-	uint32_t ext_count = 0;
-	vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr);
-	Vector<VkExtensionProperties> exts(ext_count);
-	if(ext_count)
-		vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, exts.Begin());
+	Vector<VkExtensionProperties> exts;
+	if(!EnumerateResult<VkExtensionProperties>(exts,
+		[&](uint32_t *count, VkExtensionProperties *data) { return loader.enumerate_instance_extension_properties(nullptr, count, data); },
+		"instance extension", report.extension_error))
+		return fail(VulkanProbeStatus::ExtensionEnumerationFailed, report.extension_error);
 	for(const auto& ext : exts) {
 		VulkanExtensionInfo info;
 		info.name = ExtensionName(ext);
@@ -146,17 +285,11 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 		report.instance_extensions.Add() = pick(info);
 	}
 
-	if(request_validation && !report.validation_available) {
-		report.status = VulkanProbeStatus::ValidationUnavailable;
-		report.status_text = StatusText(report.status);
-		return report;
-	}
+	if(request_validation && !report.validation_available)
+		return fail(VulkanProbeStatus::ValidationUnavailable, "VK_LAYER_KHRONOS_validation not present");
 
-	if(loader_version < VK_API_VERSION_1_3) {
-		report.status = VulkanProbeStatus::LoaderTooOld;
-		report.status_text = StatusText(report.status);
-		return report;
-	}
+	if(loader_version < VK_API_VERSION_1_3)
+		return fail(VulkanProbeStatus::LoaderTooOld, "loader reports Vulkan " + FormatVersion(loader_version) + ", need 1.3+");
 
 	VkApplicationInfo app_info{};
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -176,39 +309,37 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 	create_info.enabledLayerCount = enabled_layers.GetCount();
 	create_info.ppEnabledLayerNames = enabled_layers.IsEmpty() ? nullptr : enabled_layers.Begin();
 
-	VkInstance instance = VK_NULL_HANDLE;
-	vr = vkCreateInstance(&create_info, nullptr, &instance);
-	if(vr != VK_SUCCESS) {
-		report.status = VulkanProbeStatus::InstanceCreationFailed;
-		report.instance_error = String("vkCreateInstance failed: ") + AsString((int)vr);
-		report.status_text = StatusText(report.status);
-		return report;
-	}
+	vr = loader.create_instance(&create_info, nullptr, &instance);
+	if(vr != VK_SUCCESS)
+		return fail(VulkanProbeStatus::InstanceCreationFailed, String("vkCreateInstance failed: ") + ApiResultText(vr));
 	report.instance_created = true;
 
-	uint32_t device_count = 0;
-	vr = vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
-	if(vr != VK_SUCCESS || device_count == 0) {
-		vkDestroyInstance(instance, nullptr);
-		report.status = VulkanProbeStatus::NoPhysicalDevices;
-		report.status_text = StatusText(report.status);
-		return report;
-	}
+	if(!LoadProc(loader.destroy_instance, loader.get_instance_proc_addr, instance, "vkDestroyInstance"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkDestroyInstance unavailable", true);
+	if(!LoadProc(loader.enumerate_physical_devices, loader.get_instance_proc_addr, instance, "vkEnumeratePhysicalDevices"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkEnumeratePhysicalDevices unavailable", true);
+	if(!LoadProc(loader.get_physical_device_properties, loader.get_instance_proc_addr, instance, "vkGetPhysicalDeviceProperties"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkGetPhysicalDeviceProperties unavailable", true);
+	if(!LoadProc(loader.get_physical_device_queue_family_properties, loader.get_instance_proc_addr, instance, "vkGetPhysicalDeviceQueueFamilyProperties"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkGetPhysicalDeviceQueueFamilyProperties unavailable", true);
+	if(!LoadProc(loader.enumerate_device_extension_properties, loader.get_instance_proc_addr, instance, "vkEnumerateDeviceExtensionProperties"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkEnumerateDeviceExtensionProperties unavailable", true);
+	if(!LoadProc(loader.get_physical_device_features2, loader.get_instance_proc_addr, instance, "vkGetPhysicalDeviceFeatures2"))
+		return fail(VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "vkGetPhysicalDeviceFeatures2 unavailable", true);
 
-	Vector<VkPhysicalDevice> devices(device_count);
-	vr = vkEnumeratePhysicalDevices(instance, &device_count, devices.Begin());
-	if(vr != VK_SUCCESS) {
-		vkDestroyInstance(instance, nullptr);
-		report.status = VulkanProbeStatus::NoPhysicalDevices;
-		report.instance_error = String("vkEnumeratePhysicalDevices failed: ") + AsString((int)vr);
-		report.status_text = StatusText(report.status);
-		return report;
+	Vector<VkPhysicalDevice> devices;
+	if(!EnumerateResult<VkPhysicalDevice>(devices,
+		[&](uint32_t *count, VkPhysicalDevice *data) { return loader.enumerate_physical_devices(instance, count, data); },
+		"physical device", report.physical_device_error)) {
+		return fail(VulkanProbeStatus::PhysicalDeviceEnumerationFailed, report.physical_device_error, true);
 	}
+	if(devices.IsEmpty())
+		return fail(VulkanProbeStatus::NoPhysicalDevices, "vkEnumeratePhysicalDevices returned zero devices", true);
 
 	for(VkPhysicalDevice device : devices) {
 		VulkanDeviceInfo info;
 		VkPhysicalDeviceProperties props{};
-		vkGetPhysicalDeviceProperties(device, &props);
+		loader.get_physical_device_properties(device, &props);
 		info.name = props.deviceName;
 		info.type = DeviceTypeText(props.deviceType);
 		info.vendor_id = props.vendorID;
@@ -216,11 +347,13 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 		info.driver_version = props.driverVersion;
 		info.api_version = props.apiVersion;
 
-		uint32_t qcount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &qcount, nullptr);
-		Vector<VkQueueFamilyProperties> qprops(qcount);
-		if(qcount)
-			vkGetPhysicalDeviceQueueFamilyProperties(device, &qcount, qprops.Begin());
+		Vector<VkQueueFamilyProperties> qprops;
+		if(!EnumerateVoid<VkQueueFamilyProperties>(qprops,
+			[&](uint32_t *count, VkQueueFamilyProperties *data) { loader.get_physical_device_queue_family_properties(device, count, data); },
+			"queue family", report.physical_device_error)) {
+			return fail(VulkanProbeStatus::PhysicalDeviceEnumerationFailed, report.physical_device_error, true);
+		}
+
 		for(int i = 0; i < qprops.GetCount(); ++i) {
 			const VkQueueFamilyProperties& q = qprops[i];
 			VulkanQueueFamilyInfo qinfo;
@@ -236,11 +369,12 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 				info.graphics_queue = true;
 		}
 
-		uint32_t dext_count = 0;
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &dext_count, nullptr);
-		Vector<VkExtensionProperties> dexts(dext_count);
-		if(dext_count)
-			vkEnumerateDeviceExtensionProperties(device, nullptr, &dext_count, dexts.Begin());
+		Vector<VkExtensionProperties> dexts;
+		if(!EnumerateResult<VkExtensionProperties>(dexts,
+			[&](uint32_t *count, VkExtensionProperties *data) { return loader.enumerate_device_extension_properties(device, nullptr, count, data); },
+			"device extension", report.extension_error)) {
+			return fail(VulkanProbeStatus::ExtensionEnumerationFailed, report.extension_error, true);
+		}
 
 		for(const auto& ext : dexts) {
 			VulkanExtensionInfo einfo;
@@ -253,13 +387,15 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 		bool has_sync2 = false;
 		if(props.apiVersion >= VK_API_VERSION_1_3) {
 			VkPhysicalDeviceVulkan13Features f13{};
+			f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 			VkPhysicalDeviceFeatures2 f2{};
 			f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 			f2.pNext = &f13;
-			vkGetPhysicalDeviceFeatures2(device, &f2);
+			loader.get_physical_device_features2(device, &f2);
 			has_dynamic_rendering = f13.dynamicRendering == VK_TRUE;
 			has_sync2 = f13.synchronization2 == VK_TRUE;
-		} else {
+		}
+		else {
 			bool has_dyn_ext = HasExtension(info.device_extensions, "VK_KHR_dynamic_rendering");
 			bool has_sync_ext = HasExtension(info.device_extensions, "VK_KHR_synchronization2");
 			if(has_dyn_ext || has_sync_ext) {
@@ -271,35 +407,38 @@ VulkanPreflightReport VulkanPreflight::Run(bool request_validation)
 				sync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
 				f2.pNext = &dyn;
 				dyn.pNext = &sync2;
-				vkGetPhysicalDeviceFeatures2(device, &f2);
+				loader.get_physical_device_features2(device, &f2);
 				has_dynamic_rendering = has_dyn_ext && dyn.dynamicRendering == VK_TRUE;
 				has_sync2 = has_sync_ext && sync2.synchronization2 == VK_TRUE;
 			}
 		}
+
 		info.dynamic_rendering = has_dynamic_rendering;
 		info.synchronization2 = has_sync2;
-
-		if(props.apiVersion < VK_API_VERSION_1_3)
-			AppendMissing(info, "Vulkan 1.3");
-		if(!info.graphics_queue)
-			AppendMissing(info, "graphics queue");
-		if(!info.dynamic_rendering)
-			AppendMissing(info, "dynamic rendering");
-		if(!info.synchronization2)
-			AppendMissing(info, "synchronization2");
-		info.suitable = info.missing_requirements.IsEmpty() && props.apiVersion >= VK_API_VERSION_1_3;
-		if(!info.suitable && props.apiVersion >= VK_API_VERSION_1_3 && info.graphics_queue && info.dynamic_rendering && info.synchronization2)
-			info.suitable = true;
+		info.suitable = info.api_version >= VK_API_VERSION_1_3 && info.graphics_queue && info.dynamic_rendering && info.synchronization2;
+		if(!info.suitable) {
+			if(info.api_version < VK_API_VERSION_1_3)
+				AppendMissing(info, "Vulkan 1.3");
+			if(!info.graphics_queue)
+				AppendMissing(info, "graphics queue");
+			if(!info.dynamic_rendering)
+				AppendMissing(info, "dynamic rendering");
+			if(!info.synchronization2)
+				AppendMissing(info, "synchronization2");
+		}
 		if(info.suitable)
 			report.suitable_device_count += 1;
 
 		report.devices.Add() = pick(info);
 	}
 
-	vkDestroyInstance(instance, nullptr);
-	report.status = report.devices.IsEmpty() ? VulkanProbeStatus::NoPhysicalDevices : (report.suitable_device_count > 0 ? VulkanProbeStatus::Ok : VulkanProbeStatus::NoSuitableDevices);
+	loader.destroy_instance(instance, nullptr);
+	loader.Reset();
+	report.instance_created = true;
+	report.clean_shutdown = true;
+	report.status = report.suitable_device_count > 0 ? VulkanProbeStatus::Ok : VulkanProbeStatus::NoSuitableDevices;
 	report.status_text = StatusText(report.status);
-	return report;
+	return pick(report);
 }
 
 String VulkanPreflight::Dump(const VulkanPreflightReport& report) const
@@ -307,12 +446,23 @@ String VulkanPreflight::Dump(const VulkanPreflightReport& report) const
 	String out;
 	out << "Vulkan preflight summary\n";
 	out << "Status: " << report.status_text << '\n';
-	out << "Loader available: " << BoolText(report.loader_available) << '\n';
+	out << "Loader/runtime available: " << BoolText(report.loader_available) << '\n';
 	if(report.loader_available)
-		out << "Loader version: " << FormatVersion(report.loader_version) << '\n';
+		out << "Loader API version: " << FormatVersion(report.loader_version) << '\n';
 	out << "Validation layer available: " << BoolText(report.validation_available) << '\n';
 	out << "Validation requested: " << BoolText(report.validation_requested) << '\n';
 	out << "Instance created: " << BoolText(report.instance_created) << '\n';
+	out << "Clean shutdown: " << BoolText(report.clean_shutdown) << '\n';
+	if(!report.runtime_error.IsEmpty())
+		out << "Runtime error: " << report.runtime_error << '\n';
+	if(!report.loader_error.IsEmpty())
+		out << "Loader error: " << report.loader_error << '\n';
+	if(!report.layer_error.IsEmpty())
+		out << "Layer error: " << report.layer_error << '\n';
+	if(!report.extension_error.IsEmpty())
+		out << "Extension error: " << report.extension_error << '\n';
+	if(!report.physical_device_error.IsEmpty())
+		out << "Physical device error: " << report.physical_device_error << '\n';
 	if(!report.instance_error.IsEmpty())
 		out << "Instance error: " << report.instance_error << '\n';
 	out << "Instance layers: " << report.instance_layers.GetCount() << '\n';
@@ -340,9 +490,8 @@ String VulkanPreflight::Dump(const VulkanPreflightReport& report) const
 		out << "  Device extensions: " << d.device_extensions.GetCount() << '\n';
 		for(const auto& ext : d.device_extensions)
 			out << "    " << ext.name << " spec=" << FormatVersion(ext.spec_version) << '\n';
-		for(const auto& q : d.queue_families) {
+		for(const auto& q : d.queue_families)
 			out << "  Queue family " << q.index << ": flags=" << QueueFlagsText(q.flags) << " count=" << AsString(q.count) << " graphics=" << BoolText(q.graphics) << " compute=" << BoolText(q.compute) << " transfer=" << BoolText(q.transfer) << '\n';
-		}
 	}
 	out << "VulkanProbe " << (report.status == VulkanProbeStatus::Ok ? "passed" : "failed") << '\n';
 	return out;

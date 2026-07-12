@@ -1,16 +1,21 @@
 #pragma once
 
 #include <Core/Core.h>
+#define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 
 namespace Upp {
 
 enum class VulkanProbeStatus {
 	Ok,
-	LoaderUnavailable,
+	RuntimeUnavailable,
+	RequiredLoaderFunctionUnavailable,
 	LoaderTooOld,
+	LayerEnumerationFailed,
+	ExtensionEnumerationFailed,
 	ValidationUnavailable,
 	InstanceCreationFailed,
+	PhysicalDeviceEnumerationFailed,
 	NoPhysicalDevices,
 	NoSuitableDevices,
 };
@@ -53,13 +58,19 @@ struct VulkanDeviceInfo : Moveable<VulkanDeviceInfo> {
 };
 
 struct VulkanPreflightReport : Moveable<VulkanPreflightReport> {
-	VulkanProbeStatus status = VulkanProbeStatus::LoaderUnavailable;
+	VulkanProbeStatus status = VulkanProbeStatus::RuntimeUnavailable;
 	String status_text;
 	bool loader_available = false;
 	uint32_t loader_version = 0;
 	bool validation_requested = false;
 	bool validation_available = false;
 	bool instance_created = false;
+	bool clean_shutdown = false;
+	String runtime_error;
+	String loader_error;
+	String layer_error;
+	String extension_error;
+	String physical_device_error;
 	String instance_error;
 	Vector<VulkanLayerInfo> instance_layers;
 	Vector<VulkanExtensionInfo> instance_extensions;
@@ -75,7 +86,6 @@ public:
 	String Dump(const VulkanPreflightReport& report) const;
 
 	static String FormatVersion(uint32_t version);
-	static String FormatDeviceType(String type);
 
 private:
 	static String BoolText(bool value);
@@ -85,7 +95,6 @@ private:
 	static String DeviceTypeText(VkPhysicalDeviceType type);
 	static String QueueFlagsText(VkQueueFlags flags);
 	static bool HasExtension(const Vector<VulkanExtensionInfo>& extensions, const char *name);
-	static bool HasLayer(const Vector<VulkanLayerInfo>& layers, const char *name);
 	static void AppendMissing(VulkanDeviceInfo& device, const char *text);
 	static uint32_t LayerVersionToUInt(const VkLayerProperties& prop);
 	static uint32_t ExtensionVersionToUInt(const VkExtensionProperties& prop);

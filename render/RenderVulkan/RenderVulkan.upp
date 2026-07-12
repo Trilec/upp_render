@@ -1,8 +1,6 @@
 uses
 	Core;
 
-library(WIN32) "$(VULKAN_SDK)/Lib/vulkan-1.lib";
-
 file
 	RenderVulkan.h,
 	RenderVulkan.cpp;
