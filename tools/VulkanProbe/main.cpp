@@ -17,6 +17,17 @@ CONSOLE_APP_MAIN
 		args.Add(__argv[i]);
 
 	bool request_validation = HasArg(args, "--validation");
+	bool create_device = HasArg(args, "--create-device");
+	if(create_device) {
+		VulkanBootstrap probe;
+		VulkanBootstrapReport report = probe.Run(request_validation, true);
+		Cout() << probe.Dump(report) << EOL;
+		if(report.status == VulkanProbeStatus::Ok)
+			return;
+		SetExitCode((int)report.status + 1);
+		return;
+	}
+
 	VulkanPreflight probe;
 	VulkanPreflightReport report = probe.Run(request_validation);
 	Cout() << probe.Dump(report) << EOL;

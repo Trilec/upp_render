@@ -53,15 +53,16 @@ Add the first GPU backend:
 - frame submission and synchronization
 - resource upload and deferred destruction
 
-TASK-005A is the current milestone: Vulkan preflight and loader integration.
-It uses Vulkan 1.3 as the baseline and keeps the SDK header path local via a
-build method copied from `E:\upp-18468\CLANGx64.bm` with `INCLUDE` extended
-by `C:\VulkanSDK\1.4.350.0\Include`.
+TASK-005 and TASK-005A are complete.
+TASK-006 is current: Vulkan instance, logical device, and graphics queue bootstrap.
+It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
+and keeps the SDK header path local via a build method with `INCLUDE` extended
+by `%VULKAN_SDK%\Include`.
 
 Successful local build command:
 
 ```text
-E:\upp-18468\umk.exe render,examples,tests,tools,E:\upp-18468\uppsrc VulkanProbe C:\Users\admin\AppData\Local\Temp\opencode\CLANGx64_Vulkan.bm --out-dir build
+<upp-root>\umk.exe render,examples,tests,tools,<upp-root>\uppsrc VulkanProbe <local-vulkan-build-method> --out-dir build
 ```
 
 ## Stage 4 - GPU 2D Renderer

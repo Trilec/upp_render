@@ -14,10 +14,13 @@ enum class VulkanProbeStatus {
 	LayerEnumerationFailed,
 	ExtensionEnumerationFailed,
 	ValidationUnavailable,
+	DebugUtilsUnavailable,
 	InstanceCreationFailed,
 	PhysicalDeviceEnumerationFailed,
 	NoPhysicalDevices,
 	NoSuitableDevices,
+	DeviceCreationFailed,
+	ValidationErrorsReported,
 };
 
 struct VulkanLayerInfo : Moveable<VulkanLayerInfo> {
@@ -52,6 +55,14 @@ struct VulkanDeviceInfo : Moveable<VulkanDeviceInfo> {
 	bool dynamic_rendering = false;
 	bool synchronization2 = false;
 	bool suitable = false;
+	String selection_reason;
+	int selected_queue_family_index = -1;
+	uint32_t selected_queue_count = 0;
+	uint32_t selected_queue_flags = 0;
+	bool selected_queue_compute = false;
+	bool selected_queue_transfer = false;
+	bool logical_device_created = false;
+	bool graphics_queue_acquired = false;
 	Vector<String> missing_requirements;
 	Vector<VulkanQueueFamilyInfo> queue_families;
 	Vector<VulkanExtensionInfo> device_extensions;
@@ -64,18 +75,43 @@ struct VulkanPreflightReport : Moveable<VulkanPreflightReport> {
 	uint32_t loader_version = 0;
 	bool validation_requested = false;
 	bool validation_available = false;
+	bool debug_utils_available = false;
 	bool instance_created = false;
 	bool clean_shutdown = false;
 	String runtime_error;
 	String loader_error;
 	String layer_error;
 	String extension_error;
-	String physical_device_error;
 	String instance_error;
+	String physical_device_error;
 	Vector<VulkanLayerInfo> instance_layers;
 	Vector<VulkanExtensionInfo> instance_extensions;
 	Vector<VulkanDeviceInfo> devices;
 	int suitable_device_count = 0;
+};
+
+struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
+	VulkanProbeStatus status = VulkanProbeStatus::RuntimeUnavailable;
+	String status_text;
+	VulkanPreflightReport preflight;
+	bool validation_requested = false;
+	bool create_device_requested = false;
+	bool validation_available = false;
+	bool debug_utils_available = false;
+	bool debug_messenger_created = false;
+	bool logical_device_created = false;
+	bool graphics_queue_acquired = false;
+	bool clean_shutdown = false;
+	int validation_warning_count = 0;
+	int validation_error_count = 0;
+	Vector<String> validation_messages;
+	String runtime_error;
+	String loader_error;
+	String validation_error;
+	String instance_error;
+	String physical_device_error;
+	String device_error;
+	VulkanDeviceInfo selected_device;
 };
 
 class VulkanPreflight {
@@ -85,19 +121,47 @@ public:
 	VulkanPreflightReport Run(bool request_validation);
 	String Dump(const VulkanPreflightReport& report) const;
 
+private:
+	static String BoolText(bool value);
+	static String StatusText(VulkanProbeStatus status);
 	static String FormatVersion(uint32_t version);
+	static String DeviceTypeText(VkPhysicalDeviceType type);
+	static String QueueFlagsText(VkQueueFlags flags);
+	static String LayerName(const VkLayerProperties& prop);
+	static String ExtensionName(const VkExtensionProperties& prop);
+	static uint32_t LayerVersionToUInt(const VkLayerProperties& prop);
+	static uint32_t ExtensionVersionToUInt(const VkExtensionProperties& prop);
+	static bool HasExtension(const Vector<VulkanExtensionInfo>& extensions, const char *name);
+	static void AppendMissing(VulkanDeviceInfo& device, const char *text);
+
+	friend class VulkanBootstrap;
+};
+
+class VulkanBootstrap {
+public:
+	VulkanBootstrap();
+
+	VulkanBootstrapReport Run(bool request_validation, bool create_device);
+	String Dump(const VulkanBootstrapReport& report) const;
 
 private:
 	static String BoolText(bool value);
 	static String StatusText(VulkanProbeStatus status);
-	static String ExtensionName(const VkExtensionProperties& prop);
-	static String LayerName(const VkLayerProperties& prop);
+	static String FormatVersion(uint32_t version);
 	static String DeviceTypeText(VkPhysicalDeviceType type);
 	static String QueueFlagsText(VkQueueFlags flags);
-	static bool HasExtension(const Vector<VulkanExtensionInfo>& extensions, const char *name);
-	static void AppendMissing(VulkanDeviceInfo& device, const char *text);
+	static String LayerName(const VkLayerProperties& prop);
+	static String ExtensionName(const VkExtensionProperties& prop);
 	static uint32_t LayerVersionToUInt(const VkLayerProperties& prop);
 	static uint32_t ExtensionVersionToUInt(const VkExtensionProperties& prop);
+	static bool HasExtension(const Vector<VulkanExtensionInfo>& extensions, const char *name);
+	static bool IsSuitableDevice(const VulkanDeviceInfo& device);
+	static int DeviceRank(VkPhysicalDeviceType type);
+	static int QueueRank(const VulkanQueueFamilyInfo& family);
+	static String SanitizeValidationMessage(const String& text);
+
+	static VulkanPreflightReport BuildPreflight(bool request_validation, bool request_debug_utils, bool allow_validation);
+	static bool BuildBootstrap(VulkanBootstrapReport& report, bool request_validation, bool create_device);
 };
 
 }

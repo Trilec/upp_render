@@ -19,6 +19,7 @@ software replay, tests, and a visual demo before any GPU API is introduced.
 - `examples/DisplayListDemo`
 - `tests/RenderCanvasTest`
 - `tests/RenderRhiTest`
+- `tests/RenderVulkanTest`
 - `tools/VulkanProbe`
 
 ## Build
@@ -27,9 +28,8 @@ Build the packages in the Windows `CLANGx64` configuration using TheIDE.
 `GitHubOut.var.example` uses `<path-to-uppsrc>` as a placeholder, because the
 real U++ source tree is local to each machine and pretending otherwise is how
 machines start developing personality.
-For TASK-005A, the local build method was `CLANGx64_Vulkan.bm`, copied from
-`E:\upp-18468\CLANGx64.bm` with `INCLUDE` extended by
-`C:\VulkanSDK\1.4.350.0\Include`.
+For Vulkan work, use a local build method with `INCLUDE` extended by
+`%VULKAN_SDK%\Include`.
 The expected outputs are:
 
 - the corresponding executables under `build/`
@@ -40,8 +40,8 @@ Run the test and demo executables after building.
 
 ## Current limitations
 
-- no Vulkan backend yet
-- Vulkan preflight only; no rendering backend yet
+- no Vulkan rendering backend yet
+- Vulkan loader/device bootstrap only; no surface or presentation path yet
 - no other GPU backend yet
 - no U++ control integration yet
 - no text, image, gradient, shadow, or shader pipeline yet
