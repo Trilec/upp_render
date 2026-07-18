@@ -54,10 +54,14 @@ Add the first GPU backend:
 - resource upload and deferred destruction
 
 TASK-005 and TASK-005A are complete.
-TASK-006 is current: Vulkan instance, logical device, and graphics queue bootstrap.
+TASK-006 and TASK-006A are complete: Vulkan loader, instance, physical-device
+selection, logical-device creation, and graphics-queue bootstrap.
 It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
 and keeps the SDK header path local via a build method with `INCLUDE` extended
 by `%VULKAN_SDK%\Include`.
+
+Next milestone: surface and platform design, followed by swapchain and present
+lifecycle work.
 
 Successful local build command:
 

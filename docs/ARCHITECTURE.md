@@ -101,11 +101,12 @@ step is not starting from a blank screen and a shrug.
 
 ## Vulkan Preflight
 
-`RenderVulkan` and `VulkanProbe` cover loader, instance, device, and graphics
-queue bootstrap only. They use the local Vulkan SDK headers, keep Vulkan types
-out of the recording layer, and stop well before surface and presentation work.
-The reference hardware file `docs/VulkanReport_RTX_4070Ti.json` is a capability
-snapshot from the local RTX 4070 Ti; its UUID and LUID values are
-machine-specific, and the live probe run remains the source of truth.
+`RenderVulkan` and `VulkanProbe` cover Vulkan loader, instance,
+physical-device selection, logical-device creation, and graphics-queue
+bootstrap. They use the local Vulkan SDK headers, keep Vulkan types out of the
+recording layer, and stop well before surface, swapchain, presentation, or
+rendering work. The reference hardware file `docs/VulkanReport_RTX_4070Ti.json`
+is a capability snapshot from the local RTX 4070 Ti; its UUID and LUID values
+are machine-specific, and the live probe run remains the source of truth.
 
 For the broader roadmap, see `docs/PROJECT_PLAN.md`.

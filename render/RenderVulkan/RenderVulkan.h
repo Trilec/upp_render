@@ -6,6 +6,8 @@
 
 namespace Upp {
 
+using VulkanProcResolver = FARPROC (WINAPI *)(HMODULE, LPCSTR);
+
 enum class VulkanProbeStatus {
 	Ok,
 	RuntimeUnavailable,
@@ -78,6 +80,10 @@ struct VulkanPreflightReport : Moveable<VulkanPreflightReport> {
 	bool debug_utils_available = false;
 	bool instance_created = false;
 	bool clean_shutdown = false;
+	bool cleanup_state_cleared = false;
+	int validation_warning_count = 0;
+	int validation_error_count = 0;
+	Vector<String> validation_messages;
 	String runtime_error;
 	String loader_error;
 	String layer_error;
@@ -102,6 +108,10 @@ struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
 	bool logical_device_created = false;
 	bool graphics_queue_acquired = false;
 	bool clean_shutdown = false;
+	bool cleanup_state_cleared = false;
+	bool instance_cleanup_ok = false;
+	bool device_cleanup_ok = false;
+	bool dispatch_cleanup_ok = false;
 	int validation_warning_count = 0;
 	int validation_error_count = 0;
 	Vector<String> validation_messages;
@@ -119,6 +129,7 @@ public:
 	VulkanPreflight();
 
 	VulkanPreflightReport Run(bool request_validation);
+	VulkanPreflightReport Run(bool request_validation, VulkanProcResolver resolver);
 	String Dump(const VulkanPreflightReport& report) const;
 
 private:
@@ -142,6 +153,7 @@ public:
 	VulkanBootstrap();
 
 	VulkanBootstrapReport Run(bool request_validation, bool create_device);
+	VulkanBootstrapReport Run(bool request_validation, bool create_device, VulkanProcResolver resolver);
 	String Dump(const VulkanBootstrapReport& report) const;
 
 private:
@@ -160,8 +172,8 @@ private:
 	static int QueueRank(const VulkanQueueFamilyInfo& family);
 	static String SanitizeValidationMessage(const String& text);
 
-	static VulkanPreflightReport BuildPreflight(bool request_validation, bool request_debug_utils, bool allow_validation);
-	static bool BuildBootstrap(VulkanBootstrapReport& report, bool request_validation, bool create_device);
+	static VulkanPreflightReport BuildPreflight(bool request_validation, bool request_debug_utils, bool allow_validation, VulkanProcResolver resolver);
+	static bool BuildBootstrap(VulkanBootstrapReport& report, bool request_validation, bool create_device, VulkanProcResolver resolver);
 };
 
 }

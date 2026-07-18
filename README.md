@@ -40,8 +40,10 @@ Run the test and demo executables after building.
 
 ## Current limitations
 
-- no Vulkan rendering backend yet
-- Vulkan loader/device bootstrap only; no surface or presentation path yet
+- Vulkan loader, instance, physical-device selection, logical-device creation,
+  and graphics-queue bootstrap are implemented
+- no Vulkan rendering backend yet; surface, swapchain, presentation, and
+  rendering still are not
 - no other GPU backend yet
 - no U++ control integration yet
 - no text, image, gradient, shadow, or shader pipeline yet
