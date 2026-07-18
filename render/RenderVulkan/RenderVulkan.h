@@ -115,6 +115,8 @@ struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
 	int validation_warning_count = 0;
 	int validation_error_count = 0;
 	Vector<String> validation_messages;
+	int device_cleanup_result = 0;
+	String device_cleanup_error;
 	String runtime_error;
 	String loader_error;
 	String validation_error;
@@ -123,6 +125,25 @@ struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
 	String device_error;
 	VulkanDeviceInfo selected_device;
 };
+
+enum class VulkanValidationTestPoint {
+	None,
+	BeforeDeviceCreation,
+	AfterDeviceCreation,
+	DuringDeviceCleanup,
+};
+
+struct VulkanValidationTestInjection {
+	bool enabled = false;
+	bool error = false;
+	VulkanValidationTestPoint point = VulkanValidationTestPoint::None;
+	bool force_device_cleanup_failure = false;
+	VkResult device_cleanup_result = VK_ERROR_DEVICE_LOST;
+	String message;
+};
+
+void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injection);
+void ClearVulkanValidationTestInjection();
 
 class VulkanPreflight {
 public:

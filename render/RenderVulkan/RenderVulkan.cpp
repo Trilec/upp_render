@@ -237,6 +237,24 @@ static void CopyMessages(Vector<String>& dst, const Vector<String>& src)
 		dst.Add(msg);
 }
 
+static VulkanValidationTestInjection g_validation_test_injection;
+
+static void InjectValidationIfRequested(VulkanValidationCapture& capture, VulkanValidationTestPoint point)
+{
+	if(!g_validation_test_injection.enabled || g_validation_test_injection.point != point)
+		return;
+	if(g_validation_test_injection.error)
+		capture.errors++;
+	else
+		capture.warnings++;
+		
+	if(!g_validation_test_injection.message.IsEmpty())
+		capture.messages.Add(g_validation_test_injection.message);
+	else
+		capture.messages.Add(g_validation_test_injection.error ? String("synthetic validation error") : String("synthetic validation warning"));
+	g_validation_test_injection.enabled = false;
+}
+
 template <class T>
 static bool ResolveInstanceProc(T& out, VulkanProcResolver filter, PFN_vkGetInstanceProcAddr get_proc, VkInstance instance, const char *name, String& error)
 {
@@ -260,6 +278,21 @@ static bool ResolveDeviceProc(T& out, VulkanProcResolver filter, PFN_vkGetDevice
 		return false;
 	}
 	out = reinterpret_cast<T>(get_proc(device, name));
+	if(!out) {
+		error = name;
+		return false;
+	}
+	return true;
+}
+
+template <class T>
+static bool ResolveGlobalProc(T& out, VulkanProcResolver filter, HMODULE module, const char *name, String& error)
+{
+	if(filter && !filter(module, name)) {
+		error = name;
+		return false;
+	}
+	out = reinterpret_cast<T>(GetProcAddress(module, name));
 	if(!out) {
 		error = name;
 		return false;
@@ -357,25 +390,20 @@ struct VulkanDispatch {
 			error = "LoadLibraryW(vulkan-1.dll) failed";
 			return false;
 		}
-		get_instance_proc_addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(GetProcAddress(module, "vkGetInstanceProcAddr"));
-		if(!get_instance_proc_addr) {
-			error = "vkGetInstanceProcAddr unavailable";
+		if(!ResolveGlobalProc(get_instance_proc_addr, proc_filter, module, "vkGetInstanceProcAddr", error)) {
 			Close();
 			return false;
 		}
 		enumerate_instance_version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(GetProcAddress(module, "vkEnumerateInstanceVersion"));
-		if(!(enumerate_instance_layer_properties = reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(get_instance_proc_addr(VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties")))) {
-			error = "vkEnumerateInstanceLayerProperties";
+		if(!ResolveGlobalProc(enumerate_instance_layer_properties, proc_filter, module, "vkEnumerateInstanceLayerProperties", error)) {
 			Close();
 			return false;
 		}
-		if(!(enumerate_instance_extension_properties = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(get_instance_proc_addr(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties")))) {
-			error = "vkEnumerateInstanceExtensionProperties";
+		if(!ResolveGlobalProc(enumerate_instance_extension_properties, proc_filter, module, "vkEnumerateInstanceExtensionProperties", error)) {
 			Close();
 			return false;
 		}
-		if(!(create_instance = reinterpret_cast<PFN_vkCreateInstance>(get_instance_proc_addr(VK_NULL_HANDLE, "vkCreateInstance")))) {
-			error = "vkCreateInstance";
+		if(!ResolveGlobalProc(create_instance, proc_filter, module, "vkCreateInstance", error)) {
 			Close();
 			return false;
 		}
@@ -638,21 +666,30 @@ struct VulkanDeviceContext {
 	PFN_vkGetDeviceQueue get_device_queue = nullptr;
 	PFN_vkDeviceWaitIdle device_wait_idle = nullptr;
 	bool cleanup_ok = true;
+	int cleanup_result = 0;
+	String cleanup_error;
 
-	~VulkanDeviceContext() { }
+	~VulkanDeviceContext() { Close(); }
 
 	bool IsCleared() const
 	{
 		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr;
 	}
 
-	bool Close(const VulkanInstanceContext& instance)
+	bool Close()
 	{
 		bool ok = true;
-		if(device && device_wait_idle) {
-			VkResult vr = device_wait_idle(device);
-			if(vr != VK_SUCCESS)
+		if(device) {
+			VkResult vr = VK_SUCCESS;
+			if(g_validation_test_injection.point == VulkanValidationTestPoint::DuringDeviceCleanup && g_validation_test_injection.force_device_cleanup_failure)
+				vr = g_validation_test_injection.device_cleanup_result;
+			else if(device_wait_idle)
+				vr = device_wait_idle(device);
+			cleanup_result = (int)vr;
+			if(vr != VK_SUCCESS) {
 				ok = false;
+				cleanup_error = String("vkDeviceWaitIdle failed: ") + AsString((int)vr);
+			}
 		}
 		if(device && destroy_device)
 			destroy_device(device, nullptr);
@@ -672,6 +709,8 @@ struct VulkanDeviceContext {
 	{
 		this->physical_device = physical_device;
 		cleanup_ok = true;
+		cleanup_result = 0;
+		cleanup_error.Clear();
 		int chosen_queue_index = -1;
 		int queue_rank = -1;
 		for(const auto& q : device_info.queue_families) {
@@ -710,7 +749,7 @@ struct VulkanDeviceContext {
 
 		auto fail = [&](const String& message) {
 			error = message;
-			Close(instance);
+			Close();
 			return false;
 		};
 
@@ -908,7 +947,7 @@ static void FinalizeBootstrapCleanup(VulkanBootstrapReport& report, const Vulkan
 
 static bool CloseBootstrapContexts(VulkanDispatch& dispatch, VulkanInstanceContext& instance, VulkanDeviceContext& device)
 {
-	bool ok = device.Close(instance);
+	bool ok = device.Close();
 	ok = instance.Close() && ok;
 	ok = dispatch.Close() && ok;
 	return ok;
@@ -946,7 +985,24 @@ static VulkanProbeStatus MapDeviceError(const String& error)
 	return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
 }
 
+static VulkanProbeStatus MapDispatchError(const String& error)
+{
+	if(error == "LoadLibraryW(vulkan-1.dll) failed")
+		return VulkanProbeStatus::RuntimeUnavailable;
+	return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
+}
+
 } // namespace
+
+void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injection)
+{
+	g_validation_test_injection = injection;
+}
+
+void ClearVulkanValidationTestInjection()
+{
+	g_validation_test_injection = VulkanValidationTestInjection();
+}
 
 VulkanPreflight::VulkanPreflight()
 {
@@ -1031,8 +1087,11 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	VulkanDeviceContext device;
 	String error;
 	if(!dispatch.Open(error, resolver)) {
-		report.status = VulkanProbeStatus::RuntimeUnavailable;
-		report.runtime_error = error;
+		report.status = MapDispatchError(error);
+		if(report.status == VulkanProbeStatus::RuntimeUnavailable)
+			report.runtime_error = error;
+		else
+			report.loader_error = error;
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
@@ -1160,17 +1219,31 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	report.preflight.status = report.status == VulkanProbeStatus::ValidationErrorsReported ? VulkanProbeStatus::Ok : report.status;
 	report.preflight.status_text = StatusText(report.preflight.status);
 
+	if(request_validation)
+		InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::BeforeDeviceCreation);
 	if(create_device) {
 		if(!device.Open(instance, selected->handle, report.selected_device, report, error)) {
 			report.status = MapDeviceError(error);
 			report.device_error = error;
 			report.status_text = StatusText(report.status);
+			report.device_cleanup_ok = device.Close();
+			report.device_cleanup_result = device.cleanup_result;
+			report.device_cleanup_error = device.cleanup_error;
 			CopyValidationCapture(report, instance.capture);
+			CopyMessages(report.preflight.validation_messages, report.validation_messages);
 			report.preflight.validation_warning_count = report.validation_warning_count;
 			report.preflight.validation_error_count = report.validation_error_count;
-			CopyMessages(report.preflight.validation_messages, report.validation_messages);
-			report.device_cleanup_ok = device.Close(instance);
-			FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+			report.preflight.debug_utils_available = instance.debug_utils_available;
+			report.preflight.validation_available = report.preflight.validation_available;
+			if(report.validation_error_count > 0 && report.status == VulkanProbeStatus::Ok) {
+				report.status = VulkanProbeStatus::ValidationErrorsReported;
+				report.validation_error = "validation errors reported";
+			}
+			report.preflight.status = report.status;
+			report.preflight.status_text = StatusText(report.preflight.status);
+			report.instance_cleanup_ok = instance.Close();
+			report.dispatch_cleanup_ok = dispatch.Close();
+			FinalizeBootstrapCleanup(report, dispatch, instance, device, report.instance_cleanup_ok && report.dispatch_cleanup_ok && report.device_cleanup_ok);
 			report.preflight.clean_shutdown = report.clean_shutdown;
 			report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 			return false;
@@ -1179,23 +1252,34 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 		report.graphics_queue_acquired = true;
 		report.selected_device.logical_device_created = true;
 		report.selected_device.graphics_queue_acquired = true;
-		report.device_cleanup_ok = device.Close(instance);
-		if(!report.device_cleanup_ok)
-			CopyValidationCapture(report, instance.capture);
+		if(request_validation) {
+			InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::AfterDeviceCreation);
+			InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
+		}
+		report.device_cleanup_ok = device.Close();
+		report.device_cleanup_result = device.cleanup_result;
+		report.device_cleanup_error = device.cleanup_error;
 	}
 
-	report.instance_cleanup_ok = instance.Close();
-	report.dispatch_cleanup_ok = dispatch.Close();
-	report.validation_warning_count = instance.capture.warnings;
-	report.validation_error_count = instance.capture.errors;
-	CopyMessages(report.validation_messages, instance.capture.messages);
+	CopyValidationCapture(report, instance.capture);
+	CopyMessages(report.preflight.validation_messages, report.validation_messages);
 	report.preflight.validation_warning_count = report.validation_warning_count;
 	report.preflight.validation_error_count = report.validation_error_count;
-	CopyMessages(report.preflight.validation_messages, report.validation_messages);
+	report.preflight.debug_utils_available = instance.debug_utils_available;
+	report.preflight.validation_available = report.preflight.validation_available;
+	if(report.status == VulkanProbeStatus::Ok && report.validation_error_count > 0) {
+		report.status = VulkanProbeStatus::ValidationErrorsReported;
+		report.validation_error = "validation errors reported";
+	}
+	report.status_text = StatusText(report.status);
+	report.preflight.status = report.status;
+	report.preflight.status_text = report.status_text;
+	report.instance_cleanup_ok = instance.Close();
+	report.dispatch_cleanup_ok = dispatch.Close();
 	FinalizeBootstrapCleanup(report, dispatch, instance, device, report.instance_cleanup_ok && report.dispatch_cleanup_ok && (!create_device || report.device_cleanup_ok));
 	report.preflight.clean_shutdown = report.clean_shutdown;
 	report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
-	return true;
+	return report.status == VulkanProbeStatus::Ok || report.status == VulkanProbeStatus::ValidationErrorsReported;
 }
 
 VulkanBootstrapReport VulkanBootstrap::Run(bool request_validation, bool create_device)
@@ -1230,6 +1314,10 @@ String VulkanBootstrap::Dump(const VulkanBootstrapReport& report) const
 		out << "Synchronization2 enabled: " << BoolText(report.selected_device.synchronization2) << '\n';
 		out << "Validation warnings: " << AsString(report.validation_warning_count) << '\n';
 		out << "Validation errors: " << AsString(report.validation_error_count) << '\n';
+		if(!report.device_cleanup_error.IsEmpty())
+			out << "Device cleanup error: " << report.device_cleanup_error << '\n';
+		if(report.device_cleanup_result != 0)
+			out << "Device cleanup VkResult: " << AsString(report.device_cleanup_result) << '\n';
 		out << "Clean shutdown: " << BoolText(report.clean_shutdown) << '\n';
 		out << "Bootstrap status: " << report.status_text << '\n';
 	}
