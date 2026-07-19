@@ -3,4 +3,5 @@ uses
 
 file
 	RenderVulkan.h,
+	RenderVulkanTestHooks.h,
 	RenderVulkan.cpp;

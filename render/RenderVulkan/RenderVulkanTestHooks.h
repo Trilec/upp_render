@@ -2,6 +2,8 @@
 
 #include <RenderVulkan/RenderVulkan.h>
 
+namespace Upp {
+
 namespace VulkanTestHooks {
 
 enum class VulkanValidationTestPoint {
@@ -24,3 +26,5 @@ void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injec
 void ClearVulkanValidationTestInjection();
 
 }
+
+} // namespace Upp
