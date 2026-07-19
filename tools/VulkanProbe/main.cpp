@@ -22,9 +22,8 @@ CONSOLE_APP_MAIN
 		VulkanBootstrap probe;
 		VulkanBootstrapReport report = probe.Run(request_validation, true);
 		Cout() << probe.Dump(report) << EOL;
-		if(report.status == VulkanProbeStatus::Ok)
-			return;
-		SetExitCode((int)report.status + 1);
+		if(report.status != VulkanProbeStatus::Ok)
+			SetExitCode((int)report.status + 1);
 		return;
 	}
 
@@ -32,7 +31,6 @@ CONSOLE_APP_MAIN
 	VulkanPreflightReport report = probe.Run(request_validation);
 	Cout() << probe.Dump(report) << EOL;
 
-	if(report.status == VulkanProbeStatus::Ok)
-		return;
-	SetExitCode((int)report.status + 1);
+	if(report.status != VulkanProbeStatus::Ok)
+		SetExitCode((int)report.status + 1);
 }

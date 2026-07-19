@@ -1,6 +1,11 @@
 #include <RenderVulkan/RenderVulkan.h>
+#include <RenderVulkan/RenderVulkanTestHooks.h>
 
 using namespace Upp;
+using VulkanTestHooks::ClearVulkanValidationTestInjection;
+using VulkanTestHooks::SetVulkanValidationTestInjection;
+using VulkanTestHooks::VulkanValidationTestInjection;
+using VulkanTestHooks::VulkanValidationTestPoint;
 
 static const char *g_missing_proc = nullptr;
 
@@ -164,7 +169,7 @@ static bool TestDeviceCleanupFailureDetails()
 {
 	VulkanValidationTestInjection inj = MakeInjection(false, VulkanValidationTestPoint::DuringDeviceCleanup, "cleanup warning", true, VK_ERROR_DEVICE_LOST);
 	VulkanBootstrapReport report = RunBootstrap(true, true, nullptr, &inj);
-	if(!Check(report.status == VulkanProbeStatus::Ok, "cleanup failure should not replace success status")) return false;
+	if(!Check(report.status == VulkanProbeStatus::CleanupFailed, "cleanup failure should become primary when no operational failure exists")) return false;
 	if(!Check(report.device_cleanup_ok == false, "device cleanup should fail")) return false;
 	if(!Check(report.device_cleanup_result == VK_ERROR_DEVICE_LOST, "device cleanup VkResult should be recorded")) return false;
 	if(!Check(!report.device_cleanup_error.IsEmpty(), "device cleanup error text should be recorded")) return false;
@@ -217,8 +222,11 @@ static bool TestInjectedFailureCleanup()
 
 static bool TestCleanupHonesty()
 {
-	VulkanValidationTestInjection inj = MakeInjection(false, VulkanValidationTestPoint::DuringDeviceCleanup, "cleanup failure warning", true, VK_ERROR_DEVICE_LOST);
-	VulkanBootstrapReport report = RunBootstrap(false, true, nullptr, &inj);
+	VulkanValidationTestInjection inj = MakeInjection(true, VulkanValidationTestPoint::DuringDeviceCleanup, "cleanup failure warning", true, VK_ERROR_DEVICE_LOST);
+	VulkanBootstrapReport report = RunBootstrap(true, true, nullptr, &inj);
+	if(!Check(report.status == VulkanProbeStatus::CleanupFailed, "cleanup failure with validation should still be cleanup failed")) return false;
+	if(!Check(report.validation_error_count == 1, "validation error should be retained on cleanup failure")) return false;
+	if(!Check(report.validation_messages.GetCount() == 1 && report.validation_messages[0].Find("cleanup failure warning") >= 0, "validation message should be retained on cleanup failure")) return false;
 	if(!Check(report.device_cleanup_ok == false, "cleanup failure should be recorded")) return false;
 	if(!Check(report.device_cleanup_result == VK_ERROR_DEVICE_LOST, "cleanup VkResult should be preserved")) return false;
 	if(!Check(report.device_cleanup_error.Find("vkDeviceWaitIdle failed") >= 0, "cleanup error text should explain the wait failure")) return false;
