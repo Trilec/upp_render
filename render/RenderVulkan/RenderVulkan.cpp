@@ -1018,7 +1018,6 @@ static void FinalizeBootstrapStatus(VulkanBootstrapReport& report, bool create_d
 
 } // namespace
 
-namespace Upp {
 namespace VulkanTestHooks {
 
 void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injection)
@@ -1032,7 +1031,6 @@ void ClearVulkanValidationTestInjection()
 }
 
 } // namespace VulkanTestHooks
-} // namespace Upp
 
 VulkanPreflight::VulkanPreflight()
 {

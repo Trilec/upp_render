@@ -2,7 +2,10 @@
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 
 using namespace Upp;
-using namespace Upp::VulkanTestHooks;
+using Upp::VulkanTestHooks::ClearVulkanValidationTestInjection;
+using Upp::VulkanTestHooks::SetVulkanValidationTestInjection;
+using Upp::VulkanTestHooks::VulkanValidationTestInjection;
+using Upp::VulkanTestHooks::VulkanValidationTestPoint;
 
 static const char *g_missing_proc = nullptr;
 
