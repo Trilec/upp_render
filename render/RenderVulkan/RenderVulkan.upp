@@ -1,5 +1,6 @@
 uses
-	Core;
+	Core,
+	RenderRhi;
 
 file
 	RenderVulkan.h,

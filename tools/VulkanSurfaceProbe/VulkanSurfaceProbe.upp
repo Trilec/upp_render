@@ -1,0 +1,11 @@
+uses
+	Core,
+	CtrlCore,
+	RenderPlatformWin32,
+	RenderVulkan;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

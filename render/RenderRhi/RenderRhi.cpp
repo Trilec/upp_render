@@ -18,6 +18,17 @@ String GpuSurfaceId::Dump() const { return DumpId("Surface", value); }
 String GpuSwapchainId::Dump() const { return DumpId("Swapchain", value); }
 String GpuFrameId::Dump() const { return DumpId("Frame", value); }
 
+bool GpuNativeWindowDesc::IsValid() const
+{
+	switch(kind) {
+	case GpuNativeWindowKind::None:
+		return handle == 0;
+	case GpuNativeWindowKind::Win32:
+		return handle != 0;
+	}
+	return false;
+}
+
 String DumpGpuBackendKind(GpuBackendKind kind)
 {
 	switch(kind) {
@@ -29,6 +40,23 @@ String DumpGpuBackendKind(GpuBackendKind kind)
 	case GpuBackendKind::OpenGL: return "OpenGL";
 	}
 	return "Unknown";
+}
+
+String DumpGpuNativeWindowKind(GpuNativeWindowKind kind)
+{
+	switch(kind) {
+	case GpuNativeWindowKind::None: return "None";
+	case GpuNativeWindowKind::Win32: return "Win32";
+	}
+	return String("Unknown(") + AsString((int)kind) + ")";
+}
+
+String DumpGpuNativeWindowDesc(const GpuNativeWindowDesc& desc)
+{
+	String out;
+	out << DumpGpuNativeWindowKind(desc.kind);
+	out << " handle=" << (desc.handle ? "set" : "unset");
+	return out;
 }
 
 String DumpGpuFormat(GpuFormat format)

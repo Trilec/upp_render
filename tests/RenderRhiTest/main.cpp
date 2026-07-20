@@ -15,6 +15,16 @@ static GpuSurfaceDesc MakeSurfaceDesc(Size size)
 	GpuSurfaceDesc desc;
 	desc.label = "surface";
 	desc.size = size;
+	desc.native_window.kind = GpuNativeWindowKind::None;
+	desc.native_window.handle = 0;
+	return desc;
+}
+
+static GpuSurfaceDesc MakeSurfaceDesc(Size size, GpuNativeWindowKind kind, uintptr_t handle)
+{
+	GpuSurfaceDesc desc = MakeSurfaceDesc(size);
+	desc.native_window.kind = kind;
+	desc.native_window.handle = handle;
 	return desc;
 }
 
@@ -78,6 +88,10 @@ static bool TestHandles()
 	GpuSurfaceId surface;
 	GpuSwapchainId swapchain;
 	GpuFrameId frame;
+	GpuNativeWindowDesc none_window;
+	GpuNativeWindowDesc win32_window;
+	win32_window.kind = GpuNativeWindowKind::Win32;
+	win32_window.handle = 1;
 	return Check(!buffer.IsValid(), "default buffer invalid") &&
 	       Check(!texture.IsValid(), "default texture invalid") &&
 	       Check(!shader.IsValid(), "default shader invalid") &&
@@ -88,6 +102,10 @@ static bool TestHandles()
 	       Check(!surface.IsValid(), "default surface invalid") &&
 	       Check(!swapchain.IsValid(), "default swapchain invalid") &&
 	       Check(!frame.IsValid(), "default frame invalid") &&
+	       Check(none_window.IsValid(), "none native window should be valid") &&
+	       Check(win32_window.IsValid(), "win32 native window should be valid") &&
+	       Check(DumpGpuNativeWindowDesc(none_window).Find("handle=unset") >= 0, "native window dump should redact handle") &&
+	       Check(DumpGpuNativeWindowDesc(win32_window).Find("handle=set") >= 0, "win32 native window dump should redact handle") &&
 	       Check(buffer.Dump() == "Buffer#0", "buffer dump deterministic");
 }
 
@@ -99,6 +117,10 @@ static bool TestSurfaceLifecycle(NullGpuDevice& device)
 
 	GpuSurfaceId zero_surface;
 	if(!Check(device.CreateSurface(MakeSurfaceDesc(Size(0, 480)), zero_surface) == GpuResult::InvalidArgument, "zero width surface should fail")) return false;
+	GpuSurfaceId bad_handle_surface;
+	if(!Check(device.CreateSurface(MakeSurfaceDesc(Size(640, 480), GpuNativeWindowKind::None, 1), bad_handle_surface) == GpuResult::InvalidArgument, "none window with handle should fail")) return false;
+	if(!Check(device.CreateSurface(MakeSurfaceDesc(Size(640, 480), GpuNativeWindowKind::Win32, 0), bad_handle_surface) == GpuResult::InvalidArgument, "win32 window with zero handle should fail")) return false;
+	if(!Check(device.CreateSurface(MakeSurfaceDesc(Size(640, 480), static_cast<GpuNativeWindowKind>(99), 1), bad_handle_surface) == GpuResult::InvalidArgument, "unknown native window kind should fail")) return false;
 	if(!Check(device.DestroySurface(surface) == GpuResult::Ok, "surface destroy should succeed")) return false;
 	if(!Check(device.DestroySurface(surface) == GpuResult::InvalidHandle, "double surface destroy should fail")) return false;
 	GpuSurfaceId unknown_surface;

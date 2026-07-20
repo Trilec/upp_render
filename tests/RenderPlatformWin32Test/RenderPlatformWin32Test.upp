@@ -1,0 +1,11 @@
+uses
+	Core,
+	CtrlCore,
+	RenderRhi,
+	RenderPlatformWin32;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

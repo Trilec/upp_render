@@ -13,6 +13,11 @@ enum class GpuBackendKind {
 	OpenGL,
 };
 
+enum class GpuNativeWindowKind {
+	None,
+	Win32,
+};
+
 enum class GpuFormat {
 	Unknown,
 	RGBA8,
@@ -144,9 +149,17 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	String label;
 };
 
+struct GpuNativeWindowDesc : Moveable<GpuNativeWindowDesc> {
+	GpuNativeWindowKind kind = GpuNativeWindowKind::None;
+	uintptr_t handle = 0;
+
+	bool IsValid() const;
+};
+
 struct GpuSurfaceDesc : Moveable<GpuSurfaceDesc> {
 	String label;
 	Size size = Size(0, 0);
+	GpuNativeWindowDesc native_window;
 };
 
 struct GpuSwapchainDesc : Moveable<GpuSwapchainDesc> {
@@ -203,6 +216,8 @@ public:
 };
 
 String DumpGpuBackendKind(GpuBackendKind kind);
+String DumpGpuNativeWindowKind(GpuNativeWindowKind kind);
+String DumpGpuNativeWindowDesc(const GpuNativeWindowDesc& desc);
 String DumpGpuFormat(GpuFormat format);
 String DumpGpuBufferUsage(int usage);
 String DumpGpuTextureUsage(int usage);

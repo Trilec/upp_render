@@ -12,6 +12,26 @@ static bool IsValidTopology(GpuPrimitiveTopology topology)
 	return false;
 }
 
+static bool ValidateNativeWindowDesc(const GpuSurfaceDesc& desc, String& reason)
+{
+	switch(desc.native_window.kind) {
+	case GpuNativeWindowKind::None:
+		if(desc.native_window.handle != 0) {
+			reason = "none_window_handle_not_zero";
+			return false;
+		}
+		return true;
+	case GpuNativeWindowKind::Win32:
+		if(desc.native_window.handle == 0) {
+			reason = "win32_window_handle_zero";
+			return false;
+		}
+		return true;
+	}
+	reason = "unknown_native_window_kind";
+	return false;
+}
+
 NullGpuDevice::NullGpuDevice()
 	: NullGpuDevice(GpuDeviceDesc())
 {
@@ -233,6 +253,12 @@ GpuResult NullGpuDevice::CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId&
 		out = GpuSurfaceId();
 		return GpuResult::InvalidArgument;
 	}
+	String native_reason;
+	if(!ValidateNativeWindowDesc(desc, native_reason)) {
+		Fail("CreateSurface native_window=" + DumpGpuNativeWindowDesc(desc.native_window) + " reason=" + native_reason);
+		out = GpuSurfaceId();
+		return GpuResult::InvalidArgument;
+	}
 	GpuSurfaceId id;
 	id.value = next_surface_id++;
 	SurfaceState& state = surfaces.Add(id.value, SurfaceState());
@@ -240,7 +266,7 @@ GpuResult NullGpuDevice::CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId&
 	state.alive = true;
 	state.live_swapchains = 0;
 	out = id;
-	AppendLog("CreateSurface id=" + id.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy));
+	AppendLog("CreateSurface id=" + id.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " native_window=" + DumpGpuNativeWindowDesc(desc.native_window));
 	return GpuResult::Ok;
 }
 

@@ -1,0 +1,8 @@
+uses
+	Core,
+	CtrlCore,
+	RenderRhi;
+
+file
+	RenderPlatformWin32.h,
+	RenderPlatformWin32.cpp;

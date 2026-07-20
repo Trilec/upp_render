@@ -63,6 +63,9 @@ by `%VULKAN_SDK%\Include`.
 Next milestone: surface and platform design, followed by swapchain and present
 lifecycle work.
 
+TASK-007 is now implementing the surface and platform bridge layer, with a Win32
+native-window contract, bridge test coverage, and a live Vulkan surface probe.
+
 Successful local build command:
 
 ```text

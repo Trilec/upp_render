@@ -15,12 +15,15 @@ software replay, tests, and a visual demo before any GPU API is introduced.
 - `render/RenderSoftware`
 - `render/RenderRhi`
 - `render/RenderNull`
+- `render/RenderPlatformWin32`
 - `render/RenderVulkan`
 - `examples/DisplayListDemo`
 - `tests/RenderCanvasTest`
 - `tests/RenderRhiTest`
 - `tests/RenderVulkanTest`
+- `tests/RenderPlatformWin32Test`
 - `tools/VulkanProbe`
+- `tools/VulkanSurfaceProbe`
 
 ## Build
 
