@@ -1,0 +1,8 @@
+uses
+	Core,
+	CtrlLib,
+	RenderRhi;
+
+file
+	GpuCtrl.h,
+	GpuCtrl.cpp;

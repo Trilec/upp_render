@@ -63,8 +63,12 @@ by `%VULKAN_SDK%\Include`.
 Next milestone: surface and platform design, followed by swapchain and present
 lifecycle work.
 
-TASK-007 is now implementing the surface and platform bridge layer, with a Win32
-native-window contract, bridge test coverage, and a live Vulkan surface probe.
+TASK-007 completed the surface and platform bridge layer, with a Win32
+native-window contract, bridge test coverage, a live Vulkan surface probe, and
+a ten-cycle validation gate that now passes.
+
+TASK-007A2 is defining the embedded `GpuCtrl` lifecycle boundary and keeping
+the public API free of native handles, Vulkan headers, and swapchain ceremony.
 
 Successful local build command:
 
@@ -97,6 +101,9 @@ Add:
 
 Connect the new pipeline back into existing U++ controls and painting.
 
+`GpuCtrl` is the intended application-facing boundary for future embedded GPU
+content.
+
 ## Stage 7 - Effects, Compute, and Specialized Views
 
 Add the follow-on pieces that depend on the earlier layers:
@@ -106,7 +113,18 @@ Add the follow-on pieces that depend on the earlier layers:
 - offscreen and specialized views
 - broader GPU capability plumbing
 
+Compute is an architectural consideration here, not an implementation yet.
+
 ## Stage 8 - Hardening and Future Backends
 
 Stabilize the stack, compare software and GPU outputs, and then evaluate any
 additional backends beyond the first ones already planned.
+
+## Current Status
+
+- TASK-007 surface bring-up passes the ten-cycle validation gate
+- the early GUI startup fault was caused by missing `CtrlLib` initialization
+- `GpuCtrl` is lifecycle-only for now
+- swapchain and rendering remain unimplemented
+- GPU-backed U++ and upp_Ui rendering is a future stage
+- compute remains an architectural topic only
