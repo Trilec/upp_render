@@ -1,4 +1,5 @@
 #include "RenderVulkan.h"
+#include "RenderVulkanSurfaceSession.h"
 #include "RenderVulkanTestHooks.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -2013,6 +2014,492 @@ static void CopySurfaceValidationCapture(VulkanSurfaceReport& report, const Vulk
 		report.preflight.validation_messages.Add(msg);
 }
 
+template <class T>
+static void CopyVector(Vector<T>& dst, const Vector<T>& src)
+{
+	dst.Clear();
+	for(const auto& item : src)
+		dst.Add(item);
+}
+
+VulkanDeviceInfo::VulkanDeviceInfo(const VulkanDeviceInfo& src)
+{
+	*this = src;
+}
+
+VulkanDeviceInfo& VulkanDeviceInfo::operator=(const VulkanDeviceInfo& src)
+{
+	if(this == &src)
+		return *this;
+	name = src.name;
+	type = src.type;
+	vendor_id = src.vendor_id;
+	device_id = src.device_id;
+	driver_version = src.driver_version;
+	api_version = src.api_version;
+	graphics_queue = src.graphics_queue;
+	dynamic_rendering = src.dynamic_rendering;
+	synchronization2 = src.synchronization2;
+	suitable = src.suitable;
+	selection_reason = src.selection_reason;
+	selected_queue_family_index = src.selected_queue_family_index;
+	selected_queue_count = src.selected_queue_count;
+	selected_queue_flags = src.selected_queue_flags;
+	selected_queue_compute = src.selected_queue_compute;
+	selected_queue_transfer = src.selected_queue_transfer;
+	logical_device_created = src.logical_device_created;
+	graphics_queue_acquired = src.graphics_queue_acquired;
+	CopyVector(missing_requirements, src.missing_requirements);
+	CopyVector(queue_families, src.queue_families);
+	CopyVector(device_extensions, src.device_extensions);
+	return *this;
+}
+
+VulkanPreflightReport::VulkanPreflightReport(const VulkanPreflightReport& src)
+{
+	*this = src;
+}
+
+VulkanPreflightReport& VulkanPreflightReport::operator=(const VulkanPreflightReport& src)
+{
+	if(this == &src)
+		return *this;
+	status = src.status;
+	status_text = src.status_text;
+	loader_available = src.loader_available;
+	loader_version = src.loader_version;
+	validation_requested = src.validation_requested;
+	validation_available = src.validation_available;
+	debug_utils_available = src.debug_utils_available;
+	instance_created = src.instance_created;
+	clean_shutdown = src.clean_shutdown;
+	cleanup_state_cleared = src.cleanup_state_cleared;
+	validation_warning_count = src.validation_warning_count;
+	validation_error_count = src.validation_error_count;
+	CopyVector(validation_messages, src.validation_messages);
+	runtime_error = src.runtime_error;
+	loader_error = src.loader_error;
+	layer_error = src.layer_error;
+	extension_error = src.extension_error;
+	instance_error = src.instance_error;
+	physical_device_error = src.physical_device_error;
+	CopyVector(instance_layers, src.instance_layers);
+	CopyVector(instance_extensions, src.instance_extensions);
+	CopyVector(devices, src.devices);
+	suitable_device_count = src.suitable_device_count;
+	return *this;
+}
+
+VulkanBootstrapReport::VulkanBootstrapReport(const VulkanBootstrapReport& src)
+{
+	*this = src;
+}
+
+VulkanBootstrapReport& VulkanBootstrapReport::operator=(const VulkanBootstrapReport& src)
+{
+	if(this == &src)
+		return *this;
+	status = src.status;
+	status_text = src.status_text;
+	preflight = src.preflight;
+	validation_requested = src.validation_requested;
+	create_device_requested = src.create_device_requested;
+	validation_available = src.validation_available;
+	debug_utils_available = src.debug_utils_available;
+	debug_messenger_created = src.debug_messenger_created;
+	logical_device_created = src.logical_device_created;
+	graphics_queue_acquired = src.graphics_queue_acquired;
+	clean_shutdown = src.clean_shutdown;
+	cleanup_state_cleared = src.cleanup_state_cleared;
+	instance_cleanup_ok = src.instance_cleanup_ok;
+	device_cleanup_ok = src.device_cleanup_ok;
+	dispatch_cleanup_ok = src.dispatch_cleanup_ok;
+	validation_warning_count = src.validation_warning_count;
+	validation_error_count = src.validation_error_count;
+	CopyVector(validation_messages, src.validation_messages);
+	device_cleanup_result = src.device_cleanup_result;
+	device_cleanup_error = src.device_cleanup_error;
+	runtime_error = src.runtime_error;
+	loader_error = src.loader_error;
+	validation_error = src.validation_error;
+	instance_error = src.instance_error;
+	physical_device_error = src.physical_device_error;
+	device_error = src.device_error;
+	selected_device = src.selected_device;
+	return *this;
+}
+
+VulkanSurfaceReport::VulkanSurfaceReport(const VulkanSurfaceReport& src)
+{
+	*this = src;
+}
+
+VulkanSurfaceReport& VulkanSurfaceReport::operator=(const VulkanSurfaceReport& src)
+{
+	if(this == &src)
+		return *this;
+	status = src.status;
+	status_text = src.status_text;
+	preflight = src.preflight;
+	validation_requested = src.validation_requested;
+	surface_requested = src.surface_requested;
+	validation_available = src.validation_available;
+	debug_utils_available = src.debug_utils_available;
+	surface_created = src.surface_created;
+	logical_device_created = src.logical_device_created;
+	graphics_queue_acquired = src.graphics_queue_acquired;
+	present_queue_acquired = src.present_queue_acquired;
+	same_queue_family = src.same_queue_family;
+	swapchain_enabled = src.swapchain_enabled;
+	clean_shutdown = src.clean_shutdown;
+	cleanup_state_cleared = src.cleanup_state_cleared;
+	instance_cleanup_ok = src.instance_cleanup_ok;
+	surface_cleanup_ok = src.surface_cleanup_ok;
+	device_cleanup_ok = src.device_cleanup_ok;
+	dispatch_cleanup_ok = src.dispatch_cleanup_ok;
+	validation_warning_count = src.validation_warning_count;
+	validation_error_count = src.validation_error_count;
+	CopyVector(validation_messages, src.validation_messages);
+	runtime_error = src.runtime_error;
+	loader_error = src.loader_error;
+	validation_error = src.validation_error;
+	instance_error = src.instance_error;
+	surface_error = src.surface_error;
+	physical_device_error = src.physical_device_error;
+	device_error = src.device_error;
+	native_window = src.native_window;
+	selected_device = src.selected_device;
+	graphics_queue_family_index = src.graphics_queue_family_index;
+	present_queue_family_index = src.present_queue_family_index;
+	graphics_queue_count = src.graphics_queue_count;
+	present_queue_count = src.present_queue_count;
+	graphics_queue_flags = src.graphics_queue_flags;
+	present_queue_flags = src.present_queue_flags;
+	CopyVector(surface_formats, src.surface_formats);
+	CopyVector(present_modes, src.present_modes);
+	min_image_count = src.min_image_count;
+	max_image_count = src.max_image_count;
+	current_extent = src.current_extent;
+	min_extent = src.min_extent;
+	max_extent = src.max_extent;
+	supported_transforms = src.supported_transforms;
+	current_transform = src.current_transform;
+	supported_composite_alpha = src.supported_composite_alpha;
+	supported_image_usage = src.supported_image_usage;
+	preferred_bgra8 = src.preferred_bgra8;
+	preferred_rgba8 = src.preferred_rgba8;
+	preferred_srgb = src.preferred_srgb;
+	preferred_mailbox = src.preferred_mailbox;
+	preferred_fifo = src.preferred_fifo;
+	return *this;
+}
+
+struct VulkanSurfaceSession::Impl {
+	VulkanDispatch dispatch;
+	VulkanSurfaceContext ctx;
+	VulkanDeviceContext device;
+	VulkanSurfaceReport report;
+	String error;
+	bool open = false;
+	bool ready = false;
+};
+
+VulkanSurfaceSession::VulkanSurfaceSession()
+    : impl(new Impl)
+{
+}
+
+VulkanSurfaceSession::~VulkanSurfaceSession()
+{
+	Close();
+}
+
+bool VulkanSurfaceSession::IsOpen() const
+{
+	return impl && impl->open;
+}
+
+bool VulkanSurfaceSession::IsReady() const
+{
+	return IsOpen() && impl->ready;
+}
+
+const VulkanSurfaceReport& VulkanSurfaceSession::GetReport() const
+{
+	return impl->report;
+}
+
+const String& VulkanSurfaceSession::GetError() const
+{
+	return impl->error;
+}
+
+static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanup_ok)
+{
+	impl.report.instance_cleanup_ok = impl.ctx.instance == VK_NULL_HANDLE;
+	impl.report.surface_cleanup_ok = impl.ctx.surface == VK_NULL_HANDLE;
+	impl.report.device_cleanup_ok = impl.device.device == VK_NULL_HANDLE;
+	impl.report.dispatch_cleanup_ok = impl.dispatch.IsCleared();
+	FinalizeSurfaceCleanup(impl.report, impl.dispatch, impl.ctx, impl.device, cleanup_ok);
+	impl.ready = false;
+	impl.open = false;
+}
+
+bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDesc& native_window, VulkanProcResolver resolver)
+{
+	Close();
+	impl->report = VulkanSurfaceReport();
+	impl->error.Clear();
+	impl->report.validation_requested = request_validation;
+	impl->report.surface_requested = true;
+	impl->report.native_window = native_window;
+	impl->report.preflight.validation_requested = request_validation;
+
+	auto fail = [&](const String& message) {
+		impl->error = message;
+		Close();
+		return false;
+	};
+
+	if(!impl->dispatch.Open(impl->error, resolver)) {
+		impl->report.status = MapDispatchError(impl->error);
+		if(impl->report.status == VulkanProbeStatus::RuntimeUnavailable)
+			impl->report.runtime_error = impl->error;
+		else
+			impl->report.loader_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	uint32_t loader_version = VK_API_VERSION_1_0;
+	if(!QueryLoaderVersion(impl->dispatch.enumerate_instance_version, loader_version, impl->error)) {
+		impl->report.status = VulkanProbeStatus::LoaderTooOld;
+		impl->report.loader_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+	impl->report.preflight.loader_available = true;
+	impl->report.preflight.loader_version = loader_version;
+	if(loader_version < VK_API_VERSION_1_3) {
+		impl->report.status = VulkanProbeStatus::LoaderTooOld;
+		impl->report.loader_error = "loader api version older than Vulkan 1.3";
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	if(!impl->ctx.Open(impl->dispatch, request_validation, native_window, impl->report, impl->error)) {
+		if(impl->error == "VK_LAYER_KHRONOS_validation not present")
+			impl->report.status = VulkanProbeStatus::ValidationUnavailable;
+		else if(impl->error == "VK_EXT_debug_utils not present")
+			impl->report.status = VulkanProbeStatus::DebugUtilsUnavailable;
+		else if(impl->error == "surface requires Win32 native window" || impl->error == "invalid native handle" || impl->error == "invalid window hinstance" || impl->error == "VK_KHR_surface not present" || impl->error == "VK_KHR_win32_surface not present" || impl->error.StartsWith("vkCreateInstance failed"))
+			impl->report.status = VulkanProbeStatus::SurfaceUnsupported;
+		else if(impl->error.StartsWith("vkCreateWin32SurfaceKHR failed"))
+			impl->report.status = VulkanProbeStatus::SurfaceCreationFailed;
+		else
+			impl->report.status = VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
+		impl->report.instance_error = impl->error;
+		impl->report.surface_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	Vector<VulkanDiscoveredDevice> discovered;
+	if(!impl->ctx.EnumeratePhysicalDevices(discovered, impl->report, impl->error)) {
+		impl->report.status = VulkanProbeStatus::PhysicalDeviceEnumerationFailed;
+		impl->report.physical_device_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+	if(discovered.IsEmpty()) {
+		impl->report.status = VulkanProbeStatus::NoPhysicalDevices;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	for(auto& found : discovered) {
+		impl->report.preflight.devices.Add();
+		CloneDeviceInfo(impl->report.preflight.devices.Top(), found.info);
+		if(found.info.suitable)
+			impl->report.preflight.suitable_device_count += 1;
+	}
+
+	VulkanSurfaceSelection choice;
+	if(!ChooseSurfaceDevice(discovered, choice)) {
+		impl->report.status = VulkanProbeStatus::PresentationUnsupported;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	CloneDeviceInfo(impl->report.selected_device, choice.device->info);
+	impl->report.graphics_queue_family_index = choice.graphics_family;
+	impl->report.present_queue_family_index = choice.present_family;
+	impl->report.same_queue_family = choice.same_family;
+	impl->report.graphics_queue_count = impl->report.selected_device.queue_families[choice.graphics_family].count;
+	impl->report.present_queue_count = impl->report.selected_device.queue_families[choice.present_family].count;
+	impl->report.graphics_queue_flags = impl->report.selected_device.queue_families[choice.graphics_family].flags;
+	impl->report.present_queue_flags = impl->report.selected_device.queue_families[choice.present_family].flags;
+	impl->report.swapchain_enabled = HasExtension(impl->report.selected_device.device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	if(!impl->ctx.QuerySurfaceCapabilities(choice.device->handle, impl->report, impl->error)) {
+		impl->report.status = VulkanProbeStatus::SurfaceCapabilitiesFailed;
+		impl->report.surface_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	VkDeviceQueueCreateInfo qcis[2]{};
+	float priority = 1.0f;
+	int queue_info_count = 0;
+	qcis[queue_info_count].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	qcis[queue_info_count].queueFamilyIndex = (uint32_t)choice.graphics_family;
+	qcis[queue_info_count].queueCount = 1;
+	qcis[queue_info_count].pQueuePriorities = &priority;
+	queue_info_count++;
+	if(!choice.same_family) {
+		qcis[queue_info_count].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		qcis[queue_info_count].queueFamilyIndex = (uint32_t)choice.present_family;
+		qcis[queue_info_count].queueCount = 1;
+		qcis[queue_info_count].pQueuePriorities = &priority;
+		queue_info_count++;
+	}
+
+	VkPhysicalDeviceVulkan13Features f13{};
+	f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+	f13.dynamicRendering = VK_TRUE;
+	f13.synchronization2 = VK_TRUE;
+	VkPhysicalDeviceFeatures2 features2{};
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.pNext = &f13;
+	Vector<const char*> enabled_exts;
+	enabled_exts.Add(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	VkDeviceCreateInfo dci{};
+	dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	dci.pNext = &features2;
+	dci.queueCreateInfoCount = queue_info_count;
+	dci.pQueueCreateInfos = qcis;
+	dci.enabledExtensionCount = enabled_exts.GetCount();
+	dci.ppEnabledExtensionNames = enabled_exts.Begin();
+
+	PFN_vkCreateDevice create_device = nullptr;
+	if(!ResolveInstanceProc(create_device, impl->dispatch.proc_filter, impl->dispatch.get_instance_proc_addr, impl->ctx.instance, "vkCreateDevice", impl->error))
+		return fail(impl->error);
+	VkResult vr = create_device(choice.device->handle, &dci, nullptr, &impl->device.device);
+	if(vr != VK_SUCCESS) {
+		impl->error = String("vkCreateDevice failed: ") + AsString((int)vr);
+		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
+		impl->report.device_error = impl->error;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+
+	if(!ResolveDeviceProc(impl->device.destroy_device, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.device_wait_idle, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkDeviceWaitIdle", impl->error)) return fail(impl->error);
+	impl->device.get_device_queue(impl->device.device, (uint32_t)choice.graphics_family, 0, &impl->device.graphics_queue);
+	if(impl->device.graphics_queue == VK_NULL_HANDLE) {
+		impl->error = "vkGetDeviceQueue returned VK_NULL_HANDLE";
+		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
+		impl->report.device_error = impl->error;
+		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+		return false;
+	}
+	if(choice.same_family)
+		impl->device.present_queue = impl->device.graphics_queue;
+	else {
+		impl->device.get_device_queue(impl->device.device, (uint32_t)choice.present_family, 0, &impl->device.present_queue);
+		if(impl->device.present_queue == VK_NULL_HANDLE) {
+			impl->error = "vkGetDeviceQueue returned VK_NULL_HANDLE";
+			impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
+			impl->report.device_error = impl->error;
+			CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+			FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
+			return false;
+		}
+	}
+
+	impl->device.physical_device = choice.device->handle;
+	impl->report.logical_device_created = true;
+	impl->report.graphics_queue_acquired = true;
+	impl->report.present_queue_acquired = true;
+	impl->report.selected_device.logical_device_created = true;
+	impl->report.selected_device.graphics_queue_acquired = true;
+	impl->report.selected_device.selected_queue_family_index = choice.graphics_family;
+	impl->report.selected_device.selected_queue_count = impl->report.selected_device.queue_families[choice.graphics_family].count;
+	impl->report.selected_device.selected_queue_flags = impl->report.selected_device.queue_families[choice.graphics_family].flags;
+	impl->report.selected_device.selected_queue_compute = impl->report.selected_device.queue_families[choice.graphics_family].compute;
+	impl->report.selected_device.selected_queue_transfer = impl->report.selected_device.queue_families[choice.graphics_family].transfer;
+	impl->report.status = VulkanProbeStatus::Ok;
+	if(request_validation)
+		InjectValidationIfRequested(impl->ctx.capture, VulkanValidationTestPoint::AfterDeviceCreation);
+	if(request_validation)
+		InjectValidationIfRequested(impl->ctx.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
+
+	CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+	impl->report.preflight.debug_utils_available = impl->ctx.debug_utils_available;
+	impl->report.debug_utils_available = impl->ctx.debug_utils_available;
+	if(impl->report.status == VulkanProbeStatus::Ok && impl->report.validation_error_count > 0) {
+		impl->report.status = VulkanProbeStatus::ValidationErrorsReported;
+		impl->report.validation_error = "validation errors reported";
+	}
+	impl->report.status_text = StatusText(impl->report.status);
+	impl->report.preflight.status = impl->report.status;
+	impl->report.preflight.status_text = impl->report.status_text;
+	impl->open = true;
+	impl->ready = true;
+	return true;
+}
+
+void VulkanSurfaceSession::Close()
+{
+	if(!impl)
+		return;
+	bool cleanup_ok = true;
+	if(impl->device.device) {
+		cleanup_ok = impl->device.Close() && cleanup_ok;
+		impl->report.device_cleanup_ok = true;
+	}
+	cleanup_ok = impl->ctx.Close() && cleanup_ok;
+	cleanup_ok = impl->dispatch.Close() && cleanup_ok;
+	FinalizeSurfaceSession(*impl, cleanup_ok);
+	impl->report.clean_shutdown = cleanup_ok && impl->report.cleanup_state_cleared;
+	impl->report.cleanup_state_cleared = impl->dispatch.IsCleared() && impl->ctx.IsCleared() && impl->device.IsCleared();
+	impl->report.instance_cleanup_ok = impl->ctx.instance == VK_NULL_HANDLE;
+	impl->report.surface_cleanup_ok = impl->ctx.surface == VK_NULL_HANDLE;
+	impl->report.dispatch_cleanup_ok = impl->dispatch.IsCleared();
+	impl->open = false;
+	impl->ready = false;
+}
+
 bool VulkanSurfaceProbe::BuildSurface(VulkanSurfaceReport& report, bool request_validation, const GpuNativeWindowDesc& native_window, VulkanProcResolver resolver)
 {
 	report = VulkanSurfaceReport();
@@ -2294,8 +2781,11 @@ VulkanSurfaceReport VulkanSurfaceProbe::Run(bool request_validation, const GpuNa
 
 VulkanSurfaceReport VulkanSurfaceProbe::Run(bool request_validation, const GpuNativeWindowDesc& native_window, VulkanProcResolver resolver)
 {
+	VulkanSurfaceSession session;
 	VulkanSurfaceReport report;
-	BuildSurface(report, request_validation, native_window, resolver);
+	if(session.Open(request_validation, native_window, resolver))
+		session.Close();
+	report = session.GetReport();
 	return pick(report);
 }
 

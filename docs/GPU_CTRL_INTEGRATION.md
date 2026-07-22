@@ -119,21 +119,21 @@ The two should stay separate so layout code does not become a surface factory we
 
 ### Files and methods inspected
 
-- `E:\upp-18468\uppsrc\GLCtrl\GLCtrl.h`
-- `E:\upp-18468\uppsrc\GLCtrl\GLCtrl.cpp`
-- `E:\upp-18468\uppsrc\GLCtrl\Win32GLCtrl.cpp`
-- `E:\upp-18468\uppsrc\GLCtrl\XGLCtrl.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\DHCtrl.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\CtrlChild.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\TopWindow.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\TopWin32.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\Win32Wnd.cpp`
-- `E:\upp-18468\uppsrc\CtrlCore\Win32Ctrl.h`
-- `E:\apps\github\upp_render\render\RenderPlatformWin32\RenderPlatformWin32.h`
-- `E:\apps\github\upp_render\render\RenderPlatformWin32\RenderPlatformWin32.cpp`
-- `E:\apps\github\upp_render\render\RenderRhi\RenderRhi.h`
-- `E:\apps\github\upp_render\render\RenderRhi\RenderRhi.cpp`
-- `E:\apps\github\upp_render\examples\DisplayListDemo\main.cpp`
+- `uppsrc/GLCtrl/GLCtrl.h`
+- `uppsrc/GLCtrl/GLCtrl.cpp`
+- `uppsrc/GLCtrl/Win32GLCtrl.cpp`
+- `uppsrc/GLCtrl/XGLCtrl.cpp`
+- `uppsrc/CtrlCore/DHCtrl.cpp`
+- `uppsrc/CtrlCore/CtrlChild.cpp`
+- `uppsrc/CtrlCore/TopWindow.cpp`
+- `uppsrc/CtrlCore/TopWin32.cpp`
+- `uppsrc/CtrlCore/Win32Wnd.cpp`
+- `uppsrc/CtrlCore/Win32Ctrl.h`
+- `render/RenderPlatformWin32/RenderPlatformWin32.h`
+- `render/RenderPlatformWin32/RenderPlatformWin32.cpp`
+- `render/RenderRhi/RenderRhi.h`
+- `render/RenderRhi/RenderRhi.cpp`
+- `examples/DisplayListDemo/main.cpp`
 
 ### Conventions worth preserving
 

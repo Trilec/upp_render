@@ -55,6 +55,10 @@ struct VulkanQueueFamilyInfo : Moveable<VulkanQueueFamilyInfo> {
 };
 
 struct VulkanDeviceInfo : Moveable<VulkanDeviceInfo> {
+	VulkanDeviceInfo() = default;
+	VulkanDeviceInfo(const VulkanDeviceInfo& src);
+	VulkanDeviceInfo& operator=(const VulkanDeviceInfo& src);
+
 	String name;
 	String type;
 	uint32_t vendor_id = 0;
@@ -79,6 +83,10 @@ struct VulkanDeviceInfo : Moveable<VulkanDeviceInfo> {
 };
 
 struct VulkanPreflightReport : Moveable<VulkanPreflightReport> {
+	VulkanPreflightReport() = default;
+	VulkanPreflightReport(const VulkanPreflightReport& src);
+	VulkanPreflightReport& operator=(const VulkanPreflightReport& src);
+
 	VulkanProbeStatus status = VulkanProbeStatus::RuntimeUnavailable;
 	String status_text;
 	bool loader_available = false;
@@ -105,6 +113,10 @@ struct VulkanPreflightReport : Moveable<VulkanPreflightReport> {
 };
 
 struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
+	VulkanBootstrapReport() = default;
+	VulkanBootstrapReport(const VulkanBootstrapReport& src);
+	VulkanBootstrapReport& operator=(const VulkanBootstrapReport& src);
+
 	VulkanProbeStatus status = VulkanProbeStatus::RuntimeUnavailable;
 	String status_text;
 	VulkanPreflightReport preflight;
@@ -135,6 +147,10 @@ struct VulkanBootstrapReport : Moveable<VulkanBootstrapReport> {
 };
 
 struct VulkanSurfaceReport : Moveable<VulkanSurfaceReport> {
+	VulkanSurfaceReport() = default;
+	VulkanSurfaceReport(const VulkanSurfaceReport& src);
+	VulkanSurfaceReport& operator=(const VulkanSurfaceReport& src);
+
 	VulkanProbeStatus status = VulkanProbeStatus::RuntimeUnavailable;
 	String status_text;
 	VulkanPreflightReport preflight;
