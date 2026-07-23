@@ -2240,6 +2240,7 @@ static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanu
 	impl.report.surface_cleanup_ok = impl.ctx.surface == VK_NULL_HANDLE;
 	impl.report.device_cleanup_ok = impl.device.device == VK_NULL_HANDLE;
 	impl.report.dispatch_cleanup_ok = impl.dispatch.IsCleared();
+	impl.report.native_window = GpuNativeWindowDesc();
 	FinalizeSurfaceCleanup(impl.report, impl.dispatch, impl.ctx, impl.device, cleanup_ok);
 	impl.ready = false;
 	impl.open = false;
@@ -2496,6 +2497,7 @@ void VulkanSurfaceSession::Close()
 	impl->report.instance_cleanup_ok = impl->ctx.instance == VK_NULL_HANDLE;
 	impl->report.surface_cleanup_ok = impl->ctx.surface == VK_NULL_HANDLE;
 	impl->report.dispatch_cleanup_ok = impl->dispatch.IsCleared();
+	impl->report.native_window = GpuNativeWindowDesc();
 	impl->open = false;
 	impl->ready = false;
 }

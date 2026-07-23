@@ -176,5 +176,8 @@ GUI_APP_MAIN
 	DemoView view;
 	win.Add(view.SizePos());
 	win.SetRect(0, 0, DPI(780), DPI(560));
+	SetTimeCallback(250, [&win] {
+		win.Close();
+	});
 	win.Run();
 }

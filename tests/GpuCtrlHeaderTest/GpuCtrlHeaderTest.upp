@@ -1,0 +1,10 @@
+uses
+	Core,
+	CtrlLib,
+	GpuCtrl;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";
