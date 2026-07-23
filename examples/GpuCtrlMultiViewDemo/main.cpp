@@ -14,10 +14,8 @@ static bool HasArg(const Vector<String>& args, const char *name)
 
 class Demo : public TopWindow {
 public:
-	Demo(bool left_validation, bool right_validation, bool auto_close)
+	Demo(bool validation, bool auto_close)
 		: auto_close(auto_close)
-		, left_validation(left_validation)
-		, right_validation(right_validation)
 	{
 		Title("GpuCtrlMultiViewDemo").Sizeable().Zoomable();
 		SetRect(0, 0, 1024, 640);
@@ -37,91 +35,65 @@ public:
 		Add(hide_right.LeftPos(184, 88).TopPos(8, 24));
 		Add(show_right.LeftPos(280, 88).TopPos(8, 24));
 
-		left.Create();
-		right.Create();
-		left->SetValidation(left_validation);
-		right->SetValidation(right_validation);
-		split.Horz(*left, *right);
+		split.Horz(left, right);
 		Add(split.HSizePos(8, 8).VSizePos(44, 8));
 
-		left->SetTitle("Left GPU control");
-		right->SetTitle("Right GPU control");
-		left->UpdateStatus();
-		right->UpdateStatus();
+		left.SetTitle("Left GPU control");
+		right.SetTitle("Right GPU control");
+		left.SetValidation(validation);
+		right.SetValidation(validation);
+		left.UpdateStatus();
+		right.UpdateStatus();
 	}
 
 	void Start()
 	{
 		for(int i = 0; i < 100 && (!LeftGpuReady() || !RightGpuReady()) && LeftGpuError().IsEmpty() && RightGpuError().IsEmpty(); ++i)
 			Ctrl::ProcessEvents();
-		Cout() << "GpuCtrlMultiViewDemo start left: " << left->DescribeStatus() << EOL;
-		Cout() << "GpuCtrlMultiViewDemo start right: " << right->DescribeStatus() << EOL;
-		left_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
-		right_diag = left_diag;
+		Cout() << "GpuCtrlMultiViewDemo start left: " << left.DescribeStatus() << EOL;
+		Cout() << "GpuCtrlMultiViewDemo start right: " << right.DescribeStatus() << EOL;
 		if(auto_close)
 			ScriptStep();
 		else
 			Tick();
 	}
 
-	bool LeftGpuReady() const { return left && left->gpu.IsGpuReady(); }
-	bool RightGpuReady() const { return right && right->gpu.IsGpuReady(); }
-	String LeftGpuError() const { return left ? left->gpu.GetGpuError() : String(); }
-	String RightGpuError() const { return right ? right->gpu.GetGpuError() : String(); }
+	bool LeftGpuReady() const { return left.gpu.IsGpuReady(); }
+	bool RightGpuReady() const { return right.gpu.IsGpuReady(); }
+	String LeftGpuError() const { return left.gpu.GetGpuError(); }
+	String RightGpuError() const { return right.gpu.GetGpuError(); }
 
 private:
 	void OnHideLeft()
 	{
-		if(left)
-			left->Hide();
+		left.Hide();
 	}
 
 	void OnShowLeft()
 	{
-		if(left)
-			left->Show();
+		left.Show();
 	}
 
 	void OnHideRight()
 	{
-		if(right)
-			right->Hide();
+		right.Hide();
 	}
 
 	void OnShowRight()
 	{
-		if(right)
-			right->Show();
-	}
-
-	void DestroyLeft()
-	{
-		if(left) {
-			split.Remove(*left);
-			left.Clear();
-		}
-	}
-
-	void DestroyRight()
-	{
-		if(right) {
-			split.Remove(*right);
-			right.Clear();
-		}
+		right.Show();
 	}
 
 
 	void ScriptStep()
 	{
-		if(left)
-			left->UpdateStatus();
-		if(right)
-			right->UpdateStatus();
+		left.UpdateStatus();
+		right.UpdateStatus();
 		switch(script_step++) {
 		case 0:
 			SetRect(0, 0, 1140, 700);
-			Cout() << "GpuCtrlMultiViewDemo resize wide left: " << left->DescribeStatus() << EOL;
-			Cout() << "GpuCtrlMultiViewDemo resize wide right: " << right->DescribeStatus() << EOL;
+			Cout() << "GpuCtrlMultiViewDemo resize wide left: " << left.DescribeStatus() << EOL;
+			Cout() << "GpuCtrlMultiViewDemo resize wide right: " << right.DescribeStatus() << EOL;
 			break;
 		case 1:
 			OnHideLeft();
@@ -133,19 +105,8 @@ private:
 			break;
 		case 3:
 			SetRect(0, 0, 980, 620);
-			Cout() << "GpuCtrlMultiViewDemo resize narrow left: " << left->DescribeStatus() << EOL;
-			Cout() << "GpuCtrlMultiViewDemo resize narrow right: " << right->DescribeStatus() << EOL;
-			break;
-		case 4:
-			DestroyLeft();
-			Ctrl::ProcessEvents();
-			right_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
-			Cout() << "GpuCtrlMultiViewDemo destroy left diagnostics: " << GpuDiagText(right_diag) << EOL;
-			break;
-		case 5:
-			DestroyRight();
-			Ctrl::ProcessEvents();
-			Cout() << "GpuCtrlMultiViewDemo destroy right" << EOL;
+			Cout() << "GpuCtrlMultiViewDemo resize narrow left: " << left.DescribeStatus() << EOL;
+			Cout() << "GpuCtrlMultiViewDemo resize narrow right: " << right.DescribeStatus() << EOL;
 			break;
 		default:
 			Close();
@@ -156,27 +117,21 @@ private:
 
 	void Tick()
 	{
-		if(left)
-			left->UpdateStatus();
-		if(right)
-			right->UpdateStatus();
+		left.UpdateStatus();
+		right.UpdateStatus();
 		if(IsOpen())
 			SetTimeCallback(100, callback(this, &Demo::Tick));
 	}
 
 	Splitter split;
-	One<GpuCtrlPane> left;
-	One<GpuCtrlPane> right;
+	GpuCtrlPane left;
+	GpuCtrlPane right;
 	Button hide_left;
 	Button show_left;
 	Button hide_right;
 	Button show_right;
 	bool auto_close = false;
-	bool left_validation = false;
-	bool right_validation = false;
 	int script_step = 0;
-	VulkanTestHooks::VulkanRuntimeDeviceDiagnostics left_diag;
-	VulkanTestHooks::VulkanRuntimeDeviceDiagnostics right_diag;
 };
 
 }
@@ -188,7 +143,6 @@ GUI_APP_MAIN
 		args.Add(__argv[i]);
 
 	bool validation = HasArg(args, "--validation");
-	bool mixed_validation = HasArg(args, "--mixed-validation");
 	bool auto_close = HasArg(args, "--auto-close");
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	Cout() << "GUI_APP_MAIN entered" << EOL;
@@ -197,7 +151,7 @@ GUI_APP_MAIN
 	String left_error;
 	String right_error;
 	{
-		Demo win(mixed_validation || validation, validation && !mixed_validation ? validation : false, auto_close);
+		Demo win(validation, auto_close);
 		win.Open();
 		opened = win.IsOpen();
 		if(!opened) {
