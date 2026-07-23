@@ -35,6 +35,10 @@ public:
 			SetTimeCallback(800, callback(this, &Demo::CloseNow));
 	}
 
+	bool NativeHostReady() const { return pane.gpu.IsNativeHostReady(); }
+	bool GpuReady() const { return pane.gpu.IsGpuReady(); }
+	String GpuError() const { return pane.gpu.GetGpuError(); }
+
 private:
 	void Tick()
 	{
@@ -62,17 +66,41 @@ GUI_APP_MAIN
 
 	bool validation = HasArg(args, "--validation");
 	bool auto_close = HasArg(args, "--auto-close");
+	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	Cout() << "GUI_APP_MAIN entered" << EOL;
+	bool opened = false;
+	bool ready = false;
+	String error;
 	{
 		Demo win(validation, auto_close);
 		win.Open();
-		if(!win.IsOpen()) {
+		opened = win.IsOpen();
+		if(!opened) {
 			Cout() << "FAIL: window did not open" << EOL;
 			SetExitCode(1);
 			return;
 		}
+		for(int i = 0; i < 200 && !win.GpuReady() && win.GpuError().IsEmpty(); ++i)
+			Ctrl::ProcessEvents();
+		ready = win.GpuReady();
+		error = win.GpuError();
+		if(auto_close) {
+			if(!ready || !error.IsEmpty()) {
+				Cout() << "FAIL: ready=" << GpuBoolText(ready) << " error='" << error << "'" << EOL;
+				SetExitCode(1);
+				return;
+			}
+		}
 		win.Start();
 		win.Run();
+	}
+	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+	Cout() << "GpuCtrlBasicDemo diagnostics: " << GpuDiagText(diag) << EOL;
+	if(auto_close) {
+		if(!opened || !ready || !error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
+			SetExitCode(1);
+			return;
+		}
 	}
 	Cout() << "GUI_APP_MAIN exited" << EOL;
 }

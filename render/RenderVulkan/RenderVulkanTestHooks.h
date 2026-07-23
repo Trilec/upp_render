@@ -6,6 +6,23 @@ namespace Upp {
 
 namespace VulkanTestHooks {
 
+struct VulkanRuntimeDeviceDiagnostics {
+	uint64_t runtime_create_count = 0;
+	uint64_t runtime_live_count = 0;
+	uint64_t runtime_id = 0;
+	uint64_t instance_create_count = 0;
+	uint64_t instance_live_count = 0;
+	uint64_t debug_messenger_create_count = 0;
+	uint64_t debug_messenger_live_count = 0;
+	uint64_t physical_device_discovery_count = 0;
+	uint64_t device_create_count = 0;
+	uint64_t device_live_count = 0;
+	uint64_t device_id = 0;
+	uint64_t surface_create_count = 0;
+	uint64_t surface_live_count = 0;
+	uint64_t surface_id = 0;
+};
+
 enum class VulkanValidationTestPoint {
 	None,
 	BeforeDeviceCreation,
@@ -24,6 +41,8 @@ struct VulkanValidationTestInjection {
 
 void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injection);
 void ClearVulkanValidationTestInjection();
+VulkanRuntimeDeviceDiagnostics GetVulkanRuntimeDeviceDiagnostics();
+void ClearVulkanRuntimeDeviceDiagnostics();
 
 }
 

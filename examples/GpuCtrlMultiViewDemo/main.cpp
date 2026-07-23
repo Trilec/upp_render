@@ -48,7 +48,7 @@ public:
 
 	void Start()
 	{
-		for(int i = 0; i < 100 && (!left.gpu.IsGpuReady() || !right.gpu.IsGpuReady()) && left.gpu.GetGpuError().IsEmpty() && right.gpu.GetGpuError().IsEmpty(); ++i)
+		for(int i = 0; i < 100 && (!LeftGpuReady() || !RightGpuReady()) && LeftGpuError().IsEmpty() && RightGpuError().IsEmpty(); ++i)
 			Ctrl::ProcessEvents();
 		Cout() << "GpuCtrlMultiViewDemo start left: " << left.DescribeStatus() << EOL;
 		Cout() << "GpuCtrlMultiViewDemo start right: " << right.DescribeStatus() << EOL;
@@ -57,6 +57,11 @@ public:
 		else
 			Tick();
 	}
+
+	bool LeftGpuReady() const { return left.gpu.IsGpuReady(); }
+	bool RightGpuReady() const { return right.gpu.IsGpuReady(); }
+	String LeftGpuError() const { return left.gpu.GetGpuError(); }
+	String RightGpuError() const { return right.gpu.GetGpuError(); }
 
 private:
 	void OnHideLeft()
@@ -78,6 +83,7 @@ private:
 	{
 		right.Show();
 	}
+
 
 	void ScriptStep()
 	{
@@ -138,17 +144,43 @@ GUI_APP_MAIN
 
 	bool validation = HasArg(args, "--validation");
 	bool auto_close = HasArg(args, "--auto-close");
+	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	Cout() << "GUI_APP_MAIN entered" << EOL;
+	bool opened = false;
+	bool ready = false;
+	String left_error;
+	String right_error;
 	{
 		Demo win(validation, auto_close);
 		win.Open();
-		if(!win.IsOpen()) {
+		opened = win.IsOpen();
+		if(!opened) {
 			Cout() << "FAIL: window did not open" << EOL;
+			SetExitCode(1);
+			return;
+		}
+		for(int i = 0; i < 200 && (!win.LeftGpuReady() || !win.RightGpuReady()) && win.LeftGpuError().IsEmpty() && win.RightGpuError().IsEmpty(); ++i)
+			Ctrl::ProcessEvents();
+		ready = win.LeftGpuReady() && win.RightGpuReady();
+		left_error = win.LeftGpuError();
+		right_error = win.RightGpuError();
+		if(auto_close && (!ready || !left_error.IsEmpty() || !right_error.IsEmpty())) {
+			Cout() << "FAIL: ready=" << GpuBoolText(ready)
+			       << " left-error='" << left_error << "'"
+			       << " right-error='" << right_error << "'" << EOL;
 			SetExitCode(1);
 			return;
 		}
 		win.Start();
 		win.Run();
+	}
+	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+	Cout() << "GpuCtrlMultiViewDemo diagnostics: " << GpuDiagText(diag) << EOL;
+	if(auto_close) {
+		if(!opened || !ready || !left_error.IsEmpty() || !right_error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
+			SetExitCode(1);
+			return;
+		}
 	}
 	Cout() << "GUI_APP_MAIN exited" << EOL;
 }

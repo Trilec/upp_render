@@ -2,6 +2,8 @@
 #include "RenderVulkanSurfaceSession.h"
 #include "RenderVulkanTestHooks.h"
 
+#include <atomic>
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -13,6 +15,35 @@ namespace {
 
 using VulkanValidationTestInjection = VulkanTestHooks::VulkanValidationTestInjection;
 using VulkanValidationTestPoint = VulkanTestHooks::VulkanValidationTestPoint;
+
+struct VulkanRuntimeDeviceDiagnosticsState {
+	std::atomic<uint64_t> runtime_create_count { 0 };
+	std::atomic<uint64_t> runtime_live_count { 0 };
+	std::atomic<uint64_t> runtime_next_id { 1 };
+	std::atomic<uint64_t> runtime_last_id { 0 };
+	std::atomic<uint64_t> instance_next_id { 1 };
+	std::atomic<uint64_t> instance_last_id { 0 };
+	std::atomic<uint64_t> instance_create_count { 0 };
+	std::atomic<uint64_t> instance_live_count { 0 };
+	std::atomic<uint64_t> debug_messenger_create_count { 0 };
+	std::atomic<uint64_t> debug_messenger_live_count { 0 };
+	std::atomic<uint64_t> physical_device_discovery_count { 0 };
+	std::atomic<uint64_t> device_create_count { 0 };
+	std::atomic<uint64_t> device_live_count { 0 };
+	std::atomic<uint64_t> device_next_id { 1 };
+	std::atomic<uint64_t> device_last_id { 0 };
+	std::atomic<uint64_t> surface_create_count { 0 };
+	std::atomic<uint64_t> surface_live_count { 0 };
+	std::atomic<uint64_t> surface_next_id { 1 };
+	std::atomic<uint64_t> surface_last_id { 0 };
+};
+
+static VulkanRuntimeDeviceDiagnosticsState g_runtime_device_stats;
+
+static uint64_t NextDiagnosticId(std::atomic<uint64_t>& counter)
+{
+	return counter.fetch_add(1, std::memory_order_relaxed);
+}
 
 static String BoolText(bool value)
 {
@@ -386,6 +417,7 @@ struct VulkanDispatch {
 	PFN_vkEnumerateInstanceExtensionProperties enumerate_instance_extension_properties = nullptr;
 	PFN_vkCreateInstance create_instance = nullptr;
 	bool cleanup_ok = true;
+	uint64_t diagnostic_id = 0;
 
 	~VulkanDispatch() { Close(); }
 
@@ -409,6 +441,10 @@ struct VulkanDispatch {
 			module = nullptr;
 		}
 		cleanup_ok = cleanup_ok && ok && IsCleared();
+		if(diagnostic_id) {
+			g_runtime_device_stats.runtime_live_count.fetch_sub(1, std::memory_order_relaxed);
+			diagnostic_id = 0;
+		}
 		return cleanup_ok;
 	}
 
@@ -416,6 +452,10 @@ struct VulkanDispatch {
 	{
 		Close();
 		cleanup_ok = true;
+		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.runtime_next_id);
+		g_runtime_device_stats.runtime_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.runtime_live_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.runtime_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		proc_filter = resolver;
 		module = LoadLibraryW(L"vulkan-1.dll");
 		if(!module) {
@@ -462,6 +502,7 @@ struct VulkanInstanceContext {
 	bool debug_utils_requested = false;
 	bool debug_utils_available = false;
 	bool cleanup_ok = true;
+	uint64_t diagnostic_id = 0;
 
 	~VulkanInstanceContext() { Close(); }
 
@@ -476,6 +517,7 @@ struct VulkanInstanceContext {
 		if(messenger && destroy_debug_utils_messenger) {
 			destroy_debug_utils_messenger(instance, messenger, nullptr);
 			messenger = VK_NULL_HANDLE;
+			g_runtime_device_stats.debug_messenger_live_count.fetch_sub(1, std::memory_order_relaxed);
 		}
 		else if(messenger) {
 			ok = false;
@@ -502,6 +544,10 @@ struct VulkanInstanceContext {
 		debug_utils_requested = false;
 		debug_utils_available = false;
 		cleanup_ok = cleanup_ok && ok && IsCleared();
+		if(diagnostic_id) {
+			g_runtime_device_stats.instance_live_count.fetch_sub(1, std::memory_order_relaxed);
+			diagnostic_id = 0;
+		}
 		return cleanup_ok;
 	}
 
@@ -509,6 +555,10 @@ struct VulkanInstanceContext {
 	{
 		Close();
 		cleanup_ok = true;
+		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.instance_next_id);
+		g_runtime_device_stats.instance_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.instance_live_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.instance_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		dispatch = &d;
 		validation_requested = request_validation;
 		auto fail = [&](const String& message) {
@@ -607,6 +657,8 @@ struct VulkanInstanceContext {
 				error = String("vkCreateDebugUtilsMessengerEXT failed: ") + AsString((int)vr);
 				return fail(error);
 			}
+			g_runtime_device_stats.debug_messenger_create_count.fetch_add(1, std::memory_order_relaxed);
+			g_runtime_device_stats.debug_messenger_live_count.fetch_add(1, std::memory_order_relaxed);
 			debug_utils_requested = true;
 			debug_utils_available = true;
 			bootstrap.debug_messenger_created = true;
@@ -617,6 +669,7 @@ struct VulkanInstanceContext {
 
 	bool EnumeratePhysicalDevices(Vector<VulkanDiscoveredDevice>& out, String& error) const
 	{
+		g_runtime_device_stats.physical_device_discovery_count.fetch_add(1, std::memory_order_relaxed);
 		Vector<VkPhysicalDevice> handles;
 		if(!EnumerateResult(handles, [&](uint32_t *count, VkPhysicalDevice *data) { return enumerate_physical_devices(instance, count, data); }, error, "physical device"))
 			return false;
@@ -701,6 +754,7 @@ struct VulkanDeviceContext {
 	bool cleanup_ok = true;
 	int cleanup_result = 0;
 	String cleanup_error;
+	uint64_t diagnostic_id = 0;
 
 	~VulkanDeviceContext() { Close(); }
 
@@ -736,6 +790,10 @@ struct VulkanDeviceContext {
 		device_wait_idle = nullptr;
 		physical_device = VK_NULL_HANDLE;
 		cleanup_ok = cleanup_ok && ok && IsCleared();
+		if(diagnostic_id) {
+			g_runtime_device_stats.device_live_count.fetch_sub(1, std::memory_order_relaxed);
+			diagnostic_id = 0;
+		}
 		return cleanup_ok;
 	}
 
@@ -745,6 +803,10 @@ struct VulkanDeviceContext {
 		cleanup_ok = true;
 		cleanup_result = 0;
 		cleanup_error.Clear();
+		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.device_next_id);
+		g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.device_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		int chosen_queue_index = -1;
 		int queue_rank = -1;
 		for(const auto& q : device_info.queue_families) {
@@ -846,6 +908,7 @@ struct VulkanSurfaceContext {
 	bool surface_requested = false;
 	bool surface_available = false;
 	bool cleanup_ok = true;
+	uint64_t diagnostic_id = 0;
 
 	~VulkanSurfaceContext() { Close(); }
 
@@ -868,6 +931,7 @@ struct VulkanSurfaceContext {
 		if(messenger && destroy_debug_utils_messenger) {
 			destroy_debug_utils_messenger(instance, messenger, nullptr);
 			messenger = VK_NULL_HANDLE;
+			g_runtime_device_stats.debug_messenger_live_count.fetch_sub(1, std::memory_order_relaxed);
 		}
 		else if(messenger) {
 			ok = false;
@@ -877,6 +941,8 @@ struct VulkanSurfaceContext {
 			destroy_instance(instance, nullptr);
 		else if(instance)
 			ok = false;
+		if(instance)
+			g_runtime_device_stats.instance_live_count.fetch_sub(1, std::memory_order_relaxed);
 		instance = VK_NULL_HANDLE;
 		destroy_instance = nullptr;
 		get_device_proc_addr = nullptr;
@@ -902,6 +968,10 @@ struct VulkanSurfaceContext {
 		surface_requested = false;
 		surface_available = false;
 		cleanup_ok = cleanup_ok && ok && IsCleared();
+		if(diagnostic_id) {
+			g_runtime_device_stats.surface_live_count.fetch_sub(1, std::memory_order_relaxed);
+			diagnostic_id = 0;
+		}
 		return cleanup_ok;
 	}
 
@@ -909,6 +979,10 @@ struct VulkanSurfaceContext {
 	{
 		Close();
 		cleanup_ok = true;
+		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.surface_next_id);
+		g_runtime_device_stats.surface_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.surface_live_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.surface_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		dispatch = &d;
 		validation_requested = request_validation;
 		surface_requested = true;
@@ -1002,6 +1076,8 @@ struct VulkanSurfaceContext {
 			error = String("vkCreateInstance failed: ") + AsString((int)vr);
 			return fail(error);
 		}
+		g_runtime_device_stats.instance_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.instance_live_count.fetch_add(1, std::memory_order_relaxed);
 		report.preflight.instance_created = true;
 
 		if(!ResolveInstanceProc(destroy_instance, d.proc_filter, d.get_instance_proc_addr, instance, "vkDestroyInstance", error)) return fail(error);
@@ -1033,6 +1109,8 @@ struct VulkanSurfaceContext {
 				error = String("vkCreateDebugUtilsMessengerEXT failed: ") + AsString((int)vr);
 				return fail(error);
 			}
+			g_runtime_device_stats.debug_messenger_create_count.fetch_add(1, std::memory_order_relaxed);
+			g_runtime_device_stats.debug_messenger_live_count.fetch_add(1, std::memory_order_relaxed);
 			debug_utils_requested = true;
 			debug_utils_available = true;
 		}
@@ -1648,6 +1726,49 @@ void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injec
 void ClearVulkanValidationTestInjection()
 {
 	g_validation_test_injection = VulkanValidationTestInjection();
+}
+
+VulkanRuntimeDeviceDiagnostics GetVulkanRuntimeDeviceDiagnostics()
+{
+	VulkanRuntimeDeviceDiagnostics diag;
+	diag.runtime_create_count = g_runtime_device_stats.runtime_create_count.load(std::memory_order_relaxed);
+	diag.runtime_live_count = g_runtime_device_stats.runtime_live_count.load(std::memory_order_relaxed);
+	diag.runtime_id = g_runtime_device_stats.runtime_last_id.load(std::memory_order_relaxed);
+	diag.instance_create_count = g_runtime_device_stats.instance_create_count.load(std::memory_order_relaxed);
+	diag.instance_live_count = g_runtime_device_stats.instance_live_count.load(std::memory_order_relaxed);
+	diag.debug_messenger_create_count = g_runtime_device_stats.debug_messenger_create_count.load(std::memory_order_relaxed);
+	diag.debug_messenger_live_count = g_runtime_device_stats.debug_messenger_live_count.load(std::memory_order_relaxed);
+	diag.physical_device_discovery_count = g_runtime_device_stats.physical_device_discovery_count.load(std::memory_order_relaxed);
+	diag.device_create_count = g_runtime_device_stats.device_create_count.load(std::memory_order_relaxed);
+	diag.device_live_count = g_runtime_device_stats.device_live_count.load(std::memory_order_relaxed);
+	diag.device_id = g_runtime_device_stats.device_last_id.load(std::memory_order_relaxed);
+	diag.surface_create_count = g_runtime_device_stats.surface_create_count.load(std::memory_order_relaxed);
+	diag.surface_live_count = g_runtime_device_stats.surface_live_count.load(std::memory_order_relaxed);
+	diag.surface_id = g_runtime_device_stats.surface_last_id.load(std::memory_order_relaxed);
+	return diag;
+}
+
+void ClearVulkanRuntimeDeviceDiagnostics()
+{
+	g_runtime_device_stats.runtime_create_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.runtime_live_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.runtime_next_id.store(1, std::memory_order_relaxed);
+	g_runtime_device_stats.runtime_last_id.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.instance_next_id.store(1, std::memory_order_relaxed);
+	g_runtime_device_stats.instance_last_id.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.instance_create_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.instance_live_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.debug_messenger_create_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.debug_messenger_live_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.physical_device_discovery_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.device_create_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.device_live_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.device_next_id.store(1, std::memory_order_relaxed);
+	g_runtime_device_stats.device_last_id.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.surface_create_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.surface_live_count.store(0, std::memory_order_relaxed);
+	g_runtime_device_stats.surface_next_id.store(1, std::memory_order_relaxed);
+	g_runtime_device_stats.surface_last_id.store(0, std::memory_order_relaxed);
 }
 
 } // namespace VulkanTestHooks
@@ -2423,6 +2544,8 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
 		return false;
 	}
+	g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
+	g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
 
 	if(!ResolveDeviceProc(impl->device.destroy_device, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail(impl->error);
 	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail(impl->error);
@@ -2490,6 +2613,7 @@ void VulkanSurfaceSession::Close()
 	if(impl->device.device) {
 		cleanup_ok = impl->device.Close() && cleanup_ok;
 		impl->report.device_cleanup_ok = true;
+		g_runtime_device_stats.device_live_count.fetch_sub(1, std::memory_order_relaxed);
 	}
 	cleanup_ok = impl->ctx.Close() && cleanup_ok;
 	cleanup_ok = impl->dispatch.Close() && cleanup_ok;
