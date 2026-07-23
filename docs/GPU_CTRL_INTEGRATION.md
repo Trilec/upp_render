@@ -4,30 +4,45 @@
 
 `GpuCtrl` is the application-facing U++ control for hosting GPU content inside a normal `TopWindow` layout.
 
-The intended user experience is simple: add a control, size it with layout, attach a render callback later. The programmer should not need to manage HWNDs, surface descriptors, queue-family selection, swapchains, acquisition, presentation, or cleanup ceremony.
+The intended user experience is simple: add a control, size it with layout, and inspect readiness or errors without touching HWNDs, surface descriptors, queue-family selection, swapchains, acquisition, presentation, or cleanup ceremony.
 
-## Intended Public Shape
-
-Planned shape:
+## Current Public API
 
 ```cpp
 class GpuCtrl : public Ctrl {
 public:
-    Event<GpuPainter&> WhenRender;
+	bool IsNativeHostReady() const;
+	bool IsGpuReady() const;
+	String GetGpuError() const;
+	void RequestGpuRefresh();
+	GpuCtrl& RetryGpuInit();
 
-    bool IsGpuReady() const;
-    String GetGpuError() const;
-    void RequestGpuRefresh();
-
-    GpuCtrl& SetBackend(GpuBackendKind kind);
+	GpuCtrl& SetBackend(GpuBackendKind kind);
+	GpuCtrl& SetValidation(bool validation = true);
 };
 ```
 
-The current prototype is lifecycle-only. `GpuPainter` does not exist yet.
+`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the embedded surface-level session is open and ready. `GetGpuError()` returns the last API or session error without clearing a healthy ready state.
+
+The control now defaults to Vulkan so ordinary code can just embed it.
+
+## Architecture
+
+```text
+TopWindow
+  -> GpuCtrl
+  -> private DHCtrl child host
+  -> Win32 native-handle helper
+  -> VulkanSurfaceSession
+  -> RenderVulkan surface/session code
+
+VulkanSurfaceProbe
+  -> same VulkanSurfaceSession
+```
 
 ## Selected Native Host Mechanism
 
-The prototype uses U++'s existing child-window mechanism through `DHCtrl`, wrapped privately inside `GpuCtrl`.
+The implementation uses U++'s existing child-window mechanism through `DHCtrl`, wrapped privately inside `GpuCtrl`.
 
 That gives a real embedded child HWND without exposing native handles in the public API.
 
@@ -39,41 +54,45 @@ Mechanism selected:
 - visibility follows normal U++ show/hide propagation through the host state path
 - destruction is driven by the normal U++ close and member-destruction order
 
+`CLOSE` is handled before `DHCtrl::State(CLOSE)` so the embedded backend can shut down before the native child disappears.
+
 ## Lifecycle Model
 
-Planned ownership order:
+Ownership order:
 
 1. `TopWindow` owns `GpuCtrl` as an ordinary child control.
 2. `GpuCtrl` owns a private child host control.
 3. The host owns the native child HWND.
-4. Future backend objects will hang off the host or control state, not the other way around.
+4. Backend/session objects live behind the host, not the other way around.
 
 Destruction order:
 
 - backend resources must be released before the child HWND disappears
 - the child HWND must be destroyed before the C++ control object is fully gone
-- the current prototype has no backend resources yet, but it already follows the child-host shutdown path
+- the current implementation follows the child-host shutdown path and closes the embedded session first
 
-## Resize and Visibility
+`GpuCtrl` keeps the backend implementation hidden behind `Impl` so future backends do not leak into the public header.
+
+## Resize And Visibility
 
 `GpuCtrl` keeps the host rectangle synchronized from `Layout()`.
 
 Repeated `Layout()` calls are safe.
 Repeated `OPEN`/`CLOSE`/`SHOW`/`ENABLE` notifications are treated as idempotent state updates.
 
-Visibility follows the surrounding U++ control tree where practical. The host is not a replacement window manager. It is just the small window inside the larger one that happened to be invited.
+Ordinary resize and visibility changes update the embedded host; they do not create or destroy a swapchain yet.
 
 ## Error Handling
 
-The prototype exposes a concise string error state through `GetGpuError()`.
+API errors describe rejected configuration changes. Session errors describe backend bring-up or teardown failures.
 
-Current error cases are limited to native-host readiness problems. No Vulkan surface or swapchain error path is implemented in this task.
+`RetryGpuInit()` is the deterministic retry path after a failed attempt. The control makes one automatic startup attempt when the native host first becomes ready and then waits for an explicit retry or configuration change.
 
 ## Refresh Semantics
 
 `RequestGpuRefresh()` is a thin host invalidation request.
 
-In the current prototype it is intentionally boring: if the native host is ready, it requests a repaint; otherwise it does nothing.
+In the current implementation it is intentionally boring: if the native host is ready, it requests a repaint; otherwise it does nothing.
 
 ## Future Swapchain Ownership
 
@@ -101,13 +120,13 @@ class GpuTopWindow : public TopWindow
 
 This should remain optional. `GpuCtrl` is the primary boundary because it composes naturally inside normal layouts.
 
-## Relationship to `RenderRhi`
+## Relationship To `RenderRhi`
 
 `RenderRhi` remains the neutral lower-level GPU contract.
 
 `GpuCtrl` does not bypass it. The control only provides the application-facing hosting boundary and lifecycle entry point.
 
-## Separation from `RenderPlatformWin32`
+## Separation From `RenderPlatformWin32`
 
 `RenderPlatformWin32` is the native-window descriptor bridge for future surface creation.
 
@@ -115,9 +134,13 @@ This should remain optional. `GpuCtrl` is the primary boundary because it compos
 
 The two should stay separate so layout code does not become a surface factory wearing a control badge.
 
+## Shared Surface Path
+
+`VulkanSurfaceSession` is shared by `VulkanSurfaceProbe` and `GpuCtrl` so there is one production surface bring-up path for loader startup, instance creation, surface creation, physical-device discovery, queue selection, capability queries, logical-device creation, and cleanup.
+
 ## OpenGL Integration Findings
 
-### Files and methods inspected
+### Files And Methods Inspected
 
 - `uppsrc/GLCtrl/GLCtrl.h`
 - `uppsrc/GLCtrl/GLCtrl.cpp`
@@ -135,7 +158,7 @@ The two should stay separate so layout code does not become a surface factory we
 - `render/RenderRhi/RenderRhi.cpp`
 - `examples/DisplayListDemo/main.cpp`
 
-### Conventions worth preserving
+### Conventions Worth Preserving
 
 - `Ctrl`-based placement inside ordinary U++ layouts
 - creation tied to `OPEN` and cleanup tied to `CLOSE`
@@ -143,7 +166,7 @@ The two should stay separate so layout code does not become a surface factory we
 - a small public surface with the native details kept private
 - callback-based rendering entry points rather than a global render loop
 
-### OpenGL-specific details not to copy
+### OpenGL-Specific Details Not To Copy
 
 - global singleton OpenGL context ownership
 - WGL/GLX-specific context and pixel-format setup in control code
@@ -151,7 +174,7 @@ The two should stay separate so layout code does not become a surface factory we
 - fixed-pipeline helpers such as `StdView()`
 - assumptions that painting must be immediate-mode GL
 
-### Lifecycle weaknesses to avoid
+### Lifecycle Weaknesses To Avoid
 
 - relying on a global rendering context shared by all controls
 - making the control public API expose native handles or backend-specific state

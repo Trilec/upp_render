@@ -6,9 +6,9 @@ preflight probe, which is a little unsettling but useful.
 
 The first planned GPU backend is Vulkan, but this stage is backend-neutral.
 It establishes value types, display-list recording, deterministic inspection,
-software replay, tests, and a visual demo before any GPU API is introduced.
-The application-facing control boundary is now being defined around `GpuCtrl`;
-the current prototype covers lifecycle only.
+software replay, tests, and demos before any GPU API is introduced.
+`GpuCtrl` now provides the embedded surface/session boundary; visible rendering
+still comes later.
 
 ## Current packages
 
@@ -21,13 +21,21 @@ the current prototype covers lifecycle only.
 - `render/RenderVulkan`
 - `render/GpuCtrl`
 - `examples/DisplayListDemo`
+- `examples/GpuCtrlBasicDemo`
 - `examples/GpuCtrlLifecycleDemo`
+- `examples/GpuCtrlMultiViewDemo`
 - `tests/RenderCanvasTest`
 - `tests/RenderRhiTest`
 - `tests/RenderVulkanTest`
 - `tests/RenderPlatformWin32Test`
 - `tools/VulkanProbe`
 - `tools/VulkanSurfaceProbe`
+
+## Docs
+
+- `docs/GPU_CTRL_USAGE.md`
+- `docs/DEMO_ROADMAP.md`
+- `docs/UI_GPU_RENDERING_ARCHITECTURE.md`
 
 ## Build
 
@@ -50,9 +58,10 @@ Run the test and demo executables after building.
 - Vulkan loader, instance, physical-device selection, logical-device creation,
   and graphics-queue bootstrap are implemented; TASK-007 surface bring-up also
   passes the ten-cycle validation gate
-- `GpuCtrl` exists as a lifecycle-only control prototype
+- `GpuCtrl` now hosts a surface-level Vulkan session with a deterministic retry
+  policy and no test-only public hooks
 - no Vulkan rendering backend yet; surface, swapchain, presentation, and
-  rendering still are not
+  visible rendering still are not
 - no other GPU backend yet
 - no swapchain, frame acquisition, or presentation path yet
 - no text, image, gradient, shadow, or shader pipeline yet

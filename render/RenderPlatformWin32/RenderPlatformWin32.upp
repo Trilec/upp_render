@@ -4,5 +4,6 @@ uses
 	RenderRhi;
 
 file
+	RenderPlatformWin32Internal.h,
 	RenderPlatformWin32.h,
 	RenderPlatformWin32.cpp;

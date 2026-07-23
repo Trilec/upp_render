@@ -281,8 +281,6 @@ private:
 	static int DeviceRank(VkPhysicalDeviceType type);
 	static int QueueRank(const VulkanQueueFamilyInfo& family);
 	static String SanitizeValidationMessage(const String& text);
-
-	static bool BuildSurface(VulkanSurfaceReport& report, bool request_validation, const GpuNativeWindowDesc& native_window, VulkanProcResolver resolver);
 };
 
 }

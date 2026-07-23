@@ -1,0 +1,11 @@
+uses
+	Core,
+	CtrlLib,
+	GpuCtrl;
+
+file
+	main.cpp,
+	../GpuCtrlDemoSupport.h;
+
+mainconfig
+	"" = "GUI";

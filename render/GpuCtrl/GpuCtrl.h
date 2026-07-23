@@ -10,14 +10,15 @@ public:
 	GpuCtrl();
 	~GpuCtrl() override;
 
+	// Advanced diagnostics for host/native lifecycle issues.
 	bool   IsNativeHostReady() const;
 	bool   IsGpuReady() const;
 	String GetGpuError() const;
 	void   RequestGpuRefresh();
+	GpuCtrl& RetryGpuInit();
 
 	GpuCtrl& SetBackend(GpuBackendKind kind);
 	GpuCtrl& SetValidation(bool validation = true);
-	GpuCtrl& SetShutdownCallback(Callback3<bool, bool, const String&> cb);
 
 protected:
 	void State(int reason) override;

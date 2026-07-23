@@ -67,8 +67,10 @@ TASK-007 completed the surface and platform bridge layer, with a Win32
 native-window contract, bridge test coverage, a live Vulkan surface probe, and
 a ten-cycle validation gate that now passes.
 
-TASK-007A2 is defining the embedded `GpuCtrl` lifecycle boundary and keeping
-the public API free of native handles, Vulkan headers, and swapchain ceremony.
+TASK-007A3 restored the backend-neutral `GpuCtrl` public boundary.
+TASK-007A4 is now cleaning the control/session foundation, removing duplicate
+surface bring-up code, documenting the usage and future UI rendering shape, and
+adding practical embedded-control demos.
 
 Successful local build command:
 
@@ -124,7 +126,8 @@ additional backends beyond the first ones already planned.
 
 - TASK-007 surface bring-up passes the ten-cycle validation gate
 - the early GUI startup fault was caused by missing `CtrlLib` initialization
-- `GpuCtrl` is lifecycle-only for now
+- `GpuCtrl` now owns a surface-level Vulkan session with deterministic retry
+  behavior and no test-only public hook
 - swapchain and rendering remain unimplemented
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

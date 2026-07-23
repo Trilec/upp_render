@@ -1,4 +1,5 @@
 #include "GpuCtrl.h"
+#include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
 #include <RenderVulkan/RenderVulkanSurfaceSession.h>
 
 namespace Upp {
@@ -55,6 +56,8 @@ static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
 
 }
 
+// The public control stays tiny; platform/session ownership lives behind this
+// private implementation so future backends do not leak into the ordinary API.
 struct GpuCtrl::Impl {
 	class Host : public DHCtrl {
 	public:
@@ -70,6 +73,7 @@ struct GpuCtrl::Impl {
 
 		void State(int reason) override
 		{
+			// CLOSE must reach the implementation before DHCtrl tears the native host down.
 			if(reason == CLOSE) {
 				if(impl)
 					impl->OnHostState(reason);
@@ -128,18 +132,27 @@ struct GpuCtrl::Impl {
 
 	String GetGpuError() const
 	{
+		// API errors describe rejected configuration; session errors describe
+		// backend bring-up or teardown failures.
 		return api_error.IsEmpty() ? session_error : api_error;
-	}
-
-	void SetShutdownCallback(Callback3<bool, bool, const String&> cb)
-	{
-		shutdown_callback = cb;
 	}
 
 	void RequestGpuRefresh()
 	{
 		if(IsGpuReady())
 			host.Refresh();
+	}
+
+	void RetryGpuInit()
+	{
+		if(destroying)
+			return;
+		// One automatic attempt happens on first host readiness; explicit retry is
+		// the deterministic path after a failure.
+		init_attempted = false;
+		ClearError();
+		if(host_ready && !gpu_ready)
+			StartGpuSession();
 	}
 
 	void SetBackend(GpuBackendKind kind)
@@ -151,6 +164,7 @@ struct GpuCtrl::Impl {
 			return;
 		}
 		backend_kind = kind;
+		init_attempted = false;
 		if(kind == GpuBackendKind::Vulkan)
 			ClearError();
 		else if(kind != GpuBackendKind::Unknown)
@@ -168,6 +182,8 @@ struct GpuCtrl::Impl {
 			return;
 		}
 		validation_requested = validation;
+		init_attempted = false;
+		ClearError();
 	}
 
 	void OnHostState(int reason)
@@ -181,7 +197,7 @@ struct GpuCtrl::Impl {
 		case POSITION:
 		case LAYOUTPOS:
 			host_ready = IsNativeHostReady();
-			if(host_ready && !gpu_ready) {
+			if(host_ready && !gpu_ready && !init_attempted) {
 				ClearError();
 				StartGpuSession();
 			}
@@ -212,6 +228,9 @@ struct GpuCtrl::Impl {
 
 	void SyncHostBounds()
 	{
+		// Ordinary resize and visibility notifications keep the host child sized;
+		// the surface-level session itself is intentionally independent of any
+		// swapchain/presentation lifetime.
 		Size sz = owner->GetSize();
 		host.SetRect(0, 0, sz.cx, sz.cy);
 		if(IsNativeHostReady()) {
@@ -224,6 +243,9 @@ struct GpuCtrl::Impl {
 	{
 		if(destroying)
 			return;
+		init_attempted = true;
+		// Vulkan is the current backend baseline; other values remain explicit
+		// configuration errors until their real implementations arrive.
 		if(backend_kind != GpuBackendKind::Vulkan) {
 			gpu_ready = false;
 			if(backend_kind == GpuBackendKind::Unknown)
@@ -234,9 +256,9 @@ struct GpuCtrl::Impl {
 		}
 
 		GpuNativeWindowDesc native_window;
-		String desc_error;
-		if(!BuildNativeWindowDesc(native_window, desc_error)) {
-			SetSessionError(desc_error);
+		String native_error;
+		if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(), native_window, native_error)) {
+			SetSessionError(native_error);
 			return;
 		}
 
@@ -262,6 +284,9 @@ struct GpuCtrl::Impl {
 
 	void StopGpuSession()
 	{
+		// Release backend resources before the child HWND disappears.  The child
+		// host is a U++ implementation detail; the surface session is the actual
+		// backend lifetime boundary for now.
 		if(backend)
 			backend->Close();
 		backend.Clear();
@@ -269,25 +294,7 @@ struct GpuCtrl::Impl {
 		session_error.Clear();
 		host_ready = false;
 		gpu_ready = false;
-	}
-
-	bool BuildNativeWindowDesc(GpuNativeWindowDesc& desc, String& native_error) const
-	{
-		desc = GpuNativeWindowDesc();
-		HWND hwnd = const_cast<Host&>(host).GetHWND();
-		if(!hwnd || !IsWindow(hwnd)) {
-			native_error = "native host not ready";
-			return false;
-		}
-		DWORD pid = 0;
-		GetWindowThreadProcessId(hwnd, &pid);
-		if(pid != GetCurrentProcessId()) {
-			native_error = "native host belongs to another process";
-			return false;
-		}
-		desc.kind = GpuNativeWindowKind::Win32;
-		desc.handle = (uintptr_t)hwnd;
-		return true;
+		init_attempted = false;
 	}
 
 	void SetApiError(const String& message)
@@ -310,13 +317,13 @@ struct GpuCtrl::Impl {
 	GpuCtrl *owner = nullptr;
 	Host host;
 	One<GpuCtrlBackendSession> backend;
-	GpuBackendKind backend_kind = GpuBackendKind::Unknown;
+	GpuBackendKind backend_kind = GpuBackendKind::Vulkan;
 	String api_error;
 	String session_error;
-	Callback3<bool, bool, const String&> shutdown_callback;
 	bool validation_requested = false;
 	bool host_ready = false;
 	bool gpu_ready = false;
+	bool init_attempted = false;
 	bool destroying = false;
 };
 
@@ -324,18 +331,18 @@ GpuCtrl::GpuCtrl()
 {
 	BackPaint(EXCLUDEPAINT);
 	impl.Create(*this);
+	// Vulkan is the current default so ordinary code can just add the control;
+	// explicit backend selection remains available for tests and future backends.
 	Add(impl->host.SizePos());
 }
 
 GpuCtrl::~GpuCtrl()
 {
-		if(impl) {
-			impl->destroying = true;
-			impl->StopGpuSession();
-			if(impl->shutdown_callback)
-				impl->shutdown_callback(impl->host_ready, impl->gpu_ready, impl->GetGpuError());
-		}
+	if(impl) {
+		impl->destroying = true;
+		impl->StopGpuSession();
 	}
+}
 
 bool GpuCtrl::IsNativeHostReady() const
 {
@@ -372,10 +379,10 @@ GpuCtrl& GpuCtrl::SetValidation(bool validation)
 	return *this;
 }
 
-GpuCtrl& GpuCtrl::SetShutdownCallback(Callback3<bool, bool, const String&> cb)
+GpuCtrl& GpuCtrl::RetryGpuInit()
 {
 	if(impl)
-		impl->SetShutdownCallback(cb);
+		impl->RetryGpuInit();
 	return *this;
 }
 

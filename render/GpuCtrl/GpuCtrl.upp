@@ -1,6 +1,7 @@
 uses
 	Core,
 	CtrlLib,
+	RenderPlatformWin32,
 	RenderRhi,
 	RenderVulkan;
 
