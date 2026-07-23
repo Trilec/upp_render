@@ -12,6 +12,7 @@ struct VulkanRuntimeDeviceDiagnostics {
 	uint64_t runtime_id = 0;
 	uint64_t instance_create_count = 0;
 	uint64_t instance_live_count = 0;
+	uint64_t instance_id = 0;
 	uint64_t debug_messenger_create_count = 0;
 	uint64_t debug_messenger_live_count = 0;
 	uint64_t physical_device_discovery_count = 0;
