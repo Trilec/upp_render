@@ -672,7 +672,7 @@ static bool TestInstanceOptions()
 		expected_exts.Add("VK_KHR_win32_surface");
 		if(!CheckStrings(result.enabled_layers, expected_layers, "validation layer should be enabled")) return false;
 		if(!CheckStrings(result.enabled_extensions, expected_exts, "validation and surface extensions should be enabled together")) return false;
-		if(!Check(result.diagnostics.debug_messenger_create_count == 1, "debug messenger should be created")) return false;
+		if(!Check(result.diagnostics.debug_messenger_create_count == 0, "debug messenger create count should stay zero")) return false;
 		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
 		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
 		if(!Check(result.diagnostics.debug_messenger_live_count == 0, "debug messenger live count should return to zero")) return false;

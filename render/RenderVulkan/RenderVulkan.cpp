@@ -308,204 +308,55 @@ struct VulkanInstanceOptions {
 	const char *application_name = nullptr;
 };
 
-struct VulkanInstanceOptionsTestFixture {
-	Vector<VkExtensionProperties> instance_extensions;
-	Vector<VkLayerProperties> instance_layers;
-	Vector<String> enabled_layers;
-	Vector<String> enabled_extensions;
-};
-
-static thread_local VulkanInstanceOptionsTestFixture *g_instance_options_test_fixture = nullptr;
-
-static const VulkanInstanceOptionsTestFixture& EmptyInstanceOptionsTestFixture()
+static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
+	const Vector<VulkanExtensionInfo>& available_extensions,
+	const Vector<VulkanLayerInfo>& available_layers,
+	Vector<String>& enabled_layers,
+	Vector<String>& enabled_extensions,
+	String& error)
 {
-	static VulkanInstanceOptionsTestFixture empty;
-	return empty;
-}
+	enabled_layers.Clear();
+	enabled_extensions.Clear();
+	auto has_extension = [&](const char *name) {
+		for(const auto& ext : available_extensions)
+			if(ext.name == name)
+				return true;
+		return false;
+	};
+	auto has_layer = [&](const char *name) {
+		for(const auto& layer : available_layers)
+			if(layer.name == name)
+				return true;
+		return false;
+	};
 
-static void AddTestExtension(Vector<VkExtensionProperties>& out, const char *name)
-{
-	VkExtensionProperties ext{};
-	strncpy(ext.extensionName, name, sizeof(ext.extensionName) - 1);
-	ext.specVersion = 1;
-	out.Add(ext);
-}
-
-static void AddTestLayer(Vector<VkLayerProperties>& out, const char *name)
-{
-	VkLayerProperties layer{};
-	strncpy(layer.layerName, name, sizeof(layer.layerName) - 1);
-	strncpy(layer.description, name, sizeof(layer.description) - 1);
-	layer.specVersion = 1;
-	layer.implementationVersion = 1;
-	out.Add(layer);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceVersion(uint32_t *version);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceLayers(uint32_t *count, VkLayerProperties *data);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceExtensions(const char *, uint32_t *count, VkExtensionProperties *data);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateInstance(const VkInstanceCreateInfo *create_info, const VkAllocationCallbacks *, VkInstance *instance);
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestDestroyInstance(VkInstance, const VkAllocationCallbacks *);
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InstanceOptionsTestGetInstanceProcAddr(VkInstance, const char *name);
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InstanceOptionsTestGetDeviceProcAddr(VkDevice, const char *name);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *, VkDevice *device);
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties *);
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t *count, VkQueueFamilyProperties *props);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumeratePhysicalDevices(VkInstance, uint32_t *count, VkPhysicalDevice *devices);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateDeviceExtensionProperties(VkPhysicalDevice, const char *, uint32_t *count, VkExtensionProperties *data);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *);
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateDebugUtilsMessengerEXT(VkInstance, const VkDebugUtilsMessengerCreateInfoEXT *, const VkAllocationCallbacks *, VkDebugUtilsMessengerEXT *messenger);
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestDestroyDebugUtilsMessengerEXT(VkInstance, VkDebugUtilsMessengerEXT, const VkAllocationCallbacks *);
-
-static PFN_vkVoidFunction GetInstanceOptionsTestProc(const char *name)
-{
-	if(strcmp(name, "vkDestroyInstance") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestDestroyInstance);
-	if(strcmp(name, "vkGetDeviceProcAddr") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestGetDeviceProcAddr);
-	if(strcmp(name, "vkCreateDevice") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestCreateDevice);
-	if(strcmp(name, "vkEnumeratePhysicalDevices") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestEnumeratePhysicalDevices);
-	if(strcmp(name, "vkGetPhysicalDeviceProperties") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestGetPhysicalDeviceProperties);
-	if(strcmp(name, "vkGetPhysicalDeviceQueueFamilyProperties") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestGetPhysicalDeviceQueueFamilyProperties);
-	if(strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestEnumerateDeviceExtensionProperties);
-	if(strcmp(name, "vkGetPhysicalDeviceFeatures2") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestGetPhysicalDeviceFeatures2);
-	if(strcmp(name, "vkCreateDebugUtilsMessengerEXT") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestCreateDebugUtilsMessengerEXT);
-	if(strcmp(name, "vkDestroyDebugUtilsMessengerEXT") == 0)
-		return reinterpret_cast<PFN_vkVoidFunction>(&InstanceOptionsTestDestroyDebugUtilsMessengerEXT);
-	return nullptr;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceVersion(uint32_t *version)
-{
-	if(version)
-		*version = VK_API_VERSION_1_3;
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceLayers(uint32_t *count, VkLayerProperties *data)
-{
-	const VulkanInstanceOptionsTestFixture& fixture = g_instance_options_test_fixture ? *g_instance_options_test_fixture : EmptyInstanceOptionsTestFixture();
-	if(!count)
-		return VK_ERROR_INITIALIZATION_FAILED;
-	if(!data) {
-		*count = fixture.instance_layers.GetCount();
-		return VK_SUCCESS;
+	if(options.validation) {
+		if(!has_layer("VK_LAYER_KHRONOS_validation")) {
+			error = "VK_LAYER_KHRONOS_validation not present";
+			return false;
+		}
+		if(!has_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+			error = "VK_EXT_debug_utils not present";
+			return false;
+		}
+		enabled_layers.Add("VK_LAYER_KHRONOS_validation");
+		enabled_extensions.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
-	int n = min<int>(*count, fixture.instance_layers.GetCount());
-	for(int i = 0; i < n; ++i)
-		data[i] = fixture.instance_layers[i];
-	*count = n;
-	return VK_SUCCESS;
-}
 
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateInstanceExtensions(const char *, uint32_t *count, VkExtensionProperties *data)
-{
-	const VulkanInstanceOptionsTestFixture& fixture = g_instance_options_test_fixture ? *g_instance_options_test_fixture : EmptyInstanceOptionsTestFixture();
-	if(!count)
-		return VK_ERROR_INITIALIZATION_FAILED;
-	if(!data) {
-		*count = fixture.instance_extensions.GetCount();
-		return VK_SUCCESS;
+	if(options.win32_surface) {
+		if(!has_extension(VK_KHR_SURFACE_EXTENSION_NAME)) {
+			error = "VK_KHR_surface not present";
+			return false;
+		}
+		if(!has_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
+			error = "VK_KHR_win32_surface not present";
+			return false;
+		}
+		enabled_extensions.Add(VK_KHR_SURFACE_EXTENSION_NAME);
+		enabled_extensions.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 	}
-	int n = min<int>(*count, fixture.instance_extensions.GetCount());
-	for(int i = 0; i < n; ++i)
-		data[i] = fixture.instance_extensions[i];
-	*count = n;
-	return VK_SUCCESS;
-}
 
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateInstance(const VkInstanceCreateInfo *create_info, const VkAllocationCallbacks *, VkInstance *instance)
-{
-	VulkanInstanceOptionsTestFixture& fixture = *g_instance_options_test_fixture;
-	fixture.enabled_layers.Clear();
-	fixture.enabled_extensions.Clear();
-	for(uint32_t i = 0; i < create_info->enabledLayerCount; ++i)
-		fixture.enabled_layers.Add(String(create_info->ppEnabledLayerNames[i]));
-	for(uint32_t i = 0; i < create_info->enabledExtensionCount; ++i)
-		fixture.enabled_extensions.Add(String(create_info->ppEnabledExtensionNames[i]));
-	if(instance)
-		*instance = reinterpret_cast<VkInstance>(static_cast<uintptr_t>(0x1));
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestDestroyInstance(VkInstance, const VkAllocationCallbacks *)
-{
-}
-
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InstanceOptionsTestGetInstanceProcAddr(VkInstance, const char *name)
-{
-	return GetInstanceOptionsTestProc(name);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *, VkDevice *device)
-{
-	if(device)
-		*device = reinterpret_cast<VkDevice>(static_cast<uintptr_t>(0x1));
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL InstanceOptionsTestGetDeviceProcAddr(VkDevice, const char *)
-{
-	return nullptr;
-}
-
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties *)
-{
-}
-
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t *count, VkQueueFamilyProperties *props)
-{
-	if(count && !props)
-		*count = 1;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumeratePhysicalDevices(VkInstance, uint32_t *count, VkPhysicalDevice *devices)
-{
-	if(!count)
-		return VK_ERROR_INITIALIZATION_FAILED;
-	if(!devices) {
-		*count = 1;
-		return VK_SUCCESS;
-	}
-	if(*count > 0)
-		devices[0] = reinterpret_cast<VkPhysicalDevice>(static_cast<uintptr_t>(0x1));
-	*count = 1;
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestEnumerateDeviceExtensionProperties(VkPhysicalDevice, const char *, uint32_t *count, VkExtensionProperties *data)
-{
-	if(!count)
-		return VK_ERROR_INITIALIZATION_FAILED;
-	if(!data) {
-		*count = 0;
-		return VK_SUCCESS;
-	}
-	*count = 0;
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestGetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)
-{
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL InstanceOptionsTestCreateDebugUtilsMessengerEXT(VkInstance, const VkDebugUtilsMessengerCreateInfoEXT *, const VkAllocationCallbacks *, VkDebugUtilsMessengerEXT *messenger)
-{
-	if(messenger)
-		*messenger = reinterpret_cast<VkDebugUtilsMessengerEXT>(static_cast<uintptr_t>(0x1));
-	return VK_SUCCESS;
-}
-
-VKAPI_ATTR void VKAPI_CALL InstanceOptionsTestDestroyDebugUtilsMessengerEXT(VkInstance, VkDebugUtilsMessengerEXT, const VkAllocationCallbacks *)
-{
+	return true;
 }
 
 static void InjectValidationIfRequested(VulkanValidationCapture& capture, VulkanValidationTestPoint point)
@@ -827,16 +678,17 @@ struct VulkanInstanceContext {
 		app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		app_info.apiVersion = VK_API_VERSION_1_3;
 
+		Vector<String> enabled_layer_names;
+		Vector<String> enabled_extension_names;
+		if(!ResolveVulkanInstanceOptions(options, preflight.instance_extensions, preflight.instance_layers, enabled_layer_names, enabled_extension_names, error))
+			return fail(error);
+
 		Vector<const char*> enabled_layers;
 		Vector<const char*> enabled_exts;
-		if(options.validation) {
-			enabled_layers.Add("VK_LAYER_KHRONOS_validation");
-			enabled_exts.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-		}
-		if(options.win32_surface) {
-			enabled_exts.Add(VK_KHR_SURFACE_EXTENSION_NAME);
-			enabled_exts.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-		}
+		for(const String& name : enabled_layer_names)
+			enabled_layers.Add(name);
+		for(const String& name : enabled_extension_names)
+			enabled_exts.Add(name);
 
 		VkInstanceCreateInfo create_info{};
 		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1997,44 +1849,33 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 	const char *application_name)
 {
 	ClearVulkanRuntimeDeviceDiagnostics();
-	VulkanInstanceOptionsTestFixture fixture;
+	Vector<VulkanExtensionInfo> extensions;
+	Vector<VulkanLayerInfo> layers;
 	if(has_debug_utils_extension)
-		AddTestExtension(fixture.instance_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		extensions.Add().name = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	if(has_surface_extension)
-		AddTestExtension(fixture.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME);
+		extensions.Add().name = VK_KHR_SURFACE_EXTENSION_NAME;
 	if(has_win32_surface_extension)
-		AddTestExtension(fixture.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		extensions.Add().name = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
 	if(has_validation_layer)
-		AddTestLayer(fixture.instance_layers, "VK_LAYER_KHRONOS_validation");
+		layers.Add().name = "VK_LAYER_KHRONOS_validation";
 
-	g_instance_options_test_fixture = &fixture;
-	VulkanDispatch dispatch;
-	dispatch.enumerate_instance_version = InstanceOptionsTestEnumerateInstanceVersion;
-	dispatch.enumerate_instance_layer_properties = InstanceOptionsTestEnumerateInstanceLayers;
-	dispatch.enumerate_instance_extension_properties = InstanceOptionsTestEnumerateInstanceExtensions;
-	dispatch.create_instance = InstanceOptionsTestCreateInstance;
-	dispatch.get_instance_proc_addr = InstanceOptionsTestGetInstanceProcAddr;
-
-	VulkanInstanceContext instance;
-	VulkanPreflightReport preflight;
-	VulkanBootstrapReport bootstrap;
-	String error;
 	VulkanInstanceOptions options;
 	options.validation = validation;
 	options.win32_surface = win32_surface;
 	options.application_name = application_name ? application_name : "VulkanInstanceOptionsTest";
-	bool opened = instance.Open(dispatch, options, preflight, bootstrap, error);
-	bool close_ok = instance.Close();
-	close_ok = instance.Close() && close_ok;
-	g_instance_options_test_fixture = nullptr;
+	Vector<String> enabled_layers;
+	Vector<String> enabled_extensions;
+	String error;
+	bool opened = ResolveVulkanInstanceOptions(options, extensions, layers, enabled_layers, enabled_extensions, error);
 
 	VulkanInstanceOptionsTestResult result;
 	result.opened = opened;
-	result.close_ok = close_ok;
+	result.close_ok = true;
 	result.error = error;
-	for(const String& s : fixture.enabled_layers)
+	for(const String& s : enabled_layers)
 		result.enabled_layers.Add(s);
-	for(const String& s : fixture.enabled_extensions)
+	for(const String& s : enabled_extensions)
 		result.enabled_extensions.Add(s);
 	result.diagnostics = GetVulkanRuntimeDeviceDiagnostics();
 	return result;
