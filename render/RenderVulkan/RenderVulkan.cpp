@@ -1107,83 +1107,26 @@ struct VulkanSurfaceContext {
 
 	bool EnumeratePhysicalDevices(Vector<VulkanDiscoveredDevice>& out, VulkanSurfaceReport& report, String& error) const
 	{
-		Vector<VkPhysicalDevice> handles;
-		if(!EnumerateResult(handles, [&](uint32_t *count, VkPhysicalDevice *data) { return instance_context.enumerate_physical_devices(instance_context.instance, count, data); }, error, "physical device"))
+		if(!instance_context.EnumeratePhysicalDevices(out, error))
 			return false;
-		if(handles.IsEmpty())
+		if(out.IsEmpty())
 			return true;
 
-		for(VkPhysicalDevice handle : handles) {
-			VulkanDiscoveredDevice device;
-			device.handle = handle;
+		for(auto& device : out) {
 			VulkanDeviceInfo& info = device.info;
-			VkPhysicalDeviceProperties props{};
-			instance_context.get_physical_device_properties(handle, &props);
-			info.name = props.deviceName;
-			info.type = DeviceTypeText(props.deviceType);
-			info.vendor_id = props.vendorID;
-			info.device_id = props.deviceID;
-			info.driver_version = props.driverVersion;
-			info.api_version = props.apiVersion;
-
-			Vector<VkQueueFamilyProperties> qprops;
-			if(!EnumerateQueueFamilies(qprops, [&](uint32_t *count, VkQueueFamilyProperties *data) { instance_context.get_physical_device_queue_family_properties(handle, count, data); }, error, "queue family"))
-				return false;
-			for(int i = 0; i < qprops.GetCount(); ++i) {
-				const VkQueueFamilyProperties& q = qprops[i];
-				VulkanQueueFamilyInfo qinfo;
-				qinfo.index = i;
-				qinfo.flags = q.queueFlags;
-				qinfo.count = q.queueCount;
-				qinfo.graphics = (q.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-				qinfo.compute = (q.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-				qinfo.transfer = (q.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
-				qinfo.sparse_binding = (q.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) != 0;
+			for(int i = 0; i < info.queue_families.GetCount(); ++i) {
+				VulkanQueueFamilyInfo& qinfo = info.queue_families[i];
 				VkBool32 present = VK_FALSE;
-				VkResult support_result = get_surface_support(handle, (uint32_t)i, surface, &present);
+				VkResult support_result = get_surface_support(device.handle, (uint32_t)i, surface, &present);
 				if(support_result != VK_SUCCESS) {
 					error = String("vkGetPhysicalDeviceSurfaceSupportKHR failed: ") + AsString((int)support_result);
 					return false;
 				}
 				qinfo.present = present == VK_TRUE;
-				info.queue_families.Add() = pick(qinfo);
-				if(qinfo.graphics)
-					info.graphics_queue = true;
 			}
-
-			Vector<VkExtensionProperties> dev_exts;
-			if(!EnumerateResult(dev_exts, [&](uint32_t *count, VkExtensionProperties *data) { return instance_context.enumerate_device_extension_properties(handle, nullptr, count, data); }, error, "device extension"))
-				return false;
-			for(const auto& ext : dev_exts) {
-				VulkanExtensionInfo einfo;
-				einfo.name = ExtensionName(ext);
-				einfo.spec_version = ExtensionVersionToUInt(ext);
-				info.device_extensions.Add() = pick(einfo);
-			}
-
-			if(info.api_version >= VK_API_VERSION_1_3) {
-				VkPhysicalDeviceVulkan13Features f13{};
-				f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-				VkPhysicalDeviceFeatures2 f2{};
-				f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-				f2.pNext = &f13;
-				instance_context.get_physical_device_features2(handle, &f2);
-				info.dynamic_rendering = f13.dynamicRendering == VK_TRUE;
-				info.synchronization2 = f13.synchronization2 == VK_TRUE;
-			}
-
-			if(info.api_version < VK_API_VERSION_1_3)
-				AppendMissing(info, "Vulkan 1.3");
-			if(!info.graphics_queue)
-				AppendMissing(info, "graphics queue");
-			if(!info.dynamic_rendering)
-				AppendMissing(info, "dynamic rendering");
-			if(!info.synchronization2)
-				AppendMissing(info, "synchronization2");
 			if(!HasExtension(info.device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
 				AppendMissing(info, "VK_KHR_swapchain");
-			info.suitable = info.api_version >= VK_API_VERSION_1_3 && info.graphics_queue && info.dynamic_rendering && info.synchronization2 && HasExtension(info.device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-			out.Add() = pick(device);
+			info.suitable = info.suitable && HasExtension(info.device_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 		}
 		return true;
 	}
