@@ -6,6 +6,7 @@ using namespace Upp;
 using Upp::VulkanTestHooks::ClearVulkanValidationTestInjection;
 using Upp::VulkanTestHooks::SetVulkanValidationTestInjection;
 using Upp::VulkanTestHooks::RunVulkanInstanceOptionsTest;
+using Upp::VulkanTestHooks::TestVulkanInstanceCompatibility;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
 using Upp::VulkanTestHooks::VulkanValidationTestPoint;
 
@@ -680,6 +681,17 @@ static bool TestInstanceOptions()
 	return true;
 }
 
+static bool TestInstanceCompatibility()
+{
+	if(!Check(TestVulkanInstanceCompatibility(false, false, false, false), "bootstrap with bootstrap should be compatible")) return false;
+	if(!Check(TestVulkanInstanceCompatibility(false, true, false, true), "surface with surface should be compatible")) return false;
+	if(!Check(TestVulkanInstanceCompatibility(true, true, true, true), "validation surface with validation surface should be compatible")) return false;
+	if(!Check(!TestVulkanInstanceCompatibility(true, false, false, false), "validation versus non-validation should be incompatible")) return false;
+	if(!Check(!TestVulkanInstanceCompatibility(false, true, false, false), "surface versus non-surface should be incompatible")) return false;
+	if(!Check(TestVulkanInstanceCompatibility(false, false, false, false), "different application names with identical requirements should be compatible")) return false;
+	return true;
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -705,6 +717,7 @@ CONSOLE_APP_MAIN
 	ok &= TestReportCopyReset();
 	ok &= TestSessionLifecycle();
 	ok &= TestInstanceOptions();
+	ok &= TestInstanceCompatibility();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");

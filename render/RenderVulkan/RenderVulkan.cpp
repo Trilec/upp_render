@@ -308,6 +308,24 @@ struct VulkanInstanceOptions {
 	const char *application_name = nullptr;
 };
 
+struct VulkanInstanceCompatibility {
+	bool validation = false;
+	bool win32_surface = false;
+};
+
+static VulkanInstanceCompatibility GetVulkanInstanceCompatibility(const VulkanInstanceOptions& options)
+{
+	VulkanInstanceCompatibility key;
+	key.validation = options.validation;
+	key.win32_surface = options.win32_surface;
+	return key;
+}
+
+static bool IsVulkanInstanceCompatible(const VulkanInstanceCompatibility& a, const VulkanInstanceCompatibility& b)
+{
+	return a.validation == b.validation && a.win32_surface == b.win32_surface;
+}
+
 static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 	const Vector<VulkanExtensionInfo>& available_extensions,
 	const Vector<VulkanLayerInfo>& available_layers,
@@ -1664,6 +1682,17 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 	for(const String& s : enabled_extensions)
 		result.enabled_extensions.Add(s);
 	return result;
+}
+
+bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b)
+{
+	VulkanInstanceOptions opts_a;
+	opts_a.validation = validation_a;
+	opts_a.win32_surface = surface_a;
+	VulkanInstanceOptions opts_b;
+	opts_b.validation = validation_b;
+	opts_b.win32_surface = surface_b;
+	return IsVulkanInstanceCompatible(GetVulkanInstanceCompatibility(opts_a), GetVulkanInstanceCompatibility(opts_b));
 }
 
 } // namespace VulkanTestHooks

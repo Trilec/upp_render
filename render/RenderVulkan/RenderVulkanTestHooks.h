@@ -53,6 +53,7 @@ void ClearVulkanRuntimeDeviceDiagnostics();
 VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool win32_surface,
 	bool has_surface_extension = true, bool has_win32_surface_extension = true,
 	bool has_validation_layer = true, bool has_debug_utils_extension = true);
+bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b);
 
 }
 
