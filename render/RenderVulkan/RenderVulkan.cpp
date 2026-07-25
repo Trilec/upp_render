@@ -940,29 +940,14 @@ struct VulkanDeviceContext {
 
 struct VulkanSurfaceContext {
 	const VulkanDispatch *dispatch = nullptr;
-	VkInstance instance = VK_NULL_HANDLE;
-	PFN_vkDestroyInstance destroy_instance = nullptr;
-	PFN_vkGetDeviceProcAddr get_device_proc_addr = nullptr;
-	PFN_vkCreateDevice create_device = nullptr;
-	PFN_vkEnumeratePhysicalDevices enumerate_physical_devices = nullptr;
-	PFN_vkGetPhysicalDeviceProperties get_physical_device_properties = nullptr;
-	PFN_vkGetPhysicalDeviceQueueFamilyProperties get_physical_device_queue_family_properties = nullptr;
-	PFN_vkEnumerateDeviceExtensionProperties enumerate_device_extension_properties = nullptr;
-	PFN_vkGetPhysicalDeviceFeatures2 get_physical_device_features2 = nullptr;
-	PFN_vkCreateDebugUtilsMessengerEXT create_debug_utils_messenger = nullptr;
-	PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger = nullptr;
+	VulkanInstanceContext instance_context;
 	PFN_vkCreateWin32SurfaceKHR create_win32_surface = nullptr;
 	PFN_vkDestroySurfaceKHR destroy_surface = nullptr;
 	PFN_vkGetPhysicalDeviceSurfaceSupportKHR get_surface_support = nullptr;
 	PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR get_surface_capabilities = nullptr;
 	PFN_vkGetPhysicalDeviceSurfaceFormatsKHR get_surface_formats = nullptr;
 	PFN_vkGetPhysicalDeviceSurfacePresentModesKHR get_surface_present_modes = nullptr;
-	VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
-	VulkanValidationCapture capture;
-	bool validation_requested = false;
-	bool debug_utils_requested = false;
-	bool debug_utils_available = false;
 	bool surface_requested = false;
 	bool surface_available = false;
 	bool cleanup_ok = true;
@@ -972,60 +957,31 @@ struct VulkanSurfaceContext {
 
 	bool IsCleared() const
 	{
-		return dispatch == nullptr && instance == VK_NULL_HANDLE && destroy_instance == nullptr && get_device_proc_addr == nullptr && create_device == nullptr && enumerate_physical_devices == nullptr && get_physical_device_properties == nullptr && get_physical_device_queue_family_properties == nullptr && enumerate_device_extension_properties == nullptr && get_physical_device_features2 == nullptr && create_debug_utils_messenger == nullptr && destroy_debug_utils_messenger == nullptr && create_win32_surface == nullptr && destroy_surface == nullptr && get_surface_support == nullptr && get_surface_capabilities == nullptr && get_surface_formats == nullptr && get_surface_present_modes == nullptr && messenger == VK_NULL_HANDLE && surface == VK_NULL_HANDLE;
+		return dispatch == nullptr && instance_context.IsCleared() && create_win32_surface == nullptr && destroy_surface == nullptr && get_surface_support == nullptr && get_surface_capabilities == nullptr && get_surface_formats == nullptr && get_surface_present_modes == nullptr && surface == VK_NULL_HANDLE;
 	}
 
 	bool Close()
 	{
 		bool ok = true;
 		if(surface && destroy_surface) {
-			destroy_surface(instance, surface, nullptr);
+			destroy_surface(instance_context.instance, surface, nullptr);
 			surface = VK_NULL_HANDLE;
 		}
 		else if(surface) {
 			ok = false;
 			surface = VK_NULL_HANDLE;
 		}
-		if(messenger && destroy_debug_utils_messenger) {
-			destroy_debug_utils_messenger(instance, messenger, nullptr);
-			messenger = VK_NULL_HANDLE;
-			g_runtime_device_stats.debug_messenger_live_count.fetch_sub(1, std::memory_order_relaxed);
-		}
-		else if(messenger) {
-			ok = false;
-			messenger = VK_NULL_HANDLE;
-		}
-		if(instance && destroy_instance)
-			destroy_instance(instance, nullptr);
-		else if(instance)
-			ok = false;
-		if(instance)
-			g_runtime_device_stats.instance_live_count.fetch_sub(1, std::memory_order_relaxed);
-		instance = VK_NULL_HANDLE;
-		destroy_instance = nullptr;
-		get_device_proc_addr = nullptr;
-		create_device = nullptr;
-		enumerate_physical_devices = nullptr;
-		get_physical_device_properties = nullptr;
-		get_physical_device_queue_family_properties = nullptr;
-		enumerate_device_extension_properties = nullptr;
-		get_physical_device_features2 = nullptr;
-		create_debug_utils_messenger = nullptr;
-		destroy_debug_utils_messenger = nullptr;
 		create_win32_surface = nullptr;
 		destroy_surface = nullptr;
 		get_surface_support = nullptr;
 		get_surface_capabilities = nullptr;
 		get_surface_formats = nullptr;
 		get_surface_present_modes = nullptr;
-		capture = VulkanValidationCapture();
 		dispatch = nullptr;
-		validation_requested = false;
-		debug_utils_requested = false;
-		debug_utils_available = false;
 		surface_requested = false;
 		surface_available = false;
-		cleanup_ok = cleanup_ok && ok && IsCleared();
+		bool instance_ok = instance_context.Close();
+		cleanup_ok = cleanup_ok && ok && instance_ok && IsCleared();
 		if(diagnostic_id) {
 			g_runtime_device_stats.surface_live_count.fetch_sub(1, std::memory_order_relaxed);
 			diagnostic_id = 0;
@@ -1042,7 +998,6 @@ struct VulkanSurfaceContext {
 		g_runtime_device_stats.surface_live_count.fetch_add(1, std::memory_order_relaxed);
 		g_runtime_device_stats.surface_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		dispatch = &d;
-		validation_requested = request_validation;
 		surface_requested = true;
 		auto fail = [&](const String& message) {
 			error = message;
@@ -1050,128 +1005,33 @@ struct VulkanSurfaceContext {
 			return false;
 		};
 
-		Vector<VkExtensionProperties> instance_exts;
-		if(!EnumerateResult(instance_exts, [&](uint32_t *count, VkExtensionProperties *data) { return d.enumerate_instance_extension_properties(nullptr, count, data); }, error, "instance extension"))
-			return fail(error);
-		for(const auto& ext : instance_exts) {
-			VulkanExtensionInfo info;
-			info.name = ExtensionName(ext);
-			info.spec_version = ExtensionVersionToUInt(ext);
-			report.preflight.instance_extensions.Add() = pick(info);
-		}
-		report.preflight.debug_utils_available = HasExtension(report.preflight.instance_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-		surface_available = HasExtension(report.preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME) && HasExtension(report.preflight.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-		report.debug_utils_available = report.preflight.debug_utils_available;
-
-		Vector<VkLayerProperties> layers;
-		if(!EnumerateResult(layers, [&](uint32_t *count, VkLayerProperties *data) { return d.enumerate_instance_layer_properties(count, data); }, error, "instance layer"))
-			return fail(error);
-		for(const auto& layer : layers) {
-			VulkanLayerInfo info;
-			info.name = LayerName(layer);
-			info.description = layer.description;
-			info.spec_version = LayerVersionToUInt(layer);
-			report.preflight.instance_layers.Add() = pick(info);
-		}
-		report.preflight.validation_available = false;
-		for(const auto& layer : report.preflight.instance_layers)
-			if(layer.name == "VK_LAYER_KHRONOS_validation")
-				report.preflight.validation_available = true;
-		report.validation_available = report.preflight.validation_available;
-
-		if(request_validation && !report.preflight.validation_available) {
-			error = "VK_LAYER_KHRONOS_validation not present";
-			return false;
-		}
-		if(request_validation && !report.preflight.debug_utils_available) {
-			error = "VK_EXT_debug_utils not present";
-			return fail(error);
-		}
 		if(native_window.kind != GpuNativeWindowKind::Win32) {
 			error = "surface requires Win32 native window";
-			return false;
+			return fail(error);
 		}
 		if(native_window.handle == 0) {
 			error = "invalid native handle";
-			return false;
-		}
-		if(!HasExtension(report.preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME)) {
-			error = "VK_KHR_surface not present";
-			return false;
-		}
-		if(!HasExtension(report.preflight.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
-			error = "VK_KHR_win32_surface not present";
-			return false;
-		}
-
-		VkApplicationInfo app_info{};
-		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		app_info.pApplicationName = "VulkanSurfaceProbe";
-		app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-		app_info.pEngineName = "upp_render";
-		app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-		app_info.apiVersion = VK_API_VERSION_1_3;
-
-		Vector<const char*> enabled_layers;
-		Vector<const char*> enabled_exts;
-		if(request_validation) {
-			enabled_layers.Add("VK_LAYER_KHRONOS_validation");
-			enabled_exts.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-		}
-		enabled_exts.Add(VK_KHR_SURFACE_EXTENSION_NAME);
-		enabled_exts.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-
-		VkInstanceCreateInfo create_info{};
-		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		create_info.pApplicationInfo = &app_info;
-		create_info.enabledLayerCount = enabled_layers.GetCount();
-		create_info.ppEnabledLayerNames = enabled_layers.IsEmpty() ? nullptr : enabled_layers.Begin();
-		create_info.enabledExtensionCount = enabled_exts.GetCount();
-		create_info.ppEnabledExtensionNames = enabled_exts.IsEmpty() ? nullptr : enabled_exts.Begin();
-
-		VkResult vr = d.create_instance(&create_info, nullptr, &instance);
-		if(vr != VK_SUCCESS) {
-			error = String("vkCreateInstance failed: ") + AsString((int)vr);
 			return fail(error);
 		}
-		g_runtime_device_stats.instance_create_count.fetch_add(1, std::memory_order_relaxed);
-		g_runtime_device_stats.instance_live_count.fetch_add(1, std::memory_order_relaxed);
-		report.preflight.instance_created = true;
 
-		if(!ResolveInstanceProc(destroy_instance, d.proc_filter, d.get_instance_proc_addr, instance, "vkDestroyInstance", error)) return fail(error);
-		if(!ResolveInstanceProc(get_device_proc_addr, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetDeviceProcAddr", error)) return fail(error);
-		if(!ResolveInstanceProc(create_device, d.proc_filter, d.get_instance_proc_addr, instance, "vkCreateDevice", error)) return fail(error);
-		if(!ResolveInstanceProc(enumerate_physical_devices, d.proc_filter, d.get_instance_proc_addr, instance, "vkEnumeratePhysicalDevices", error)) return fail(error);
-		if(!ResolveInstanceProc(get_physical_device_properties, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceProperties", error)) return fail(error);
-		if(!ResolveInstanceProc(get_physical_device_queue_family_properties, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceQueueFamilyProperties", error)) return fail(error);
-		if(!ResolveInstanceProc(enumerate_device_extension_properties, d.proc_filter, d.get_instance_proc_addr, instance, "vkEnumerateDeviceExtensionProperties", error)) return fail(error);
-		if(!ResolveInstanceProc(get_physical_device_features2, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceFeatures2", error)) return fail(error);
-		if(!ResolveInstanceProc(create_win32_surface, d.proc_filter, d.get_instance_proc_addr, instance, "vkCreateWin32SurfaceKHR", error)) return fail(error);
-		if(!ResolveInstanceProc(destroy_surface, d.proc_filter, d.get_instance_proc_addr, instance, "vkDestroySurfaceKHR", error)) return fail(error);
-		if(!ResolveInstanceProc(get_surface_support, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceSurfaceSupportKHR", error)) return fail(error);
-		if(!ResolveInstanceProc(get_surface_capabilities, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", error)) return fail(error);
-		if(!ResolveInstanceProc(get_surface_formats, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceSurfaceFormatsKHR", error)) return fail(error);
-		if(!ResolveInstanceProc(get_surface_present_modes, d.proc_filter, d.get_instance_proc_addr, instance, "vkGetPhysicalDeviceSurfacePresentModesKHR", error)) return fail(error);
+		VulkanInstanceOptions instance_options;
+		instance_options.validation = request_validation;
+		instance_options.win32_surface = true;
+		instance_options.application_name = "VulkanSurfaceProbe";
+		bool debug_messenger_created = false;
+		if(!instance_context.Open(d, instance_options, report.preflight, debug_messenger_created, error))
+			return fail(error);
 
-		if(request_validation) {
-			if(!ResolveInstanceProc(create_debug_utils_messenger, d.proc_filter, d.get_instance_proc_addr, instance, "vkCreateDebugUtilsMessengerEXT", error)) return fail(error);
-			if(!ResolveInstanceProc(destroy_debug_utils_messenger, d.proc_filter, d.get_instance_proc_addr, instance, "vkDestroyDebugUtilsMessengerEXT", error)) return fail(error);
-			VkDebugUtilsMessengerCreateInfoEXT messenger_info{};
-			messenger_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-			messenger_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-			messenger_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-			messenger_info.pfnUserCallback = VulkanDebugCallback;
-			messenger_info.pUserData = &capture;
-			vr = create_debug_utils_messenger(instance, &messenger_info, nullptr, &messenger);
-			if(vr != VK_SUCCESS) {
-				error = String("vkCreateDebugUtilsMessengerEXT failed: ") + AsString((int)vr);
-				return fail(error);
-			}
-			g_runtime_device_stats.debug_messenger_create_count.fetch_add(1, std::memory_order_relaxed);
-			g_runtime_device_stats.debug_messenger_live_count.fetch_add(1, std::memory_order_relaxed);
-			debug_utils_requested = true;
-			debug_utils_available = true;
-		}
+		report.validation_available = report.preflight.validation_available;
+		report.debug_utils_available = report.preflight.debug_utils_available;
+		surface_available = HasExtension(report.preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME) && HasExtension(report.preflight.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+
+		if(!ResolveInstanceProc(create_win32_surface, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkCreateWin32SurfaceKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(destroy_surface, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkDestroySurfaceKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(get_surface_support, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkGetPhysicalDeviceSurfaceSupportKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(get_surface_capabilities, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(get_surface_formats, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkGetPhysicalDeviceSurfaceFormatsKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(get_surface_present_modes, d.proc_filter, d.get_instance_proc_addr, instance_context.instance, "vkGetPhysicalDeviceSurfacePresentModesKHR", error)) return fail(error);
 
 		VkWin32SurfaceCreateInfoKHR surface_info{};
 		surface_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -1185,7 +1045,7 @@ struct VulkanSurfaceContext {
 			error = "invalid native handle";
 			return fail(error);
 		}
-		vr = create_win32_surface(instance, &surface_info, nullptr, &surface);
+		VkResult vr = create_win32_surface(instance_context.instance, &surface_info, nullptr, &surface);
 		if(vr != VK_SUCCESS) {
 			error = String("vkCreateWin32SurfaceKHR failed: ") + AsString((int)vr);
 			return fail(error);
@@ -1248,7 +1108,7 @@ struct VulkanSurfaceContext {
 	bool EnumeratePhysicalDevices(Vector<VulkanDiscoveredDevice>& out, VulkanSurfaceReport& report, String& error) const
 	{
 		Vector<VkPhysicalDevice> handles;
-		if(!EnumerateResult(handles, [&](uint32_t *count, VkPhysicalDevice *data) { return enumerate_physical_devices(instance, count, data); }, error, "physical device"))
+		if(!EnumerateResult(handles, [&](uint32_t *count, VkPhysicalDevice *data) { return instance_context.enumerate_physical_devices(instance_context.instance, count, data); }, error, "physical device"))
 			return false;
 		if(handles.IsEmpty())
 			return true;
@@ -1258,7 +1118,7 @@ struct VulkanSurfaceContext {
 			device.handle = handle;
 			VulkanDeviceInfo& info = device.info;
 			VkPhysicalDeviceProperties props{};
-			get_physical_device_properties(handle, &props);
+			instance_context.get_physical_device_properties(handle, &props);
 			info.name = props.deviceName;
 			info.type = DeviceTypeText(props.deviceType);
 			info.vendor_id = props.vendorID;
@@ -1267,7 +1127,7 @@ struct VulkanSurfaceContext {
 			info.api_version = props.apiVersion;
 
 			Vector<VkQueueFamilyProperties> qprops;
-			if(!EnumerateQueueFamilies(qprops, [&](uint32_t *count, VkQueueFamilyProperties *data) { get_physical_device_queue_family_properties(handle, count, data); }, error, "queue family"))
+			if(!EnumerateQueueFamilies(qprops, [&](uint32_t *count, VkQueueFamilyProperties *data) { instance_context.get_physical_device_queue_family_properties(handle, count, data); }, error, "queue family"))
 				return false;
 			for(int i = 0; i < qprops.GetCount(); ++i) {
 				const VkQueueFamilyProperties& q = qprops[i];
@@ -1292,7 +1152,7 @@ struct VulkanSurfaceContext {
 			}
 
 			Vector<VkExtensionProperties> dev_exts;
-			if(!EnumerateResult(dev_exts, [&](uint32_t *count, VkExtensionProperties *data) { return enumerate_device_extension_properties(handle, nullptr, count, data); }, error, "device extension"))
+			if(!EnumerateResult(dev_exts, [&](uint32_t *count, VkExtensionProperties *data) { return instance_context.enumerate_device_extension_properties(handle, nullptr, count, data); }, error, "device extension"))
 				return false;
 			for(const auto& ext : dev_exts) {
 				VulkanExtensionInfo einfo;
@@ -1307,7 +1167,7 @@ struct VulkanSurfaceContext {
 				VkPhysicalDeviceFeatures2 f2{};
 				f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 				f2.pNext = &f13;
-				get_physical_device_features2(handle, &f2);
+				instance_context.get_physical_device_features2(handle, &f2);
 				info.dynamic_rendering = f13.dynamicRendering == VK_TRUE;
 				info.synchronization2 = f13.synchronization2 == VK_TRUE;
 			}
@@ -2452,7 +2312,7 @@ const String& VulkanSurfaceSession::GetError() const
 
 static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanup_ok)
 {
-	impl.report.instance_cleanup_ok = impl.ctx.instance == VK_NULL_HANDLE;
+	impl.report.instance_cleanup_ok = impl.ctx.instance_context.instance == VK_NULL_HANDLE;
 	impl.report.surface_cleanup_ok = impl.ctx.surface == VK_NULL_HANDLE;
 	impl.report.device_cleanup_ok = impl.device.device == VK_NULL_HANDLE;
 	impl.report.dispatch_cleanup_ok = impl.dispatch.IsCleared();
@@ -2586,7 +2446,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		CopySurfaceValidationCapture(impl->report, impl->ctx.instance_context.capture);
 		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
 		return false;
 	}
@@ -2625,7 +2485,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	dci.ppEnabledExtensionNames = enabled_exts.Begin();
 
 	PFN_vkCreateDevice create_device = nullptr;
-	if(!ResolveInstanceProc(create_device, impl->dispatch.proc_filter, impl->dispatch.get_instance_proc_addr, impl->ctx.instance, "vkCreateDevice", impl->error))
+	if(!ResolveInstanceProc(create_device, impl->dispatch.proc_filter, impl->dispatch.get_instance_proc_addr, impl->ctx.instance_context.instance, "vkCreateDevice", impl->error))
 		return fail(impl->error);
 	VkResult vr = create_device(choice.device->handle, &dci, nullptr, &impl->device.device);
 	if(vr != VK_SUCCESS) {
@@ -2635,22 +2495,22 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		CopySurfaceValidationCapture(impl->report, impl->ctx.instance_context.capture);
 		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
 		return false;
 	}
 	g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
 	g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
 
-	if(!ResolveDeviceProc(impl->device.destroy_device, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail(impl->error);
-	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail(impl->error);
-	if(!ResolveDeviceProc(impl->device.device_wait_idle, impl->dispatch.proc_filter, impl->ctx.get_device_proc_addr, impl->device.device, "vkDeviceWaitIdle", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.destroy_device, impl->dispatch.proc_filter, impl->ctx.instance_context.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->dispatch.proc_filter, impl->ctx.instance_context.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.device_wait_idle, impl->dispatch.proc_filter, impl->ctx.instance_context.get_device_proc_addr, impl->device.device, "vkDeviceWaitIdle", impl->error)) return fail(impl->error);
 	impl->device.get_device_queue(impl->device.device, (uint32_t)choice.graphics_family, 0, &impl->device.graphics_queue);
 	if(impl->device.graphics_queue == VK_NULL_HANDLE) {
 		impl->error = "vkGetDeviceQueue returned VK_NULL_HANDLE";
 		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
 		impl->report.device_error = impl->error;
-		CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+		CopySurfaceValidationCapture(impl->report, impl->ctx.instance_context.capture);
 		FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
 		return false;
 	}
@@ -2662,7 +2522,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 			impl->error = "vkGetDeviceQueue returned VK_NULL_HANDLE";
 			impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
 			impl->report.device_error = impl->error;
-			CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
+			CopySurfaceValidationCapture(impl->report, impl->ctx.instance_context.capture);
 			FinalizeSurfaceSession(*impl, impl->dispatch.Close() && impl->ctx.Close() && impl->device.Close());
 			return false;
 		}
@@ -2681,13 +2541,13 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	impl->report.selected_device.selected_queue_transfer = impl->report.selected_device.queue_families[choice.graphics_family].transfer;
 	impl->report.status = VulkanProbeStatus::Ok;
 	if(request_validation)
-		InjectValidationIfRequested(impl->ctx.capture, VulkanValidationTestPoint::AfterDeviceCreation);
+		InjectValidationIfRequested(impl->ctx.instance_context.capture, VulkanValidationTestPoint::AfterDeviceCreation);
 	if(request_validation)
-		InjectValidationIfRequested(impl->ctx.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
+		InjectValidationIfRequested(impl->ctx.instance_context.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
 
-	CopySurfaceValidationCapture(impl->report, impl->ctx.capture);
-	impl->report.preflight.debug_utils_available = impl->ctx.debug_utils_available;
-	impl->report.debug_utils_available = impl->ctx.debug_utils_available;
+	CopySurfaceValidationCapture(impl->report, impl->ctx.instance_context.capture);
+	impl->report.preflight.debug_utils_available = impl->ctx.instance_context.debug_utils_available;
+	impl->report.debug_utils_available = impl->ctx.instance_context.debug_utils_available;
 	if(impl->report.status == VulkanProbeStatus::Ok && impl->report.validation_error_count > 0) {
 		impl->report.status = VulkanProbeStatus::ValidationErrorsReported;
 		impl->report.validation_error = "validation errors reported";
@@ -2715,7 +2575,7 @@ void VulkanSurfaceSession::Close()
 	FinalizeSurfaceSession(*impl, cleanup_ok);
 	impl->report.clean_shutdown = cleanup_ok && impl->report.cleanup_state_cleared;
 	impl->report.cleanup_state_cleared = impl->dispatch.IsCleared() && impl->ctx.IsCleared() && impl->device.IsCleared();
-	impl->report.instance_cleanup_ok = impl->ctx.instance == VK_NULL_HANDLE;
+	impl->report.instance_cleanup_ok = impl->ctx.instance_context.instance == VK_NULL_HANDLE;
 	impl->report.surface_cleanup_ok = impl->ctx.surface == VK_NULL_HANDLE;
 	impl->report.dispatch_cleanup_ok = impl->dispatch.IsCleared();
 	impl->report.native_window = GpuNativeWindowDesc();
