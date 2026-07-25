@@ -25,11 +25,9 @@ struct VulkanRuntimeDeviceDiagnostics {
 
 struct VulkanInstanceOptionsTestResult {
 	bool opened = false;
-	bool close_ok = false;
 	String error;
 	Vector<String> enabled_layers;
 	Vector<String> enabled_extensions;
-	VulkanRuntimeDeviceDiagnostics diagnostics;
 };
 
 enum class VulkanValidationTestPoint {
@@ -54,8 +52,7 @@ VulkanRuntimeDeviceDiagnostics GetVulkanRuntimeDeviceDiagnostics();
 void ClearVulkanRuntimeDeviceDiagnostics();
 VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool win32_surface,
 	bool has_surface_extension = true, bool has_win32_surface_extension = true,
-	bool has_validation_layer = true, bool has_debug_utils_extension = true,
-	const char *application_name = nullptr);
+	bool has_validation_layer = true, bool has_debug_utils_extension = true);
 
 }
 

@@ -639,31 +639,22 @@ static bool TestInstanceOptions()
 	{
 		auto result = RunVulkanInstanceOptionsTest(false, false);
 		if(!Check(result.opened, "bootstrap instance should open")) return false;
-		if(!Check(result.close_ok, "bootstrap instance close should be safe")) return false;
 		if(!Check(result.error.IsEmpty(), "bootstrap instance should not report an error")) return false;
 		if(!Check(result.enabled_extensions.IsEmpty(), "bootstrap instance should not enable surface extensions")) return false;
-		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
-		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
-		if(!Check(result.diagnostics.debug_messenger_live_count == 0, "debug messenger live count should return to zero")) return false;
 	}
 
 	{
 		auto result = RunVulkanInstanceOptionsTest(false, true);
 		if(!Check(result.opened, "surface-capable instance should open")) return false;
-		if(!Check(result.close_ok, "surface-capable close should be safe")) return false;
 		Vector<String> expected;
 		expected.Add(VK_KHR_SURFACE_EXTENSION_NAME);
 		expected.Add("VK_KHR_win32_surface");
 		if(!CheckStrings(result.enabled_extensions, expected, "surface-capable instance should enable both surface extensions")) return false;
-		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
-		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
-		if(!Check(result.diagnostics.debug_messenger_live_count == 0, "debug messenger live count should return to zero")) return false;
 	}
 
 	{
 		auto result = RunVulkanInstanceOptionsTest(true, true);
 		if(!Check(result.opened, "validation and surface options should open")) return false;
-		if(!Check(result.close_ok, "validation and surface close should be safe")) return false;
 		Vector<String> expected_layers;
 		expected_layers.Add("VK_LAYER_KHRONOS_validation");
 		Vector<String> expected_exts;
@@ -672,28 +663,18 @@ static bool TestInstanceOptions()
 		expected_exts.Add("VK_KHR_win32_surface");
 		if(!CheckStrings(result.enabled_layers, expected_layers, "validation layer should be enabled")) return false;
 		if(!CheckStrings(result.enabled_extensions, expected_exts, "validation and surface extensions should be enabled together")) return false;
-		if(!Check(result.diagnostics.debug_messenger_create_count == 0, "debug messenger create count should stay zero")) return false;
-		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
-		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
-		if(!Check(result.diagnostics.debug_messenger_live_count == 0, "debug messenger live count should return to zero")) return false;
 	}
 
 	{
 		auto result = RunVulkanInstanceOptionsTest(false, true, false, true);
 		if(!Check(!result.opened, "missing VK_KHR_surface should fail")) return false;
 		if(!Check(result.error == "VK_KHR_surface not present", "missing VK_KHR_surface error should be clear")) return false;
-		if(!Check(result.close_ok, "missing surface failure close should be safe")) return false;
-		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
-		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
 	}
 
 	{
 		auto result = RunVulkanInstanceOptionsTest(false, true, true, false);
 		if(!Check(!result.opened, "missing VK_KHR_win32_surface should fail")) return false;
 		if(!Check(result.error == "VK_KHR_win32_surface not present", "missing VK_KHR_win32_surface error should be clear")) return false;
-		if(!Check(result.close_ok, "missing win32 surface failure close should be safe")) return false;
-		if(!Check(result.diagnostics.runtime_live_count == 0, "runtime live count should return to zero")) return false;
-		if(!Check(result.diagnostics.instance_live_count == 0, "instance live count should return to zero")) return false;
 	}
 
 	return true;

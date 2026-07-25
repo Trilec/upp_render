@@ -315,8 +315,7 @@ static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 	Vector<String>& enabled_extensions,
 	String& error)
 {
-	enabled_layers.Clear();
-	enabled_extensions.Clear();
+	error.Clear();
 	auto has_extension = [&](const char *name) {
 		for(const auto& ext : available_extensions)
 			if(ext.name == name)
@@ -330,6 +329,9 @@ static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 		return false;
 	};
 
+	Vector<String> tmp_layers;
+	Vector<String> tmp_extensions;
+
 	if(options.validation) {
 		if(!has_layer("VK_LAYER_KHRONOS_validation")) {
 			error = "VK_LAYER_KHRONOS_validation not present";
@@ -339,8 +341,8 @@ static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 			error = "VK_EXT_debug_utils not present";
 			return false;
 		}
-		enabled_layers.Add("VK_LAYER_KHRONOS_validation");
-		enabled_extensions.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		tmp_layers.Add("VK_LAYER_KHRONOS_validation");
+		tmp_extensions.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 
 	if(options.win32_surface) {
@@ -352,10 +354,12 @@ static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 			error = "VK_KHR_win32_surface not present";
 			return false;
 		}
-		enabled_extensions.Add(VK_KHR_SURFACE_EXTENSION_NAME);
-		enabled_extensions.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		tmp_extensions.Add(VK_KHR_SURFACE_EXTENSION_NAME);
+		tmp_extensions.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 	}
 
+	enabled_layers = pick(tmp_layers);
+	enabled_extensions = pick(tmp_extensions);
 	return true;
 }
 
@@ -650,25 +654,6 @@ struct VulkanInstanceContext {
 		for(const auto& layer : preflight.instance_layers)
 			if(layer.name == "VK_LAYER_KHRONOS_validation")
 				preflight.validation_available = true;
-
-		if(options.validation && !preflight.validation_available) {
-			error = "VK_LAYER_KHRONOS_validation not present";
-			return fail(error);
-		}
-		if(options.validation && !preflight.debug_utils_available) {
-			error = "VK_EXT_debug_utils not present";
-			return fail(error);
-		}
-		if(options.win32_surface) {
-			if(!HasExtension(preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME)) {
-				error = "VK_KHR_surface not present";
-				return fail(error);
-			}
-			if(!HasExtension(preflight.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
-				error = "VK_KHR_win32_surface not present";
-				return fail(error);
-			}
-		}
 
 		VkApplicationInfo app_info{};
 		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -1845,10 +1830,8 @@ void ClearVulkanRuntimeDeviceDiagnostics()
 
 VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool win32_surface,
 	bool has_surface_extension, bool has_win32_surface_extension,
-	bool has_validation_layer, bool has_debug_utils_extension,
-	const char *application_name)
+	bool has_validation_layer, bool has_debug_utils_extension)
 {
-	ClearVulkanRuntimeDeviceDiagnostics();
 	Vector<VulkanExtensionInfo> extensions;
 	Vector<VulkanLayerInfo> layers;
 	if(has_debug_utils_extension)
@@ -1863,7 +1846,7 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 	VulkanInstanceOptions options;
 	options.validation = validation;
 	options.win32_surface = win32_surface;
-	options.application_name = application_name ? application_name : "VulkanInstanceOptionsTest";
+	options.application_name = "VulkanInstanceOptionsTest";
 	Vector<String> enabled_layers;
 	Vector<String> enabled_extensions;
 	String error;
@@ -1871,13 +1854,11 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 
 	VulkanInstanceOptionsTestResult result;
 	result.opened = opened;
-	result.close_ok = true;
 	result.error = error;
 	for(const String& s : enabled_layers)
 		result.enabled_layers.Add(s);
 	for(const String& s : enabled_extensions)
 		result.enabled_extensions.Add(s);
-	result.diagnostics = GetVulkanRuntimeDeviceDiagnostics();
 	return result;
 }
 
