@@ -612,8 +612,9 @@ struct VulkanInstanceContext {
 		return cleanup_ok;
 	}
 
-	bool Open(const VulkanDispatch& d, const VulkanInstanceOptions& options, VulkanPreflightReport& preflight, VulkanBootstrapReport& bootstrap, String& error)
+	bool Open(const VulkanDispatch& d, const VulkanInstanceOptions& options, VulkanPreflightReport& preflight, bool& debug_messenger_created, String& error)
 	{
+		debug_messenger_created = false;
 		Close();
 		cleanup_ok = true;
 		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.instance_next_id);
@@ -718,7 +719,7 @@ struct VulkanInstanceContext {
 			g_runtime_device_stats.debug_messenger_live_count.fetch_add(1, std::memory_order_relaxed);
 			debug_utils_requested = true;
 			debug_utils_available = true;
-			bootstrap.debug_messenger_created = true;
+			debug_messenger_created = true;
 		}
 
 		return true;
@@ -1990,7 +1991,7 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	VulkanInstanceOptions instance_options;
 	instance_options.validation = request_validation;
 	instance_options.application_name = "VulkanBootstrap";
-	if(!instance.Open(dispatch, instance_options, report.preflight, report, error)) {
+	if(!instance.Open(dispatch, instance_options, report.preflight, report.debug_messenger_created, error)) {
 		report.status = MapInstanceError(error);
 		report.instance_error = error;
 		report.status_text = StatusText(report.status);
