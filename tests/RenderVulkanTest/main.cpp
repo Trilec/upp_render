@@ -7,6 +7,10 @@ using Upp::VulkanTestHooks::ClearVulkanValidationTestInjection;
 using Upp::VulkanTestHooks::SetVulkanValidationTestInjection;
 using Upp::VulkanTestHooks::RunVulkanInstanceOptionsTest;
 using Upp::VulkanTestHooks::TestVulkanInstanceCompatibility;
+using Upp::VulkanTestHooks::TestVulkanInstanceOwner;
+using Upp::VulkanTestHooks::TestVulkanInstanceOwnerCompatibility;
+using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
+using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
 using Upp::VulkanTestHooks::VulkanValidationTestPoint;
 
@@ -692,6 +696,40 @@ static bool TestInstanceCompatibility()
 	return true;
 }
 
+static bool TestInstanceOwner()
+{
+	VulkanRuntimeDeviceDiagnostics diag;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanInstanceOwner(false, &TestResolver, diag), "owner should open and close without validation")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after owner close")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after owner close")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after owner close")) return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanInstanceOwner(true, &TestResolver, diag), "owner should open and close with validation")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after validation owner close")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after validation owner close")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after validation owner close")) return false;
+	if(!Check(diag.debug_messenger_create_count == 1, "debug messenger should be created once with validation")) return false;
+
+	if(!Check(TestVulkanInstanceOwnerCompatibility(false, false), "owner compatibility should match validation=false surface=false")) return false;
+	if(!Check(TestVulkanInstanceOwnerCompatibility(false, true), "owner compatibility should match validation=false surface=true")) return false;
+	if(!Check(TestVulkanInstanceOwnerCompatibility(true, false), "owner compatibility should match validation=true surface=false")) return false;
+	if(!Check(TestVulkanInstanceOwnerCompatibility(true, true), "owner compatibility should match validation=true surface=true")) return false;
+
+	g_missing_proc = "vkDestroyInstance";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	bool ok = TestVulkanInstanceOwner(false, &TestResolver, diag);
+	g_missing_proc = nullptr;
+	if(!Check(!ok, "owner should fail when an instance proc is missing")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after failed owner open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after failed owner open")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after failed owner open")) return false;
+
+	return true;
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -718,6 +756,7 @@ CONSOLE_APP_MAIN
 	ok &= TestSessionLifecycle();
 	ok &= TestInstanceOptions();
 	ok &= TestInstanceCompatibility();
+	ok &= TestInstanceOwner();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");

@@ -819,6 +819,51 @@ struct VulkanInstanceContext {
 	}
 };
 
+struct VulkanInstanceOwner {
+	VulkanDispatch dispatch;
+	VulkanInstanceContext instance;
+	VulkanInstanceCompatibility compatibility;
+	bool has_compatibility = false;
+	bool cleanup_ok = true;
+
+	~VulkanInstanceOwner() { Close(); }
+
+	bool IsCleared() const
+	{
+		return dispatch.IsCleared() && instance.IsCleared() && !has_compatibility;
+	}
+
+	bool Open(const VulkanInstanceOptions& options, VulkanPreflightReport& preflight,
+		bool& debug_messenger_created, String& error, VulkanProcResolver resolver = nullptr)
+	{
+		Close();
+		cleanup_ok = true;
+		if(!dispatch.Open(error, resolver)) {
+			Close();
+			return false;
+		}
+		compatibility = GetVulkanInstanceCompatibility(options);
+		has_compatibility = true;
+		if(!instance.Open(dispatch, options, preflight, debug_messenger_created, error)) {
+			Close();
+			return false;
+		}
+		return true;
+	}
+
+	bool Close()
+	{
+		bool ok = true;
+		ok = instance.Close() && ok;
+		ok = dispatch.Close() && ok;
+		cleanup_ok = cleanup_ok && ok;
+		has_compatibility = false;
+		return cleanup_ok;
+	}
+
+	const VulkanInstanceCompatibility& GetCompatibility() const { return compatibility; }
+};
+
 struct VulkanDeviceContext {
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
@@ -1521,17 +1566,16 @@ static void FinalizePreflightCleanup(VulkanPreflightReport& report, const Vulkan
 	report.clean_shutdown = cleanup_ok && report.cleanup_state_cleared;
 }
 
-static void FinalizeBootstrapCleanup(VulkanBootstrapReport& report, const VulkanDispatch& dispatch, const VulkanInstanceContext& instance, const VulkanDeviceContext& device, bool cleanup_ok)
+static void FinalizeBootstrapCleanup(VulkanBootstrapReport& report, const VulkanInstanceOwner& owner, const VulkanDeviceContext& device, bool cleanup_ok)
 {
-	report.cleanup_state_cleared = dispatch.IsCleared() && instance.IsCleared() && device.IsCleared();
+	report.cleanup_state_cleared = owner.IsCleared() && device.IsCleared();
 	report.clean_shutdown = cleanup_ok && report.cleanup_state_cleared;
 }
 
-static bool CloseBootstrapContexts(VulkanDispatch& dispatch, VulkanInstanceContext& instance, VulkanDeviceContext& device)
+static bool CloseBootstrapContexts(VulkanInstanceOwner& owner, VulkanDeviceContext& device)
 {
 	bool ok = device.Close();
-	ok = instance.Close() && ok;
-	ok = dispatch.Close() && ok;
+	ok = owner.Close() && ok;
 	return ok;
 }
 
@@ -1572,6 +1616,15 @@ static VulkanProbeStatus MapDispatchError(const String& error)
 	if(error == "LoadLibraryW(vulkan-1.dll) failed")
 		return VulkanProbeStatus::RuntimeUnavailable;
 	return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
+}
+
+static bool IsDispatchOpenError(const String& error)
+{
+	return error == "LoadLibraryW(vulkan-1.dll) failed"
+		|| error == "vkGetInstanceProcAddr"
+		|| error == "vkEnumerateInstanceLayerProperties"
+		|| error == "vkEnumerateInstanceExtensionProperties"
+		|| error == "vkCreateInstance";
 }
 
 static bool CleanupFailed(const VulkanBootstrapReport& report, bool create_device)
@@ -1698,6 +1751,42 @@ bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool val
 	return IsVulkanInstanceCompatible(GetVulkanInstanceCompatibility(opts_a), GetVulkanInstanceCompatibility(opts_b));
 }
 
+bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
+{
+	ClearVulkanRuntimeDeviceDiagnostics();
+	VulkanInstanceOwner owner;
+	VulkanInstanceOptions options;
+	options.validation = validation;
+	options.application_name = "RenderVulkanTest";
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	String error;
+	bool ok = owner.Open(options, preflight, debug_messenger_created, error, resolver);
+	if(!ok)
+		return false;
+	ok = owner.Close() && ok;
+	ok = owner.Close() && ok;
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	return ok;
+}
+
+bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface)
+{
+	VulkanInstanceOwner owner;
+	VulkanInstanceOptions options;
+	options.validation = validation;
+	options.win32_surface = win32_surface;
+	options.application_name = "RenderVulkanTest";
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	String error;
+	if(!owner.Open(options, preflight, debug_messenger_created, error))
+		return false;
+	bool match = owner.GetCompatibility().validation == validation && owner.GetCompatibility().win32_surface == win32_surface;
+	owner.Close();
+	return match;
+}
+
 } // namespace VulkanTestHooks
 
 VulkanPreflight::VulkanPreflight()
@@ -1778,33 +1867,48 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	report.create_device_requested = create_device;
 	report.preflight.validation_requested = request_validation;
 
-	VulkanDispatch dispatch;
-	VulkanInstanceContext instance;
+	VulkanInstanceOwner owner;
 	VulkanDeviceContext device;
 	String error;
-	if(!dispatch.Open(error, resolver)) {
-		report.status = MapDispatchError(error);
-		if(report.status == VulkanProbeStatus::RuntimeUnavailable)
-			report.runtime_error = error;
-		else
-			report.loader_error = error;
+
+	VulkanInstanceOptions instance_options;
+	instance_options.validation = request_validation;
+	instance_options.application_name = "VulkanBootstrap";
+	if(!owner.Open(instance_options, report.preflight, report.debug_messenger_created, error, resolver)) {
+		if(IsDispatchOpenError(error)) {
+			report.status = MapDispatchError(error);
+			if(report.status == VulkanProbeStatus::RuntimeUnavailable)
+				report.runtime_error = error;
+			else
+				report.loader_error = error;
+		}
+		else {
+			report.status = MapInstanceError(error);
+			report.instance_error = error;
+			report.validation_available = report.preflight.validation_available;
+			report.debug_utils_available = report.preflight.debug_utils_available;
+		}
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		CopyValidationCapture(report, owner.instance.capture);
+		report.preflight.validation_warning_count = report.validation_warning_count;
+		report.preflight.validation_error_count = report.validation_error_count;
+		CopyMessages(report.preflight.validation_messages, report.validation_messages);
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
 	}
 
 	uint32_t loader_version = VK_API_VERSION_1_0;
-	if(!QueryLoaderVersion(dispatch.enumerate_instance_version, loader_version, error)) {
+	if(!QueryLoaderVersion(owner.dispatch.enumerate_instance_version, loader_version, error)) {
 		report.status = VulkanProbeStatus::LoaderTooOld;
 		report.loader_error = error;
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
@@ -1817,28 +1921,7 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
-		report.preflight.clean_shutdown = report.clean_shutdown;
-		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
-		return false;
-	}
-
-	VulkanInstanceOptions instance_options;
-	instance_options.validation = request_validation;
-	instance_options.application_name = "VulkanBootstrap";
-	if(!instance.Open(dispatch, instance_options, report.preflight, report.debug_messenger_created, error)) {
-		report.status = MapInstanceError(error);
-		report.instance_error = error;
-		report.status_text = StatusText(report.status);
-		report.validation_available = report.preflight.validation_available;
-		report.debug_utils_available = report.preflight.debug_utils_available;
-		report.preflight.status = report.status;
-		report.preflight.status_text = report.status_text;
-		CopyValidationCapture(report, instance.capture);
-		report.preflight.validation_warning_count = report.validation_warning_count;
-		report.preflight.validation_error_count = report.validation_error_count;
-		CopyMessages(report.preflight.validation_messages, report.validation_messages);
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
@@ -1849,17 +1932,17 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	report.debug_utils_available = report.preflight.debug_utils_available;
 
 	Vector<VulkanDiscoveredDevice> discovered;
-	if(!instance.EnumeratePhysicalDevices(discovered, error)) {
+	if(!owner.instance.EnumeratePhysicalDevices(discovered, error)) {
 		report.status = MapDeviceError(error);
 		report.physical_device_error = error;
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		CopyValidationCapture(report, instance.capture);
+		CopyValidationCapture(report, owner.instance.capture);
 		report.preflight.validation_warning_count = report.validation_warning_count;
 		report.preflight.validation_error_count = report.validation_error_count;
 		CopyMessages(report.preflight.validation_messages, report.validation_messages);
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
@@ -1869,11 +1952,11 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		CopyValidationCapture(report, instance.capture);
+		CopyValidationCapture(report, owner.instance.capture);
 		report.preflight.validation_warning_count = report.validation_warning_count;
 		report.preflight.validation_error_count = report.validation_error_count;
 		CopyMessages(report.preflight.validation_messages, report.validation_messages);
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
@@ -1885,11 +1968,11 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 		report.status_text = StatusText(report.status);
 		report.preflight.status = report.status;
 		report.preflight.status_text = report.status_text;
-		CopyValidationCapture(report, instance.capture);
+		CopyValidationCapture(report, owner.instance.capture);
 		report.preflight.validation_warning_count = report.validation_warning_count;
 		report.preflight.validation_error_count = report.validation_error_count;
 		CopyMessages(report.preflight.validation_messages, report.validation_messages);
-		FinalizeBootstrapCleanup(report, dispatch, instance, device, CloseBootstrapContexts(dispatch, instance, device));
+		FinalizeBootstrapCleanup(report, owner, device, CloseBootstrapContexts(owner, device));
 		report.preflight.clean_shutdown = report.clean_shutdown;
 		report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 		return false;
@@ -1905,9 +1988,9 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	report.preflight.status_text = StatusText(report.preflight.status);
 	CloneDeviceInfo(report.selected_device, selected->info);
 
-	report.validation_warning_count = instance.capture.warnings;
-	report.validation_error_count = instance.capture.errors;
-	CopyMessages(report.validation_messages, instance.capture.messages);
+	report.validation_warning_count = owner.instance.capture.warnings;
+	report.validation_error_count = owner.instance.capture.errors;
+	CopyMessages(report.validation_messages, owner.instance.capture.messages);
 	report.preflight.validation_warning_count = report.validation_warning_count;
 	report.preflight.validation_error_count = report.validation_error_count;
 	CopyMessages(report.preflight.validation_messages, report.validation_messages);
@@ -1917,24 +2000,25 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	report.preflight.status_text = report.status_text;
 
 	if(request_validation)
-		InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::BeforeDeviceCreation);
+		InjectValidationIfRequested(owner.instance.capture, VulkanValidationTestPoint::BeforeDeviceCreation);
 	if(create_device) {
-		if(!device.Open(instance, selected->handle, report.selected_device, report, error)) {
+		if(!device.Open(owner.instance, selected->handle, report.selected_device, report, error)) {
 			report.status = MapDeviceError(error);
 			report.device_error = error;
 			report.device_cleanup_ok = device.Close();
 			report.device_cleanup_result = device.cleanup_result;
 			report.device_cleanup_error = device.cleanup_error;
-			CopyValidationCapture(report, instance.capture);
+			CopyValidationCapture(report, owner.instance.capture);
 			CopyMessages(report.preflight.validation_messages, report.validation_messages);
 			report.preflight.validation_warning_count = report.validation_warning_count;
 			report.preflight.validation_error_count = report.validation_error_count;
-			report.preflight.debug_utils_available = instance.debug_utils_available;
+			report.preflight.debug_utils_available = owner.instance.debug_utils_available;
 			report.preflight.validation_available = report.validation_available;
-			report.instance_cleanup_ok = instance.Close();
-			report.dispatch_cleanup_ok = dispatch.Close();
+			bool owner_cleanup_ok = owner.Close();
+			report.instance_cleanup_ok = owner.instance.cleanup_ok;
+			report.dispatch_cleanup_ok = owner.dispatch.cleanup_ok;
 			FinalizeBootstrapStatus(report, create_device);
-			FinalizeBootstrapCleanup(report, dispatch, instance, device, report.instance_cleanup_ok && report.dispatch_cleanup_ok && report.device_cleanup_ok);
+			FinalizeBootstrapCleanup(report, owner, device, owner_cleanup_ok && report.device_cleanup_ok);
 			report.preflight.clean_shutdown = report.clean_shutdown;
 			report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 			return false;
@@ -1944,24 +2028,25 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 		report.selected_device.logical_device_created = true;
 		report.selected_device.graphics_queue_acquired = true;
 		if(request_validation) {
-			InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::AfterDeviceCreation);
-			InjectValidationIfRequested(instance.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
+			InjectValidationIfRequested(owner.instance.capture, VulkanValidationTestPoint::AfterDeviceCreation);
+			InjectValidationIfRequested(owner.instance.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
 		}
 		report.device_cleanup_ok = device.Close();
 		report.device_cleanup_result = device.cleanup_result;
 		report.device_cleanup_error = device.cleanup_error;
 	}
 
-	CopyValidationCapture(report, instance.capture);
+	CopyValidationCapture(report, owner.instance.capture);
 	CopyMessages(report.preflight.validation_messages, report.validation_messages);
 	report.preflight.validation_warning_count = report.validation_warning_count;
 	report.preflight.validation_error_count = report.validation_error_count;
-	report.preflight.debug_utils_available = instance.debug_utils_available;
+	report.preflight.debug_utils_available = owner.instance.debug_utils_available;
 	report.preflight.validation_available = report.validation_available;
-	report.instance_cleanup_ok = instance.Close();
-	report.dispatch_cleanup_ok = dispatch.Close();
+	bool owner_cleanup_ok = owner.Close();
+	report.instance_cleanup_ok = owner.instance.cleanup_ok;
+	report.dispatch_cleanup_ok = owner.dispatch.cleanup_ok;
 	FinalizeBootstrapStatus(report, create_device);
-	FinalizeBootstrapCleanup(report, dispatch, instance, device, report.instance_cleanup_ok && report.dispatch_cleanup_ok && (!create_device || report.device_cleanup_ok));
+	FinalizeBootstrapCleanup(report, owner, device, owner_cleanup_ok && (!create_device || report.device_cleanup_ok));
 	report.preflight.clean_shutdown = report.clean_shutdown;
 	report.preflight.cleanup_state_cleared = report.cleanup_state_cleared;
 	return report.status == VulkanProbeStatus::Ok || report.status == VulkanProbeStatus::ValidationErrorsReported;

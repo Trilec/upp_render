@@ -55,6 +55,8 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 	bool has_validation_layer = true, bool has_debug_utils_extension = true);
 bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b,
 	const char *application_name_a = nullptr, const char *application_name_b = nullptr);
+bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
+bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface);
 
 }
 
