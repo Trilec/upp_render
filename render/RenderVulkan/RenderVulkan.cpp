@@ -1684,14 +1684,17 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 	return result;
 }
 
-bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b)
+bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b,
+	const char *application_name_a, const char *application_name_b)
 {
 	VulkanInstanceOptions opts_a;
 	opts_a.validation = validation_a;
 	opts_a.win32_surface = surface_a;
+	opts_a.application_name = application_name_a;
 	VulkanInstanceOptions opts_b;
 	opts_b.validation = validation_b;
 	opts_b.win32_surface = surface_b;
+	opts_b.application_name = application_name_b;
 	return IsVulkanInstanceCompatible(GetVulkanInstanceCompatibility(opts_a), GetVulkanInstanceCompatibility(opts_b));
 }
 

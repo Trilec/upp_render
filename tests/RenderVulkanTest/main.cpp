@@ -688,7 +688,7 @@ static bool TestInstanceCompatibility()
 	if(!Check(TestVulkanInstanceCompatibility(true, true, true, true), "validation surface with validation surface should be compatible")) return false;
 	if(!Check(!TestVulkanInstanceCompatibility(true, false, false, false), "validation versus non-validation should be incompatible")) return false;
 	if(!Check(!TestVulkanInstanceCompatibility(false, true, false, false), "surface versus non-surface should be incompatible")) return false;
-	if(!Check(TestVulkanInstanceCompatibility(false, false, false, false), "different application names with identical requirements should be compatible")) return false;
+	if(!Check(TestVulkanInstanceCompatibility(false, false, false, false, "VulkanBootstrap", "VulkanSurfaceProbe"), "different application names with identical requirements should be compatible")) return false;
 	return true;
 }
 
