@@ -1826,19 +1826,22 @@ bool TestVulkanSurfaceOwner(bool validation, VulkanProcResolver resolver, int& o
 
 bool TestVulkanSurfaceOwnerCompatibility(bool validation)
 {
-	VulkanInstanceOwner owner;
-	VulkanInstanceOptions options;
-	options.validation = validation;
-	options.win32_surface = true;
-	options.application_name = "VulkanSurfaceProbe";
-	VulkanPreflightReport preflight;
-	bool debug_messenger_created = false;
+	HWND hwnd = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+	if(!hwnd)
+		return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	VulkanSurfaceContext ctx;
+	GpuNativeWindowDesc window;
+	window.kind = GpuNativeWindowKind::Win32;
+	window.handle = (uint64_t)(uintptr_t)hwnd;
+	VulkanSurfaceReport report;
 	String error;
 	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
-	if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage))
-		return false;
-	bool match = owner.GetCompatibility().validation == validation && owner.GetCompatibility().win32_surface == true;
-	owner.Close();
+	bool ok = ctx.Open(validation, window, report, error, failure_stage);
+	bool match = ok && ctx.instance_owner.GetCompatibility().validation == validation && ctx.instance_owner.GetCompatibility().win32_surface == true;
+	ctx.Close();
+	DestroyWindow(hwnd);
 	return match;
 }
 

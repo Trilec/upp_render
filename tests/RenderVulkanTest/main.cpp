@@ -13,6 +13,7 @@ using Upp::VulkanTestHooks::TestVulkanSurfaceOwner;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
+using Upp::VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
 using Upp::VulkanTestHooks::VulkanValidationTestPoint;
 
@@ -780,8 +781,13 @@ static bool TestSurfaceOwner()
 	VulkanRuntimeDeviceDiagnostics diag;
 	int stage = -1;
 
-	if(!Check(TestVulkanSurfaceOwnerCompatibility(false), "surface owner compatibility should match validation=false win32_surface=true")) return false;
-	if(!Check(TestVulkanSurfaceOwnerCompatibility(true), "surface owner compatibility should match validation=true win32_surface=true")) return false;
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSurfaceOwnerCompatibility(false), "surface owner compatibility should match validation=false win32_surface=true via real ctx.Open")) return false;
+	if(!Check(TestVulkanSurfaceOwnerCompatibility(true), "surface owner compatibility should match validation=true win32_surface=true via real ctx.Open")) return false;
+	diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after surface compat test")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after surface compat test")) return false;
+	if(!Check(diag.surface_live_count == 0, "surface live count should be zero after surface compat test")) return false;
 
 	ClearVulkanRuntimeDeviceDiagnostics();
 	bool ok = TestVulkanSurfaceOwner(false, &TestResolver, stage, diag);
