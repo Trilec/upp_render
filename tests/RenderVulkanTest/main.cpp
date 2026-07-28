@@ -11,6 +11,8 @@ using Upp::VulkanTestHooks::TestVulkanInstanceOwner;
 using Upp::VulkanTestHooks::TestVulkanInstanceOwnerCompatibility;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwner;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics;
@@ -830,6 +832,29 @@ static bool TestSurfaceOwner()
 	return true;
 }
 
+static bool TestSharedInstanceEntry()
+{
+	VulkanRuntimeDeviceDiagnostics diag;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSharedInstanceEntryLifecycle(&TestResolver, diag), "shared entry lifecycle should succeed")) return false;
+	if(!Check(diag.runtime_create_count == 1, "only one runtime should be created across lifecycle")) return false;
+	if(!Check(diag.instance_create_count == 1, "only one instance should be created across lifecycle")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after lifecycle")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after lifecycle")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after lifecycle")) return false;
+
+	if(!Check(TestVulkanSharedInstanceEntryIncompatible(true, false, false, false), "different validation should be incompatible")) return false;
+	if(!Check(TestVulkanSharedInstanceEntryIncompatible(false, true, false, false), "different surface should be incompatible")) return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after incompatible tests")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after incompatible tests")) return false;
+
+	return true;
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -858,6 +883,7 @@ CONSOLE_APP_MAIN
 	ok &= TestInstanceCompatibility();
 	ok &= TestInstanceOwner();
 	ok &= TestSurfaceOwner();
+	ok &= TestSharedInstanceEntry();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");

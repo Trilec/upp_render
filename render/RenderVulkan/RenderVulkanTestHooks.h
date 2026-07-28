@@ -61,6 +61,8 @@ bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface);
 bool TestVulkanSurfaceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
 	VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSurfaceOwnerCompatibility(bool validation);
+bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
+bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface, bool test_validation, bool test_surface);
 
 }
 

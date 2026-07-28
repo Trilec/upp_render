@@ -876,6 +876,78 @@ struct VulkanInstanceOwner {
 	const VulkanInstanceCompatibility& GetCompatibility() const { return compatibility; }
 };
 
+struct VulkanSharedInstanceEntry {
+	VulkanInstanceOwner owner;
+	VulkanInstanceCompatibility compatibility;
+	int acquire_count = 0;
+	bool opened = false;
+	bool cleanup_ok = true;
+
+	~VulkanSharedInstanceEntry() { Close(); }
+
+	bool IsCleared() const
+	{
+		return !opened && acquire_count == 0 && owner.IsCleared();
+	}
+
+	bool IsCompatible(const VulkanInstanceOptions& options) const
+	{
+		return opened && IsVulkanInstanceCompatible(compatibility, GetVulkanInstanceCompatibility(options));
+	}
+
+	bool Open(const VulkanInstanceOptions& options, VulkanPreflightReport& preflight,
+		bool& debug_messenger_created, String& error, VulkanInstanceOwnerOpenFailure& failure_stage,
+		VulkanProcResolver resolver = nullptr)
+	{
+		Close();
+		cleanup_ok = true;
+		if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage, resolver))
+			return false;
+		compatibility = owner.GetCompatibility();
+		acquire_count = 1;
+		opened = true;
+		return true;
+	}
+
+	bool Acquire(const VulkanInstanceOptions& options)
+	{
+		if(!opened)
+			return false;
+		if(!IsVulkanInstanceCompatible(compatibility, GetVulkanInstanceCompatibility(options)))
+			return false;
+		acquire_count++;
+		return true;
+	}
+
+	bool Release()
+	{
+		if(acquire_count <= 0)
+			return false;
+		acquire_count--;
+		return true;
+	}
+
+	bool IsUnused() const
+	{
+		return acquire_count == 0;
+	}
+
+	bool Close()
+	{
+		if(!opened) {
+			cleanup_ok = cleanup_ok && IsCleared();
+			return cleanup_ok;
+		}
+		if(acquire_count > 0)
+			return cleanup_ok;
+		bool ok = owner.Close();
+		cleanup_ok = cleanup_ok && ok;
+		acquire_count = 0;
+		opened = false;
+		return cleanup_ok;
+	}
+};
+
 struct VulkanDeviceContext {
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
@@ -1843,6 +1915,92 @@ bool TestVulkanSurfaceOwnerCompatibility(bool validation)
 	ctx.Close();
 	DestroyWindow(hwnd);
 	return match;
+}
+
+bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
+{
+	out_diag = VulkanRuntimeDeviceDiagnostics();
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	VulkanSharedInstanceEntry entry;
+	VulkanInstanceOptions opts;
+	opts.validation = true;
+	opts.application_name = "SharedEntryTest";
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	String error;
+	VulkanInstanceOwnerOpenFailure failure_stage;
+
+	if(!entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
+		return false;
+	if(entry.acquire_count != 1)
+		return false;
+
+	VulkanInstanceOptions opts2 = opts;
+	opts2.application_name = "SharedEntryTest2";
+	if(!entry.Acquire(opts2))
+		return false;
+	if(entry.acquire_count != 2)
+		return false;
+
+	if(!entry.Release())
+		return false;
+	if(entry.acquire_count != 1)
+		return false;
+
+	if(!entry.Release())
+		return false;
+	if(entry.acquire_count != 0)
+		return false;
+	if(!entry.IsUnused())
+		return false;
+
+	if(!entry.Close())
+		return false;
+	if(!entry.Close())
+		return false;
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	return true;
+}
+
+bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface,
+	bool test_validation, bool test_surface)
+{
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	VulkanSharedInstanceEntry entry;
+	VulkanInstanceOptions opts;
+	opts.validation = base_validation;
+	opts.win32_surface = base_surface;
+	opts.application_name = "SharedEntryTest";
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	String error;
+	VulkanInstanceOwnerOpenFailure failure_stage;
+
+	if(!entry.Open(opts, preflight, debug_messenger_created, error, failure_stage))
+		return false;
+
+	int count_before = entry.acquire_count;
+
+	VulkanInstanceOptions test_opts;
+	test_opts.validation = test_validation;
+	test_opts.win32_surface = test_surface;
+	test_opts.application_name = "DifferentApp";
+
+	if(entry.Acquire(test_opts)) {
+		entry.Close();
+		return false;
+	}
+	if(entry.acquire_count != count_before) {
+		entry.Close();
+		return false;
+	}
+
+	entry.Release();
+	entry.Close();
+	return true;
 }
 
 } // namespace VulkanTestHooks
