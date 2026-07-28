@@ -699,15 +699,21 @@ static bool TestInstanceCompatibility()
 static bool TestInstanceOwner()
 {
 	VulkanRuntimeDeviceDiagnostics diag;
+	int stage = -1;
+	bool debug_messenger_created = true;
 
 	ClearVulkanRuntimeDeviceDiagnostics();
-	if(!Check(TestVulkanInstanceOwner(false, &TestResolver, diag), "owner should open and close without validation")) return false;
+	if(!Check(TestVulkanInstanceOwner(false, &TestResolver, stage, debug_messenger_created, diag), "owner should open and close without validation")) return false;
+	if(!Check(stage == 0, "successful owner open should report None failure stage")) return false;
+	if(!Check(!debug_messenger_created, "debug messenger should not be created without validation")) return false;
 	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after owner close")) return false;
 	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after owner close")) return false;
 	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after owner close")) return false;
 
 	ClearVulkanRuntimeDeviceDiagnostics();
-	if(!Check(TestVulkanInstanceOwner(true, &TestResolver, diag), "owner should open and close with validation")) return false;
+	if(!Check(TestVulkanInstanceOwner(true, &TestResolver, stage, debug_messenger_created, diag), "owner should open and close with validation")) return false;
+	if(!Check(stage == 0, "successful validation owner open should report None failure stage")) return false;
+	if(!Check(debug_messenger_created, "debug messenger should be created with validation")) return false;
 	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after validation owner close")) return false;
 	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after validation owner close")) return false;
 	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after validation owner close")) return false;
@@ -718,14 +724,27 @@ static bool TestInstanceOwner()
 	if(!Check(TestVulkanInstanceOwnerCompatibility(true, false), "owner compatibility should match validation=true surface=false")) return false;
 	if(!Check(TestVulkanInstanceOwnerCompatibility(true, true), "owner compatibility should match validation=true surface=true")) return false;
 
+	g_missing_proc = "vkEnumerateInstanceLayerProperties";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	bool ok = TestVulkanInstanceOwner(false, &TestResolver, stage, debug_messenger_created, diag);
+	g_missing_proc = nullptr;
+	if(!Check(!ok, "owner should fail when a dispatch proc is missing")) return false;
+	if(!Check(stage == 1, "missing dispatch proc should report Dispatch failure stage")) return false;
+	if(!Check(!debug_messenger_created, "debug_messenger_created should be reset to false on dispatch failure")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after dispatch-failed owner open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after dispatch-failed owner open")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after dispatch-failed owner open")) return false;
+
 	g_missing_proc = "vkDestroyInstance";
 	ClearVulkanRuntimeDeviceDiagnostics();
-	bool ok = TestVulkanInstanceOwner(false, &TestResolver, diag);
+	ok = TestVulkanInstanceOwner(false, &TestResolver, stage, debug_messenger_created, diag);
 	g_missing_proc = nullptr;
 	if(!Check(!ok, "owner should fail when an instance proc is missing")) return false;
-	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after failed owner open")) return false;
-	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after failed owner open")) return false;
-	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after failed owner open")) return false;
+	if(!Check(stage == 2, "missing instance proc should report Instance failure stage")) return false;
+	if(!Check(!debug_messenger_created, "debug_messenger_created should be reset to false on instance failure")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after instance-failed owner open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after instance-failed owner open")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after instance-failed owner open")) return false;
 
 	return true;
 }

@@ -819,6 +819,12 @@ struct VulkanInstanceContext {
 	}
 };
 
+enum class VulkanInstanceOwnerOpenFailure {
+	None,
+	Dispatch,
+	Instance,
+};
+
 struct VulkanInstanceOwner {
 	VulkanDispatch dispatch;
 	VulkanInstanceContext instance;
@@ -834,17 +840,23 @@ struct VulkanInstanceOwner {
 	}
 
 	bool Open(const VulkanInstanceOptions& options, VulkanPreflightReport& preflight,
-		bool& debug_messenger_created, String& error, VulkanProcResolver resolver = nullptr)
+		bool& debug_messenger_created, String& error, VulkanInstanceOwnerOpenFailure& failure_stage,
+		VulkanProcResolver resolver = nullptr)
 	{
+		debug_messenger_created = false;
+		failure_stage = VulkanInstanceOwnerOpenFailure::None;
+		error.Clear();
 		Close();
 		cleanup_ok = true;
 		if(!dispatch.Open(error, resolver)) {
+			failure_stage = VulkanInstanceOwnerOpenFailure::Dispatch;
 			Close();
 			return false;
 		}
 		compatibility = GetVulkanInstanceCompatibility(options);
 		has_compatibility = true;
 		if(!instance.Open(dispatch, options, preflight, debug_messenger_created, error)) {
+			failure_stage = VulkanInstanceOwnerOpenFailure::Instance;
 			Close();
 			return false;
 		}
@@ -1618,15 +1630,6 @@ static VulkanProbeStatus MapDispatchError(const String& error)
 	return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
 }
 
-static bool IsDispatchOpenError(const String& error)
-{
-	return error == "LoadLibraryW(vulkan-1.dll) failed"
-		|| error == "vkGetInstanceProcAddr"
-		|| error == "vkEnumerateInstanceLayerProperties"
-		|| error == "vkEnumerateInstanceExtensionProperties"
-		|| error == "vkCreateInstance";
-}
-
 static bool CleanupFailed(const VulkanBootstrapReport& report, bool create_device)
 {
 	return !report.instance_cleanup_ok || !report.dispatch_cleanup_ok || (create_device && !report.device_cleanup_ok);
@@ -1751,7 +1754,8 @@ bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool val
 	return IsVulkanInstanceCompatible(GetVulkanInstanceCompatibility(opts_a), GetVulkanInstanceCompatibility(opts_b));
 }
 
-bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
+bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
+	bool& out_debug_messenger_created, VulkanRuntimeDeviceDiagnostics& out_diag)
 {
 	ClearVulkanRuntimeDeviceDiagnostics();
 	VulkanInstanceOwner owner;
@@ -1759,9 +1763,12 @@ bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, Vulka
 	options.validation = validation;
 	options.application_name = "RenderVulkanTest";
 	VulkanPreflightReport preflight;
-	bool debug_messenger_created = false;
+	bool debug_messenger_created = true;
 	String error;
-	bool ok = owner.Open(options, preflight, debug_messenger_created, error, resolver);
+	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
+	bool ok = owner.Open(options, preflight, debug_messenger_created, error, failure_stage, resolver);
+	out_failure_stage = (int)failure_stage;
+	out_debug_messenger_created = debug_messenger_created;
 	if(!ok)
 		return false;
 	ok = owner.Close() && ok;
@@ -1780,7 +1787,8 @@ bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface)
 	VulkanPreflightReport preflight;
 	bool debug_messenger_created = false;
 	String error;
-	if(!owner.Open(options, preflight, debug_messenger_created, error))
+	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
+	if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage))
 		return false;
 	bool match = owner.GetCompatibility().validation == validation && owner.GetCompatibility().win32_surface == win32_surface;
 	owner.Close();
@@ -1874,8 +1882,9 @@ bool VulkanBootstrap::BuildBootstrap(VulkanBootstrapReport& report, bool request
 	VulkanInstanceOptions instance_options;
 	instance_options.validation = request_validation;
 	instance_options.application_name = "VulkanBootstrap";
-	if(!owner.Open(instance_options, report.preflight, report.debug_messenger_created, error, resolver)) {
-		if(IsDispatchOpenError(error)) {
+	VulkanInstanceOwnerOpenFailure open_failure = VulkanInstanceOwnerOpenFailure::None;
+	if(!owner.Open(instance_options, report.preflight, report.debug_messenger_created, error, open_failure, resolver)) {
+		if(open_failure == VulkanInstanceOwnerOpenFailure::Dispatch) {
 			report.status = MapDispatchError(error);
 			if(report.status == VulkanProbeStatus::RuntimeUnavailable)
 				report.runtime_error = error;
