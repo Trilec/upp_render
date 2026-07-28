@@ -9,6 +9,8 @@ using Upp::VulkanTestHooks::RunVulkanInstanceOptionsTest;
 using Upp::VulkanTestHooks::TestVulkanInstanceCompatibility;
 using Upp::VulkanTestHooks::TestVulkanInstanceOwner;
 using Upp::VulkanTestHooks::TestVulkanInstanceOwnerCompatibility;
+using Upp::VulkanTestHooks::TestVulkanSurfaceOwner;
+using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
@@ -773,6 +775,55 @@ static bool TestInstanceOwner()
 	return true;
 }
 
+static bool TestSurfaceOwner()
+{
+	VulkanRuntimeDeviceDiagnostics diag;
+	int stage = -1;
+
+	if(!Check(TestVulkanSurfaceOwnerCompatibility(false), "surface owner compatibility should match validation=false win32_surface=true")) return false;
+	if(!Check(TestVulkanSurfaceOwnerCompatibility(true), "surface owner compatibility should match validation=true win32_surface=true")) return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	bool ok = TestVulkanSurfaceOwner(false, &TestResolver, stage, diag);
+	if(!Check(!ok, "surface open should fail without a valid window (focused, integration passes)")) return false;
+	if(!Check(stage == 0, "invalid-window failure should report None stage (neither dispatch nor instance)")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after invalid-window surface open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after invalid-window surface open")) return false;
+	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after invalid-window surface open")) return false;
+
+	g_missing_proc = "vkEnumerateInstanceLayerProperties";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	SetDiagSentinels(diag);
+	ok = TestVulkanSurfaceOwner(false, &TestResolver, stage, diag);
+	g_missing_proc = nullptr;
+	if(!Check(!ok, "surface owner should fail on dispatch-level missing proc")) return false;
+	if(!Check(stage == 1, "dispatch failure should report Dispatch stage")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after dispatch-failed surface open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after dispatch-failed surface open")) return false;
+
+	g_missing_proc = "vkDestroyInstance";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	SetDiagSentinels(diag);
+	ok = TestVulkanSurfaceOwner(false, &TestResolver, stage, diag);
+	g_missing_proc = nullptr;
+	if(!Check(!ok, "surface owner should fail on instance-level missing proc")) return false;
+	if(!Check(stage == 2, "instance failure should report Instance stage")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after instance-failed surface open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after instance-failed surface open")) return false;
+
+	g_missing_proc = "vkCreateWin32SurfaceKHR";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	SetDiagSentinels(diag);
+	ok = TestVulkanSurfaceOwner(false, &TestResolver, stage, diag);
+	g_missing_proc = nullptr;
+	if(!Check(!ok, "surface owner should fail on surface-proc missing")) return false;
+	if(!Check(stage == 0, "surface-proc failure should report None stage (not instance/dispatch)")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after surface-proc-failed open")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after surface-proc-failed open")) return false;
+
+	return true;
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -800,6 +851,7 @@ CONSOLE_APP_MAIN
 	ok &= TestInstanceOptions();
 	ok &= TestInstanceCompatibility();
 	ok &= TestInstanceOwner();
+	ok &= TestSurfaceOwner();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");
