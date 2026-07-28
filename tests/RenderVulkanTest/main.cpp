@@ -696,6 +696,24 @@ static bool TestInstanceCompatibility()
 	return true;
 }
 
+static void SetDiagSentinels(VulkanRuntimeDeviceDiagnostics& diag)
+{
+	diag.runtime_create_count = 0xFF;
+	diag.runtime_live_count = 0xFF;
+	diag.runtime_id = 0xFF;
+	diag.instance_create_count = 0xFF;
+	diag.instance_live_count = 0xFF;
+	diag.debug_messenger_create_count = 0xFF;
+	diag.debug_messenger_live_count = 0xFF;
+	diag.physical_device_discovery_count = 0xFF;
+	diag.device_create_count = 0xFF;
+	diag.device_live_count = 0xFF;
+	diag.device_id = 0xFF;
+	diag.surface_create_count = 0xFF;
+	diag.surface_live_count = 0xFF;
+	diag.surface_id = 0xFF;
+}
+
 static bool TestInstanceOwner()
 {
 	VulkanRuntimeDeviceDiagnostics diag;
@@ -726,6 +744,7 @@ static bool TestInstanceOwner()
 
 	g_missing_proc = "vkEnumerateInstanceLayerProperties";
 	ClearVulkanRuntimeDeviceDiagnostics();
+	SetDiagSentinels(diag);
 	bool ok = TestVulkanInstanceOwner(false, &TestResolver, stage, debug_messenger_created, diag);
 	g_missing_proc = nullptr;
 	if(!Check(!ok, "owner should fail when a dispatch proc is missing")) return false;
@@ -734,9 +753,12 @@ static bool TestInstanceOwner()
 	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after dispatch-failed owner open")) return false;
 	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after dispatch-failed owner open")) return false;
 	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after dispatch-failed owner open")) return false;
+	if(!Check(diag.runtime_create_count == 1, "dispatch failure should report exactly one runtime creation attempt")) return false;
+	if(!Check(diag.instance_create_count == 0, "dispatch failure should report no instance creation attempt")) return false;
 
 	g_missing_proc = "vkDestroyInstance";
 	ClearVulkanRuntimeDeviceDiagnostics();
+	SetDiagSentinels(diag);
 	ok = TestVulkanInstanceOwner(false, &TestResolver, stage, debug_messenger_created, diag);
 	g_missing_proc = nullptr;
 	if(!Check(!ok, "owner should fail when an instance proc is missing")) return false;
@@ -745,6 +767,8 @@ static bool TestInstanceOwner()
 	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after instance-failed owner open")) return false;
 	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after instance-failed owner open")) return false;
 	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after instance-failed owner open")) return false;
+	if(!Check(diag.runtime_create_count == 1, "instance failure should report exactly one runtime creation attempt")) return false;
+	if(!Check(diag.instance_create_count == 1, "instance failure should report exactly one instance creation attempt")) return false;
 
 	return true;
 }

@@ -1757,6 +1757,7 @@ bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool val
 bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
 	bool& out_debug_messenger_created, VulkanRuntimeDeviceDiagnostics& out_diag)
 {
+	out_diag = VulkanRuntimeDeviceDiagnostics();
 	ClearVulkanRuntimeDeviceDiagnostics();
 	VulkanInstanceOwner owner;
 	VulkanInstanceOptions options;
@@ -1769,8 +1770,11 @@ bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, int& 
 	bool ok = owner.Open(options, preflight, debug_messenger_created, error, failure_stage, resolver);
 	out_failure_stage = (int)failure_stage;
 	out_debug_messenger_created = debug_messenger_created;
-	if(!ok)
+	if(!ok) {
+		owner.Close();
+		out_diag = GetVulkanRuntimeDeviceDiagnostics();
 		return false;
+	}
 	ok = owner.Close() && ok;
 	ok = owner.Close() && ok;
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
