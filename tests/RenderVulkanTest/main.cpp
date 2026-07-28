@@ -12,6 +12,7 @@ using Upp::VulkanTestHooks::TestVulkanInstanceOwnerCompatibility;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwner;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntrySafety;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
@@ -844,13 +845,18 @@ static bool TestSharedInstanceEntry()
 	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after lifecycle")) return false;
 	if(!Check(diag.debug_messenger_live_count == 0, "debug messenger live count should be zero after lifecycle")) return false;
 
-	if(!Check(TestVulkanSharedInstanceEntryIncompatible(true, false, false, false), "different validation should be incompatible")) return false;
-	if(!Check(TestVulkanSharedInstanceEntryIncompatible(false, true, false, false), "different surface should be incompatible")) return false;
-
 	ClearVulkanRuntimeDeviceDiagnostics();
-	diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after incompatible tests")) return false;
-	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after incompatible tests")) return false;
+	if(!Check(TestVulkanSharedInstanceEntrySafety(&TestResolver, diag), "shared entry safety tests should succeed")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after safety tests")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after safety tests")) return false;
+
+	if(!Check(TestVulkanSharedInstanceEntryIncompatible(true, false, false, false, diag), "different validation should be incompatible")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after incompatible-val test")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after incompatible-val test")) return false;
+
+	if(!Check(TestVulkanSharedInstanceEntryIncompatible(false, true, false, false, diag), "different surface should be incompatible")) return false;
+	if(!Check(diag.runtime_live_count == 0, "runtime live count should be zero after incompatible-surface test")) return false;
+	if(!Check(diag.instance_live_count == 0, "instance live count should be zero after incompatible-surface test")) return false;
 
 	return true;
 }

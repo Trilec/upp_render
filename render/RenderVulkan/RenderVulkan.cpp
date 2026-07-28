@@ -899,6 +899,8 @@ struct VulkanSharedInstanceEntry {
 		bool& debug_messenger_created, String& error, VulkanInstanceOwnerOpenFailure& failure_stage,
 		VulkanProcResolver resolver = nullptr)
 	{
+		if(acquire_count > 0)
+			return false;
 		Close();
 		cleanup_ok = true;
 		if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage, resolver))
@@ -921,7 +923,7 @@ struct VulkanSharedInstanceEntry {
 
 	bool Release()
 	{
-		if(acquire_count <= 0)
+		if(!opened || acquire_count <= 0)
 			return false;
 		acquire_count--;
 		return true;
@@ -939,7 +941,7 @@ struct VulkanSharedInstanceEntry {
 			return cleanup_ok;
 		}
 		if(acquire_count > 0)
-			return cleanup_ok;
+			return false;
 		bool ok = owner.Close();
 		cleanup_ok = cleanup_ok && ok;
 		acquire_count = 0;
@@ -1964,9 +1966,82 @@ bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanR
 	return true;
 }
 
-bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface,
-	bool test_validation, bool test_surface)
+bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
 {
+	out_diag = VulkanRuntimeDeviceDiagnostics();
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	VulkanSharedInstanceEntry entry;
+	VulkanInstanceOptions opts;
+	opts.validation = true;
+	opts.application_name = "SharedEntryTest";
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	String error;
+	VulkanInstanceOwnerOpenFailure failure_stage;
+
+	if(!entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
+		return false;
+
+	VulkanInstanceOptions opts2 = opts;
+	if(!entry.Acquire(opts2))
+		return false;
+	if(entry.acquire_count != 2)
+		return false;
+
+	if(entry.Close())
+		return false;
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1)
+		return false;
+
+	if(entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
+		return false;
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1)
+		return false;
+
+	if(!entry.Release())
+		return false;
+
+	if(entry.Close())
+		return false;
+
+	if(!entry.Release())
+		return false;
+
+	if(entry.Release())
+		return false;
+
+	if(!entry.Close())
+		return false;
+	if(!entry.Close())
+		return false;
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0)
+		return false;
+
+	if(!entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
+		return false;
+	if(!entry.Release())
+		return false;
+	if(!entry.Close())
+		return false;
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0)
+		return false;
+
+	return true;
+}
+
+bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface,
+	bool test_validation, bool test_surface, VulkanRuntimeDeviceDiagnostics& out_diag)
+{
+	out_diag = VulkanRuntimeDeviceDiagnostics();
 	ClearVulkanRuntimeDeviceDiagnostics();
 
 	VulkanSharedInstanceEntry entry;
@@ -2000,6 +2075,8 @@ bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_s
 
 	entry.Release();
 	entry.Close();
+
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
 	return true;
 }
 
