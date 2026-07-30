@@ -2083,14 +2083,12 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 	if(cleanup_failure_entry.acquire_count != 0)
 		return false;
-	cleanup_failure_entry.owner.instance.destroy_instance = nullptr;
-	if(cleanup_failure_entry.Close())
+	if(cleanup_failure_entry.owner.instance.destroy_instance == nullptr)
 		return false;
-	if(cleanup_failure_entry.cleanup_ok)
-		return false;
-	if(cleanup_failure_entry.opened)
-		return false;
+	cleanup_failure_entry.owner.cleanup_ok = false;
 	VulkanRuntimeDeviceDiagnostics cleanup_counts_before_reopen = GetVulkanRuntimeDeviceDiagnostics();
+	if(cleanup_counts_before_reopen.runtime_live_count != 1 || cleanup_counts_before_reopen.instance_live_count != 1 || cleanup_counts_before_reopen.debug_messenger_live_count != 1)
+		return false;
 	bool cleanup_reopen_debug_messenger_created = true;
 	VulkanInstanceOwnerOpenFailure cleanup_reopen_failure_stage = VulkanInstanceOwnerOpenFailure::Instance;
 	String cleanup_reopen_error;
@@ -2104,11 +2102,18 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 	if(cleanup_failure_entry.cleanup_ok)
 		return false;
+	if(cleanup_failure_entry.opened)
+		return false;
+	if(cleanup_failure_entry.acquire_count != 0)
+		return false;
+	if(!cleanup_failure_entry.owner.IsCleared())
+		return false;
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
 	if(out_diag.runtime_create_count != cleanup_counts_before_reopen.runtime_create_count || out_diag.instance_create_count != cleanup_counts_before_reopen.instance_create_count)
 		return false;
 	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0 || out_diag.debug_messenger_live_count != 0)
 		return false;
+	VulkanRuntimeDeviceDiagnostics cleanup_counts_after_failure = out_diag;
 	if(cleanup_failure_entry.Open(opts, preflight, cleanup_reopen_debug_messenger_created, cleanup_reopen_error, cleanup_reopen_failure_stage, resolver))
 		return false;
 	if(cleanup_reopen_error != "shared instance entry cleanup failed")
@@ -2118,6 +2123,17 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 	if(cleanup_reopen_debug_messenger_created)
 		return false;
 	if(cleanup_failure_entry.cleanup_ok)
+		return false;
+	if(cleanup_failure_entry.opened)
+		return false;
+	if(cleanup_failure_entry.acquire_count != 0)
+		return false;
+	if(!cleanup_failure_entry.owner.IsCleared())
+		return false;
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_create_count != cleanup_counts_after_failure.runtime_create_count || out_diag.instance_create_count != cleanup_counts_after_failure.instance_create_count)
+		return false;
+	if(out_diag.runtime_live_count != cleanup_counts_after_failure.runtime_live_count || out_diag.instance_live_count != cleanup_counts_after_failure.instance_live_count || out_diag.debug_messenger_live_count != cleanup_counts_after_failure.debug_messenger_live_count)
 		return false;
 
 	return true;
