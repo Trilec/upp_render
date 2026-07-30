@@ -849,12 +849,16 @@ static bool TestSurfaceSessionDeviceAccounting()
 	if(!Check(result.close_diag.device_create_count == 1, "surface session close should keep one device creation")) return false;
 	if(!Check(result.close_diag.device_live_count == 0, "surface session device live count should return to zero")) return false;
 	if(!Check(result.close_diag.runtime_live_count == 0 && result.close_diag.instance_live_count == 0 && result.close_diag.debug_messenger_live_count == 0 && result.close_diag.surface_live_count == 0 && result.close_diag.device_live_count == 0, "all live counts should be zero after normal surface-session close")) return false;
+	if(!Check(result.repeat_report.device_cleanup_ok, "repeated normal close should keep device cleanup ok")) return false;
+	if(!Check(result.repeat_report.clean_shutdown, "repeated normal close should stay clean")) return false;
+	if(!Check(result.repeat_report.cleanup_state_cleared, "repeated normal close should keep cleanup state cleared")) return false;
 	if(!Check(result.repeat_close_diag.device_live_count == 0, "repeated surface-session close should keep device live count at zero")) return false;
 	if(!Check(result.repeat_close_diag.runtime_live_count == 0 && result.repeat_close_diag.instance_live_count == 0 && result.repeat_close_diag.debug_messenger_live_count == 0 && result.repeat_close_diag.surface_live_count == 0 && result.repeat_close_diag.device_live_count == 0, "repeated close should not change counts")) return false;
 	if(!Check(result.report.device_cleanup_ok, "normal close should report device cleanup ok")) return false;
 	if(!Check(result.report.clean_shutdown, "normal close should report clean shutdown")) return false;
 	if(!Check(result.report.cleanup_state_cleared, "normal close should clear cleanup state")) return false;
 	if(!Check(result.report.instance_cleanup_ok && result.report.surface_cleanup_ok && result.report.dispatch_cleanup_ok, "normal close should report component cleanup success")) return false;
+	if(!Check(!(result.report.clean_shutdown && (!result.report.device_cleanup_ok || !result.report.surface_cleanup_ok || !result.report.instance_cleanup_ok || !result.report.dispatch_cleanup_ok || !result.report.cleanup_state_cleared)), "clean shutdown must not contradict component cleanup flags")) return false;
 
 	g_missing_proc = "vkGetDeviceQueue";
 	ClearVulkanRuntimeDeviceDiagnostics();
@@ -865,6 +869,9 @@ static bool TestSurfaceSessionDeviceAccounting()
 	if(!Check(result.report.device_cleanup_ok, "post-create failure should still report device cleanup ok")) return false;
 	if(!Check(result.report.clean_shutdown, "post-create failure should still cleanly shut down")) return false;
 	if(!Check(result.report.cleanup_state_cleared, "post-create failure should clear cleanup state")) return false;
+	if(!Check(result.repeat_report.device_cleanup_ok, "repeated post-create failure close should keep device cleanup ok")) return false;
+	if(!Check(result.repeat_report.clean_shutdown, "repeated post-create failure close should stay clean")) return false;
+	if(!Check(result.repeat_report.cleanup_state_cleared, "repeated post-create failure close should keep cleanup state cleared")) return false;
 	if(!Check(result.close_diag.device_create_count == 1, "post-create failure should count one device creation")) return false;
 	if(!Check(result.close_diag.device_live_count == 0, "post-create failure should leave no live device")) return false;
 	if(!Check(result.close_diag.runtime_live_count == 0 && result.close_diag.instance_live_count == 0 && result.close_diag.debug_messenger_live_count == 0 && result.close_diag.surface_live_count == 0, "post-create failure should clear all live counts")) return false;
@@ -881,6 +888,9 @@ static bool TestSurfaceSessionDeviceAccounting()
 	if(!Check(!result.report.device_cleanup_ok, "forced cleanup failure should report device cleanup failure")) return false;
 	if(!Check(!result.report.clean_shutdown, "forced cleanup failure should not claim clean shutdown")) return false;
 	if(!Check(result.report.cleanup_state_cleared, "forced cleanup failure should still clear state")) return false;
+	if(!Check(!result.repeat_report.device_cleanup_ok, "repeated forced cleanup failure close should stay failed")) return false;
+	if(!Check(!result.repeat_report.clean_shutdown, "repeated forced cleanup failure close should not become clean")) return false;
+	if(!Check(result.repeat_report.cleanup_state_cleared, "repeated forced cleanup failure close should keep state cleared")) return false;
 	if(!Check(result.open_diag.device_live_count == 1, "forced cleanup failure should create one live device before close")) return false;
 	if(!Check(result.open_diag.device_id != 0, "forced cleanup failure should have nonzero device id while open")) return false;
 	if(!Check(result.close_diag.device_live_count == 0, "forced cleanup failure should end with zero live devices")) return false;

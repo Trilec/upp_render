@@ -1967,6 +1967,7 @@ bool TestVulkanSurfaceSessionLifecycle(bool validation, VulkanProcResolver resol
 	out_result.report = session.GetReport();
 	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	session.Close();
+	out_result.repeat_report = session.GetReport();
 	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	DestroyWindow(hwnd);
 	return true;
@@ -1994,6 +1995,7 @@ bool TestVulkanSurfaceSessionPostCreateFailure(bool validation, VulkanProcResolv
 	out_result.error = session.GetError();
 	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	session.Close();
+	out_result.repeat_report = session.GetReport();
 	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	DestroyWindow(hwnd);
 	return true;
@@ -2032,6 +2034,7 @@ bool TestVulkanSurfaceSessionCleanupFailure(bool validation, VulkanProcResolver 
 	out_result.report = session.GetReport();
 	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	session.Close();
+	out_result.repeat_report = session.GetReport();
 	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
 	ClearVulkanValidationTestInjection();
 	DestroyWindow(hwnd);
@@ -3133,8 +3136,8 @@ void VulkanSurfaceSession::Close()
 {
 	if(!impl)
 		return;
-	bool device_cleanup_ok = !impl->device.device || impl->device.Close();
-	bool ctx_cleanup_ok = impl->ctx.Close();
+	bool device_cleanup_ok = impl->device.cleanup_ok && (!impl->device.device || impl->device.Close());
+	bool ctx_cleanup_ok = impl->ctx.cleanup_ok && impl->ctx.Close();
 	FinalizeSurfaceSession(*impl, device_cleanup_ok && ctx_cleanup_ok);
 	impl->open = false;
 	impl->ready = false;

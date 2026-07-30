@@ -32,6 +32,7 @@ struct VulkanInstanceOptionsTestResult {
 
 struct VulkanSurfaceSessionAccountingResult {
 	VulkanSurfaceReport report;
+	VulkanSurfaceReport repeat_report;
 	VulkanRuntimeDeviceDiagnostics open_diag;
 	VulkanRuntimeDeviceDiagnostics close_diag;
 	VulkanRuntimeDeviceDiagnostics repeat_close_diag;
