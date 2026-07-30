@@ -899,9 +899,17 @@ struct VulkanSharedInstanceEntry {
 		bool& debug_messenger_created, String& error, VulkanInstanceOwnerOpenFailure& failure_stage,
 		VulkanProcResolver resolver = nullptr)
 	{
-		if(acquire_count > 0)
+		debug_messenger_created = false;
+		failure_stage = VulkanInstanceOwnerOpenFailure::None;
+		error.Clear();
+		if(acquire_count > 0) {
+			error = "shared instance entry is still acquired";
 			return false;
-		Close();
+		}
+		if(!Close()) {
+			error = "shared instance entry cleanup failed";
+			return false;
+		}
 		cleanup_ok = true;
 		if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage, resolver))
 			return false;
@@ -913,9 +921,7 @@ struct VulkanSharedInstanceEntry {
 
 	bool Acquire(const VulkanInstanceOptions& options)
 	{
-		if(!opened)
-			return false;
-		if(!IsVulkanInstanceCompatible(compatibility, GetVulkanInstanceCompatibility(options)))
+		if(!IsCompatible(options))
 			return false;
 		acquire_count++;
 		return true;
@@ -1989,31 +1995,66 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 	if(entry.acquire_count != 2)
 		return false;
 
-	if(entry.Close())
+	VulkanInstanceCompatibility compatibility = entry.compatibility;
+	bool reopen_debug_messenger_created = true;
+	VulkanInstanceOwnerOpenFailure reopen_failure_stage = VulkanInstanceOwnerOpenFailure::Instance;
+	String reopen_error;
+	if(entry.Open(opts, preflight, reopen_debug_messenger_created, reopen_error, reopen_failure_stage, resolver))
 		return false;
-
+	if(reopen_error != "shared instance entry is still acquired")
+		return false;
+	if(reopen_failure_stage != VulkanInstanceOwnerOpenFailure::None)
+		return false;
+	if(reopen_debug_messenger_created)
+		return false;
+	if(entry.acquire_count != 2)
+		return false;
+	if(!entry.opened || !entry.cleanup_ok)
+		return false;
+	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.win32_surface != compatibility.win32_surface)
+		return false;
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1)
+	if(out_diag.runtime_create_count != 1 || out_diag.instance_create_count != 1)
 		return false;
-
-	if(entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
-		return false;
-
-	out_diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1)
+	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1 || out_diag.debug_messenger_live_count != 1)
 		return false;
 
 	if(!entry.Release())
 		return false;
+	if(entry.acquire_count != 1)
+		return false;
 
-	if(entry.Close())
+	reopen_debug_messenger_created = true;
+	reopen_failure_stage = VulkanInstanceOwnerOpenFailure::Instance;
+	reopen_error.Clear();
+	if(entry.Open(opts, preflight, reopen_debug_messenger_created, reopen_error, reopen_failure_stage, resolver))
+		return false;
+	if(reopen_error != "shared instance entry is still acquired")
+		return false;
+	if(reopen_failure_stage != VulkanInstanceOwnerOpenFailure::None)
+		return false;
+	if(reopen_debug_messenger_created)
+		return false;
+	if(entry.acquire_count != 1)
+		return false;
+	if(!entry.opened || !entry.cleanup_ok)
+		return false;
+	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.win32_surface != compatibility.win32_surface)
+		return false;
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_create_count != 1 || out_diag.instance_create_count != 1)
+		return false;
+	if(out_diag.runtime_live_count != 1 || out_diag.instance_live_count != 1 || out_diag.debug_messenger_live_count != 1)
 		return false;
 
 	if(!entry.Release())
 		return false;
-
+	if(entry.acquire_count != 0)
+		return false;
 	if(entry.Release())
 		return false;
+	if(entry.acquire_count != 0)
+		return false;
 
 	if(!entry.Close())
 		return false;
@@ -2021,7 +2062,7 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0)
+	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0 || out_diag.debug_messenger_live_count != 0)
 		return false;
 
 	if(!entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
@@ -2032,7 +2073,51 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0)
+	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0 || out_diag.debug_messenger_live_count != 0)
+		return false;
+
+	VulkanSharedInstanceEntry cleanup_failure_entry;
+	if(!cleanup_failure_entry.Open(opts, preflight, debug_messenger_created, error, failure_stage, resolver))
+		return false;
+	if(!cleanup_failure_entry.Release())
+		return false;
+	if(cleanup_failure_entry.acquire_count != 0)
+		return false;
+	cleanup_failure_entry.owner.instance.destroy_instance = nullptr;
+	if(cleanup_failure_entry.Close())
+		return false;
+	if(cleanup_failure_entry.cleanup_ok)
+		return false;
+	if(cleanup_failure_entry.opened)
+		return false;
+	VulkanRuntimeDeviceDiagnostics cleanup_counts_before_reopen = GetVulkanRuntimeDeviceDiagnostics();
+	bool cleanup_reopen_debug_messenger_created = true;
+	VulkanInstanceOwnerOpenFailure cleanup_reopen_failure_stage = VulkanInstanceOwnerOpenFailure::Instance;
+	String cleanup_reopen_error;
+	if(cleanup_failure_entry.Open(opts, preflight, cleanup_reopen_debug_messenger_created, cleanup_reopen_error, cleanup_reopen_failure_stage, resolver))
+		return false;
+	if(cleanup_reopen_error != "shared instance entry cleanup failed")
+		return false;
+	if(cleanup_reopen_failure_stage != VulkanInstanceOwnerOpenFailure::None)
+		return false;
+	if(cleanup_reopen_debug_messenger_created)
+		return false;
+	if(cleanup_failure_entry.cleanup_ok)
+		return false;
+	out_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(out_diag.runtime_create_count != cleanup_counts_before_reopen.runtime_create_count || out_diag.instance_create_count != cleanup_counts_before_reopen.instance_create_count)
+		return false;
+	if(out_diag.runtime_live_count != 0 || out_diag.instance_live_count != 0 || out_diag.debug_messenger_live_count != 0)
+		return false;
+	if(cleanup_failure_entry.Open(opts, preflight, cleanup_reopen_debug_messenger_created, cleanup_reopen_error, cleanup_reopen_failure_stage, resolver))
+		return false;
+	if(cleanup_reopen_error != "shared instance entry cleanup failed")
+		return false;
+	if(cleanup_reopen_failure_stage != VulkanInstanceOwnerOpenFailure::None)
+		return false;
+	if(cleanup_reopen_debug_messenger_created)
+		return false;
+	if(cleanup_failure_entry.cleanup_ok)
 		return false;
 
 	return true;
