@@ -68,7 +68,7 @@ native-window contract, bridge test coverage, a live Vulkan surface probe, and
 a ten-cycle validation gate that now passes.
 
 TASK-007A3 restored the backend-neutral `GpuCtrl` public boundary.
-TASK-007A4 is now cleaning the control/session foundation, removing duplicate
+TASK-007A4 completed the control/session foundation, removing duplicate
 surface bring-up code, documenting the usage and future UI rendering shape, and
 adding practical embedded-control demos.
 
@@ -125,9 +125,11 @@ additional backends beyond the first ones already planned.
 ## Current Status
 
 - TASK-007 surface bring-up passes the ten-cycle validation gate
-- the early GUI startup fault was caused by missing `CtrlLib` initialization
-- `GpuCtrl` now owns a surface-level Vulkan session with deterministic retry
-  behavior and no test-only public hook
+- TASK-007A4 control/session cleanup is accepted and no longer the active focus
+- TASK-008A1 ownership work is accepted through S8-R3
+- the Vulkan shared-instance lifecycle, surface ownership, and compatibility
+  handling are now covered by committed S1-S8 ownership work
+- TASK-009 registry work is the active next task
 - swapchain and rendering remain unimplemented
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only
