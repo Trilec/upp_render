@@ -976,6 +976,16 @@ struct VulkanDeviceContext {
 		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr;
 	}
 
+	void RegisterDiagnostics()
+	{
+		if(diagnostic_id)
+			return;
+		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.device_next_id);
+		g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
+		g_runtime_device_stats.device_last_id.store(diagnostic_id, std::memory_order_relaxed);
+	}
+
 	bool Close()
 	{
 		bool ok = true;
@@ -1016,10 +1026,7 @@ struct VulkanDeviceContext {
 		cleanup_ok = true;
 		cleanup_result = 0;
 		cleanup_error.Clear();
-		diagnostic_id = NextDiagnosticId(g_runtime_device_stats.device_next_id);
-		g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
-		g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
-		g_runtime_device_stats.device_last_id.store(diagnostic_id, std::memory_order_relaxed);
+		RegisterDiagnostics();
 		int chosen_queue_index = -1;
 		int queue_rank = -1;
 		for(const auto& q : device_info.queue_families) {
@@ -1925,6 +1932,112 @@ bool TestVulkanSurfaceOwnerCompatibility(bool validation)
 	return match;
 }
 
+static HWND CreateHiddenSurfaceTestWindow()
+{
+	return CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+}
+
+bool TestVulkanSurfaceSessionLifecycle(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result)
+{
+	out_result = VulkanSurfaceSessionAccountingResult();
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	HWND hwnd = CreateHiddenSurfaceTestWindow();
+	if(!hwnd)
+		return false;
+
+	VulkanSurfaceSession session;
+	GpuNativeWindowDesc window;
+	window.kind = GpuNativeWindowKind::Win32;
+	window.handle = (uint64_t)(uintptr_t)hwnd;
+	bool ok = session.Open(validation, window, resolver);
+	out_result.open_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(!ok) {
+		session.Close();
+		DestroyWindow(hwnd);
+		return false;
+	}
+	if(out_result.open_diag.device_create_count != 1 || out_result.open_diag.device_live_count != 1 || out_result.open_diag.device_id == 0) {
+		session.Close();
+		DestroyWindow(hwnd);
+		return false;
+	}
+
+	session.Close();
+	out_result.report = session.GetReport();
+	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	session.Close();
+	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	DestroyWindow(hwnd);
+	return true;
+}
+
+bool TestVulkanSurfaceSessionPostCreateFailure(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result)
+{
+	out_result = VulkanSurfaceSessionAccountingResult();
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	HWND hwnd = CreateHiddenSurfaceTestWindow();
+	if(!hwnd)
+		return false;
+
+	VulkanSurfaceSession session;
+	GpuNativeWindowDesc window;
+	window.kind = GpuNativeWindowKind::Win32;
+	window.handle = (uint64_t)(uintptr_t)hwnd;
+	if(session.Open(validation, window, resolver)) {
+		session.Close();
+		DestroyWindow(hwnd);
+		return false;
+	}
+	out_result.report = session.GetReport();
+	out_result.error = session.GetError();
+	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	session.Close();
+	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	DestroyWindow(hwnd);
+	return true;
+}
+
+bool TestVulkanSurfaceSessionCleanupFailure(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result)
+{
+	out_result = VulkanSurfaceSessionAccountingResult();
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	HWND hwnd = CreateHiddenSurfaceTestWindow();
+	if(!hwnd)
+		return false;
+
+	VulkanValidationTestInjection injection;
+	injection.enabled = true;
+	injection.point = VulkanValidationTestPoint::DuringDeviceCleanup;
+	injection.force_device_cleanup_failure = true;
+	injection.device_cleanup_result = VK_ERROR_DEVICE_LOST;
+	SetVulkanValidationTestInjection(injection);
+
+	VulkanSurfaceSession session;
+	GpuNativeWindowDesc window;
+	window.kind = GpuNativeWindowKind::Win32;
+	window.handle = (uint64_t)(uintptr_t)hwnd;
+	bool ok = session.Open(validation, window, resolver);
+	out_result.open_diag = GetVulkanRuntimeDeviceDiagnostics();
+	if(!ok) {
+		ClearVulkanValidationTestInjection();
+		session.Close();
+		DestroyWindow(hwnd);
+		return false;
+	}
+
+	session.Close();
+	out_result.report = session.GetReport();
+	out_result.close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	session.Close();
+	out_result.repeat_close_diag = GetVulkanRuntimeDeviceDiagnostics();
+	ClearVulkanValidationTestInjection();
+	DestroyWindow(hwnd);
+	return true;
+}
+
 bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
 {
 	out_diag = VulkanRuntimeDeviceDiagnostics();
@@ -2766,10 +2879,10 @@ const String& VulkanSurfaceSession::GetError() const
 
 static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanup_ok)
 {
-	impl.report.instance_cleanup_ok = impl.ctx.instance_owner.instance.instance == VK_NULL_HANDLE;
-	impl.report.surface_cleanup_ok = impl.ctx.surface == VK_NULL_HANDLE;
-	impl.report.device_cleanup_ok = impl.device.device == VK_NULL_HANDLE;
-	impl.report.dispatch_cleanup_ok = impl.ctx.instance_owner.dispatch.IsCleared();
+	impl.report.instance_cleanup_ok = impl.ctx.instance_owner.cleanup_ok;
+	impl.report.surface_cleanup_ok = impl.ctx.cleanup_ok;
+	impl.report.device_cleanup_ok = impl.device.cleanup_ok;
+	impl.report.dispatch_cleanup_ok = impl.ctx.instance_owner.dispatch.cleanup_ok;
 	impl.report.native_window = GpuNativeWindowDesc();
 	FinalizeSurfaceCleanup(impl.report, impl.ctx, impl.device, cleanup_ok);
 	impl.ready = false;
@@ -2790,6 +2903,14 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->error = message;
 		Close();
 		return false;
+	};
+	auto fail_device_setup = [&](const String& message) {
+		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
+		impl->report.device_error = message;
+		impl->report.status_text = StatusText(impl->report.status);
+		impl->report.preflight.status = impl->report.status;
+		impl->report.preflight.status_text = impl->report.status_text;
+		return fail(message);
 	};
 
 	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
@@ -2950,20 +3071,18 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close());
 		return false;
 	}
-	g_runtime_device_stats.device_create_count.fetch_add(1, std::memory_order_relaxed);
-	g_runtime_device_stats.device_live_count.fetch_add(1, std::memory_order_relaxed);
+	impl->device.RegisterDiagnostics();
 
-	if(!ResolveDeviceProc(impl->device.destroy_device, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail(impl->error);
-	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail(impl->error);
-	if(!ResolveDeviceProc(impl->device.device_wait_idle, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkDeviceWaitIdle", impl->error)) return fail(impl->error);
+	if(!ResolveDeviceProc(impl->device.destroy_device, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkDestroyDevice", impl->error)) return fail_device_setup(impl->error);
+	if(!ResolveDeviceProc(impl->device.get_device_queue, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkGetDeviceQueue", impl->error)) return fail_device_setup(impl->error);
+	if(!ResolveDeviceProc(impl->device.device_wait_idle, impl->ctx.instance_owner.dispatch.proc_filter, impl->ctx.instance_owner.instance.get_device_proc_addr, impl->device.device, "vkDeviceWaitIdle", impl->error)) return fail_device_setup(impl->error);
 	impl->device.get_device_queue(impl->device.device, (uint32_t)choice.graphics_family, 0, &impl->device.graphics_queue);
 	if(impl->device.graphics_queue == VK_NULL_HANDLE) {
 		impl->error = "vkGetDeviceQueue returned VK_NULL_HANDLE";
 		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
 		impl->report.device_error = impl->error;
 		CopySurfaceValidationCapture(impl->report, impl->ctx.instance_owner.instance.capture);
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close());
-		return false;
+		return fail(impl->error);
 	}
 	if(choice.same_family)
 		impl->device.present_queue = impl->device.graphics_queue;
@@ -2974,8 +3093,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 			impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
 			impl->report.device_error = impl->error;
 			CopySurfaceValidationCapture(impl->report, impl->ctx.instance_owner.instance.capture);
-			FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close());
-			return false;
+			return fail(impl->error);
 		}
 	}
 
@@ -3015,20 +3133,9 @@ void VulkanSurfaceSession::Close()
 {
 	if(!impl)
 		return;
-	bool cleanup_ok = true;
-	if(impl->device.device) {
-		cleanup_ok = impl->device.Close() && cleanup_ok;
-		impl->report.device_cleanup_ok = true;
-		g_runtime_device_stats.device_live_count.fetch_sub(1, std::memory_order_relaxed);
-	}
-	cleanup_ok = impl->ctx.Close() && cleanup_ok;
-	FinalizeSurfaceSession(*impl, cleanup_ok);
-	impl->report.clean_shutdown = cleanup_ok && impl->report.cleanup_state_cleared;
-	impl->report.cleanup_state_cleared = impl->ctx.IsCleared() && impl->device.IsCleared();
-	impl->report.instance_cleanup_ok = impl->ctx.instance_owner.instance.instance == VK_NULL_HANDLE;
-	impl->report.surface_cleanup_ok = impl->ctx.surface == VK_NULL_HANDLE;
-	impl->report.dispatch_cleanup_ok = impl->ctx.instance_owner.dispatch.IsCleared();
-	impl->report.native_window = GpuNativeWindowDesc();
+	bool device_cleanup_ok = !impl->device.device || impl->device.Close();
+	bool ctx_cleanup_ok = impl->ctx.Close();
+	FinalizeSurfaceSession(*impl, device_cleanup_ok && ctx_cleanup_ok);
 	impl->open = false;
 	impl->ready = false;
 }

@@ -11,10 +11,14 @@ using Upp::VulkanTestHooks::TestVulkanInstanceOwner;
 using Upp::VulkanTestHooks::TestVulkanInstanceOwnerCompatibility;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwner;
 using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
+using Upp::VulkanTestHooks::TestVulkanSurfaceSessionLifecycle;
+using Upp::VulkanTestHooks::TestVulkanSurfaceSessionPostCreateFailure;
+using Upp::VulkanTestHooks::TestVulkanSurfaceSessionCleanupFailure;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntrySafety;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
+using Upp::VulkanTestHooks::VulkanSurfaceSessionAccountingResult;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
@@ -833,6 +837,60 @@ static bool TestSurfaceOwner()
 	return true;
 }
 
+static bool TestSurfaceSessionDeviceAccounting()
+{
+	VulkanSurfaceSessionAccountingResult result;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSurfaceSessionLifecycle(true, &TestResolver, result), "surface session lifecycle should succeed")) return false;
+	if(!Check(result.open_diag.device_create_count == 1, "surface session should create exactly one device")) return false;
+	if(!Check(result.open_diag.device_live_count == 1, "surface session device live count should be one while open")) return false;
+	if(!Check(result.open_diag.device_id != 0, "surface session device diagnostic id should be nonzero")) return false;
+	if(!Check(result.close_diag.device_create_count == 1, "surface session close should keep one device creation")) return false;
+	if(!Check(result.close_diag.device_live_count == 0, "surface session device live count should return to zero")) return false;
+	if(!Check(result.close_diag.runtime_live_count == 0 && result.close_diag.instance_live_count == 0 && result.close_diag.debug_messenger_live_count == 0 && result.close_diag.surface_live_count == 0 && result.close_diag.device_live_count == 0, "all live counts should be zero after normal surface-session close")) return false;
+	if(!Check(result.repeat_close_diag.device_live_count == 0, "repeated surface-session close should keep device live count at zero")) return false;
+	if(!Check(result.repeat_close_diag.runtime_live_count == 0 && result.repeat_close_diag.instance_live_count == 0 && result.repeat_close_diag.debug_messenger_live_count == 0 && result.repeat_close_diag.surface_live_count == 0 && result.repeat_close_diag.device_live_count == 0, "repeated close should not change counts")) return false;
+	if(!Check(result.report.device_cleanup_ok, "normal close should report device cleanup ok")) return false;
+	if(!Check(result.report.clean_shutdown, "normal close should report clean shutdown")) return false;
+	if(!Check(result.report.cleanup_state_cleared, "normal close should clear cleanup state")) return false;
+	if(!Check(result.report.instance_cleanup_ok && result.report.surface_cleanup_ok && result.report.dispatch_cleanup_ok, "normal close should report component cleanup success")) return false;
+
+	g_missing_proc = "vkGetDeviceQueue";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSurfaceSessionPostCreateFailure(true, &TestResolver, result), "post-create failure surface-session test should succeed")) return false;
+	g_missing_proc = nullptr;
+	if(!Check(result.report.status == VulkanProbeStatus::DeviceCreationFailed, "post-create failure should report device creation failure")) return false;
+	if(!Check(result.report.device_error == "vkGetDeviceQueue", "post-create failure should record the missing device proc")) return false;
+	if(!Check(result.report.device_cleanup_ok, "post-create failure should still report device cleanup ok")) return false;
+	if(!Check(result.report.clean_shutdown, "post-create failure should still cleanly shut down")) return false;
+	if(!Check(result.report.cleanup_state_cleared, "post-create failure should clear cleanup state")) return false;
+	if(!Check(result.close_diag.device_create_count == 1, "post-create failure should count one device creation")) return false;
+	if(!Check(result.close_diag.device_live_count == 0, "post-create failure should leave no live device")) return false;
+	if(!Check(result.close_diag.runtime_live_count == 0 && result.close_diag.instance_live_count == 0 && result.close_diag.debug_messenger_live_count == 0 && result.close_diag.surface_live_count == 0, "post-create failure should clear all live counts")) return false;
+	if(!Check(result.close_diag.device_id != 0, "post-create failure should keep a nonzero device id")) return false;
+
+	VulkanSurfaceSessionAccountingResult recovery;
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSurfaceSessionLifecycle(true, &TestResolver, recovery), "surface session should still open after post-create failure")) return false;
+	if(!Check(recovery.close_diag.device_live_count == 0, "recovery run should end with zero live devices")) return false;
+	if(!Check(recovery.report.clean_shutdown, "recovery run should cleanly shut down")) return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	if(!Check(TestVulkanSurfaceSessionCleanupFailure(true, &TestResolver, result), "cleanup-failure surface-session test should succeed")) return false;
+	if(!Check(!result.report.device_cleanup_ok, "forced cleanup failure should report device cleanup failure")) return false;
+	if(!Check(!result.report.clean_shutdown, "forced cleanup failure should not claim clean shutdown")) return false;
+	if(!Check(result.report.cleanup_state_cleared, "forced cleanup failure should still clear state")) return false;
+	if(!Check(result.open_diag.device_live_count == 1, "forced cleanup failure should create one live device before close")) return false;
+	if(!Check(result.open_diag.device_id != 0, "forced cleanup failure should have nonzero device id while open")) return false;
+	if(!Check(result.close_diag.device_live_count == 0, "forced cleanup failure should end with zero live devices")) return false;
+	if(!Check(result.close_diag.runtime_live_count == 0 && result.close_diag.instance_live_count == 0 && result.close_diag.debug_messenger_live_count == 0 && result.close_diag.surface_live_count == 0, "forced cleanup failure should clear all live counts")) return false;
+	if(!Check(result.repeat_close_diag.device_live_count == 0, "forced cleanup repeated close should be safe")) return false;
+	if(!Check(result.repeat_close_diag.runtime_live_count == 0 && result.repeat_close_diag.instance_live_count == 0 && result.repeat_close_diag.debug_messenger_live_count == 0 && result.repeat_close_diag.surface_live_count == 0 && result.repeat_close_diag.device_live_count == 0, "forced cleanup repeated close should not change counts")) return false;
+
+	return true;
+}
+
 static bool TestSharedInstanceEntry()
 {
 	VulkanRuntimeDeviceDiagnostics diag;
@@ -889,6 +947,7 @@ CONSOLE_APP_MAIN
 	ok &= TestInstanceCompatibility();
 	ok &= TestInstanceOwner();
 	ok &= TestSurfaceOwner();
+	ok &= TestSurfaceSessionDeviceAccounting();
 	ok &= TestSharedInstanceEntry();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
