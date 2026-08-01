@@ -17,6 +17,7 @@ using Upp::VulkanTestHooks::TestVulkanSurfaceSessionCleanupFailure;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryReuse;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryStability;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryFailures;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryInvalidRelease;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntrySafety;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
@@ -941,10 +942,18 @@ static bool TestSharedInstanceRegistry()
 	if(!Check(TestVulkanSharedInstanceRegistryReuse(&TestResolver, first, second), "registry reuse should succeed")) return false;
 	if(!Check(first.entry != nullptr && second.entry == first.entry, "compatible reuse should return same entry")) return false;
 	if(!Check(first.newly_created && !second.newly_created, "newly_created should be true only for first acquisition")) return false;
-	if(!Check(first.diag.device_create_count == 1 && second.diag.device_create_count == 1, "reuse should not create another device")) return false;
+	if(!Check(first.diag.runtime_create_count == 1 && second.diag.runtime_create_count == 1, "reuse should not create another runtime")) return false;
+	if(!Check(first.diag.instance_create_count == 1 && second.diag.instance_create_count == 1, "reuse should not create another instance")) return false;
+	if(!Check(first.diag.debug_messenger_create_count == 1 && second.diag.debug_messenger_create_count == 1, "reuse should not create another debug messenger")) return false;
+	if(!Check(first.diag.device_create_count == 0 && second.diag.device_create_count == 0, "registry reuse should not create logical devices")) return false;
+	if(!Check(first.diag.runtime_live_count == 1 && first.diag.instance_live_count == 1 && first.diag.debug_messenger_live_count == 1, "first acquisition should keep runtime, instance, and debug messenger live")) return false;
+	if(!Check(second.diag.runtime_live_count == 1 && second.diag.instance_live_count == 1 && second.diag.debug_messenger_live_count == 1, "reuse should keep runtime, instance, and debug messenger live")) return false;
+	if(!Check(first.preflight.status == second.preflight.status && first.preflight.status_text == second.preflight.status_text, "reused preflight should match status and text")) return false;
+	if(!Check(first.debug_messenger_created == second.debug_messenger_created, "reused debug-messenger state should match")) return false;
 	if(!Check(TestVulkanSharedInstanceRegistryStability(&TestResolver, first, incompatible, release), "registry stability should succeed")) return false;
 	if(!Check(release.registry_entry_count == 0, "final release should remove entry")) return false;
 	if(!Check(TestVulkanSharedInstanceRegistryFailures(&TestResolver, dispatch_failure, instance_failure, cleanup_failure), "registry failures should succeed")) return false;
+	if(!Check(TestVulkanSharedInstanceRegistryInvalidRelease(&TestResolver, release), "registry invalid release should succeed")) return false;
 	return true;
 }
 
