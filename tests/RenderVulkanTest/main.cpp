@@ -18,6 +18,7 @@ using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryReuse;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryStability;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryFailures;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryInvalidRelease;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceLease;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntrySafety;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
@@ -25,6 +26,7 @@ using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanSurfaceSessionAccountingResult;
 using Upp::VulkanTestHooks::VulkanSharedInstanceRegistryAcquireResult;
 using Upp::VulkanTestHooks::VulkanSharedInstanceRegistryReleaseResult;
+using Upp::VulkanTestHooks::VulkanSharedInstanceLeaseTestResult;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
@@ -968,6 +970,18 @@ static bool TestSharedInstanceRegistry()
 	return true;
 }
 
+static bool TestSharedInstanceLease()
+{
+	VulkanSharedInstanceLeaseTestResult result;
+	if(!Check(TestVulkanSharedInstanceLease(&TestResolver, result), "shared instance lease tests should succeed")) return false;
+	if(!Check(result.automatic_release && result.two_lease_reuse && result.non_final_release && result.final_release, "lease destructor and shared acquisition release should be explicit")) return false;
+	if(!Check(result.reset_idempotent && result.move_transfer && result.occupied_refused, "lease reset, move, and occupied refusal should be explicit")) return false;
+	if(!Check(result.dispatch_failure_empty && result.instance_failure_empty && result.recovery, "failed lease acquisitions should remain empty and recover")) return false;
+	if(!Check(result.cleanup_failure_empty && result.no_double_release && result.retained_acquire_count == 0 && !result.retained_opened && !result.retained_cleanup_ok && result.retained_owner_cleared, "cleanup failure should empty the lease without a second release")) return false;
+	if(!Check(result.detailed_outcomes, "detailed registry release outcomes should be explicit")) return false;
+	return Check(result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0, "lease tests should finish with zero live resources");
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -999,6 +1013,7 @@ CONSOLE_APP_MAIN
 	ok &= TestSurfaceSessionDeviceAccounting();
 	ok &= TestSharedInstanceEntry();
 	ok &= TestSharedInstanceRegistry();
+	ok &= TestSharedInstanceLease();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");

@@ -98,6 +98,30 @@ struct VulkanSharedInstanceRegistryReleaseResult {
 	int foreign_acquire_count = 0;
 };
 
+struct VulkanSharedInstanceLeaseTestResult {
+	bool automatic_release = false;
+	bool two_lease_reuse = false;
+	bool non_final_release = false;
+	bool final_release = false;
+	bool reset_idempotent = false;
+	bool move_transfer = false;
+	bool occupied_refused = false;
+	bool dispatch_failure_empty = false;
+	bool instance_failure_empty = false;
+	bool recovery = false;
+	bool cleanup_failure_empty = false;
+	bool no_double_release = false;
+	bool detailed_outcomes = false;
+	VulkanRuntimeDeviceDiagnostics diag;
+	VulkanRuntimeDeviceDiagnostics pre_refusal_diag;
+	VulkanRuntimeDeviceDiagnostics post_refusal_diag;
+	int registry_entry_count = 0;
+	int retained_acquire_count = 0;
+	bool retained_opened = false;
+	bool retained_cleanup_ok = true;
+	bool retained_owner_cleared = false;
+};
+
 enum class VulkanValidationTestPoint {
 	None,
 	BeforeDeviceCreation,
@@ -139,6 +163,7 @@ bool TestVulkanSharedInstanceRegistryReuse(VulkanProcResolver resolver, VulkanSh
 bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& first, VulkanSharedInstanceRegistryAcquireResult& incompatible, VulkanSharedInstanceRegistryReleaseResult& release);
 bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& dispatch_failure, VulkanSharedInstanceRegistryAcquireResult& instance_failure, VulkanSharedInstanceRegistryAcquireResult& cleanup_failure);
 bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver, VulkanSharedInstanceRegistryReleaseResult& result);
+bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result);
 
 }
 

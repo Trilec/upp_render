@@ -3,6 +3,7 @@
 #include "RenderVulkanTestHooks.h"
 
 #include <atomic>
+#include <type_traits>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -981,6 +982,12 @@ struct VulkanSharedInstanceEntry {
 
 struct VulkanSharedInstanceRegistry {
 	Vector<One<VulkanSharedInstanceEntry>> entries;
+	struct ReleaseOutcome {
+		bool acquisition_released = false;
+		bool entry_retained = false;
+		bool entry_removed = false;
+		bool cleanup_ok = false;
+	};
 
 	~VulkanSharedInstanceRegistry()
 	{
@@ -1040,27 +1047,117 @@ struct VulkanSharedInstanceRegistry {
 		return true;
 	}
 
-	bool Release(VulkanSharedInstanceEntry *entry)
+	ReleaseOutcome ReleaseDetailed(VulkanSharedInstanceEntry *entry)
 	{
+		ReleaseOutcome outcome;
 		if(!entry)
-			return false;
+			return outcome;
 		for(int i = 0; i < entries.GetCount(); ++i) {
 			if(&*entries[i] != entry)
 				continue;
 			if(!entry->Release())
-				return false;
+				return outcome;
+			outcome.acquisition_released = true;
 			if(entry->IsUnused()) {
-				if(!entry->Close())
-					return false;
+				outcome.cleanup_ok = entry->Close();
+				if(!outcome.cleanup_ok) {
+					outcome.entry_retained = true;
+					return outcome;
+				}
 				entries.Remove(i);
+				outcome.entry_removed = true;
+				return outcome;
 			}
-			return true;
+			outcome.entry_retained = true;
+			outcome.cleanup_ok = true;
+			return outcome;
 		}
-		return false;
+		return outcome;
+	}
+
+	bool Release(VulkanSharedInstanceEntry *entry)
+	{
+		ReleaseOutcome outcome = ReleaseDetailed(entry);
+		return outcome.acquisition_released && outcome.cleanup_ok;
 	}
 
 	int GetEntryCount() const { return entries.GetCount(); }
 };
+
+struct VulkanSharedInstanceLease {
+	VulkanSharedInstanceRegistry *registry = nullptr;
+	VulkanSharedInstanceEntry *entry = nullptr;
+
+	VulkanSharedInstanceLease() = default;
+	VulkanSharedInstanceLease(const VulkanSharedInstanceLease&) = delete;
+	VulkanSharedInstanceLease& operator=(const VulkanSharedInstanceLease&) = delete;
+	VulkanSharedInstanceLease(VulkanSharedInstanceLease&& other) noexcept
+		: registry(other.registry), entry(other.entry)
+	{
+		other.registry = nullptr;
+		other.entry = nullptr;
+	}
+	~VulkanSharedInstanceLease()
+	{
+		if(IsAcquired())
+			ASSERT(Reset() || !IsAcquired());
+	}
+
+	bool IsAcquired() const { return registry != nullptr && entry != nullptr; }
+	bool IsEmpty() const { return registry == nullptr && entry == nullptr; }
+
+	bool Acquire(VulkanSharedInstanceRegistry& target, const VulkanInstanceOptions& options,
+		VulkanPreflightReport& preflight, bool& debug_messenger_created, String& error,
+		VulkanInstanceOwnerOpenFailure& failure_stage, VulkanProcResolver resolver = nullptr,
+		bool *newly_created = nullptr)
+	{
+		if(IsAcquired()) {
+			preflight = VulkanPreflightReport();
+			debug_messenger_created = false;
+			failure_stage = VulkanInstanceOwnerOpenFailure::None;
+			if(newly_created)
+				*newly_created = false;
+			error = "shared instance lease is already acquired";
+			return false;
+		}
+		VulkanSharedInstanceEntry *acquired = nullptr;
+		bool created = false;
+		if(!target.Acquire(options, preflight, debug_messenger_created, error, failure_stage, resolver, acquired, created)) {
+			registry = nullptr;
+			entry = nullptr;
+			if(newly_created)
+				*newly_created = false;
+			return false;
+		}
+		registry = &target;
+		entry = acquired;
+		if(newly_created)
+			*newly_created = created;
+		return true;
+	}
+
+	bool Reset()
+	{
+		if(IsEmpty())
+			return true;
+		ASSERT(IsAcquired());
+		VulkanSharedInstanceRegistry *old_registry = registry;
+		VulkanSharedInstanceEntry *old_entry = entry;
+		VulkanSharedInstanceRegistry::ReleaseOutcome outcome = old_registry->ReleaseDetailed(old_entry);
+		if(outcome.acquisition_released) {
+			registry = nullptr;
+			entry = nullptr;
+		}
+		else {
+			ASSERT(false);
+		}
+		return outcome.acquisition_released && outcome.cleanup_ok;
+	}
+};
+
+static_assert(!std::is_copy_constructible<VulkanSharedInstanceLease>::value, "shared instance lease must not be copyable");
+static_assert(!std::is_copy_assignable<VulkanSharedInstanceLease>::value, "shared instance lease must not be copy assignable");
+static_assert(std::is_move_constructible<VulkanSharedInstanceLease>::value, "shared instance lease must be movable");
 
 struct VulkanDeviceContext {
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -2694,6 +2791,177 @@ bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver,
 	result.registry_entry_count = result.registry_a_count + result.registry_b_count;
 	result.diag = GetVulkanRuntimeDeviceDiagnostics();
 	return result.registry_entry_count == 0;
+}
+
+bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result)
+{
+	result = VulkanSharedInstanceLeaseTestResult();
+	VulkanInstanceOptions opts;
+	opts.validation = true;
+	opts.application_name = "LeaseTest";
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport preflight;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		if(!lease.Acquire(registry, opts, preflight, debug, error, stage, resolver, &created) || !lease.IsAcquired() || registry.GetEntryCount() != 1 || ((VulkanSharedInstanceEntry *)lease.entry)->acquire_count != 1 || !created)
+			return false;
+		result.automatic_release = true;
+	}
+	VulkanRuntimeDeviceDiagnostics after_auto = GetVulkanRuntimeDeviceDiagnostics();
+	if(after_auto.runtime_live_count != 0 || after_auto.instance_live_count != 0 || after_auto.debug_messenger_live_count != 0 || after_auto.device_live_count != 0)
+		return false;
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease first, second;
+		VulkanPreflightReport p1, p2;
+		bool d1 = false, d2 = false, n1 = false, n2 = false;
+		VulkanInstanceOwnerOpenFailure s1 = VulkanInstanceOwnerOpenFailure::None, s2 = VulkanInstanceOwnerOpenFailure::None;
+		String e1, e2;
+		VulkanInstanceOptions second_opts = opts;
+		second_opts.application_name = "LeaseSecond";
+		if(!first.Acquire(registry, opts, p1, d1, e1, s1, resolver, &n1) || !second.Acquire(registry, second_opts, p2, d2, e2, s2, resolver, &n2) || first.entry != second.entry || !n1 || n2 || ((VulkanSharedInstanceEntry *)first.entry)->acquire_count != 2 || registry.GetEntryCount() != 1)
+			return false;
+		VulkanRuntimeDeviceDiagnostics before_reset = GetVulkanRuntimeDeviceDiagnostics();
+		if(!first.Reset() || first.IsAcquired() || ((VulkanSharedInstanceEntry *)second.entry)->acquire_count != 1 || registry.GetEntryCount() != 1 || !SameRuntimeDiagnostics(before_reset, GetVulkanRuntimeDeviceDiagnostics()))
+			return false;
+		result.non_final_release = true;
+		if(!second.Reset() || registry.GetEntryCount() != 0)
+			return false;
+		result.two_lease_reuse = true;
+		result.final_release = true;
+	}
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport p;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		if(!lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.Reset()) return false;
+		VulkanRuntimeDeviceDiagnostics before = GetVulkanRuntimeDeviceDiagnostics();
+		if(!lease.Reset() || lease.IsAcquired() || registry.GetEntryCount() != 0 || !SameRuntimeDiagnostics(before, GetVulkanRuntimeDeviceDiagnostics())) return false;
+		result.reset_idempotent = true;
+	}
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease source;
+		VulkanPreflightReport p;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		if(!source.Acquire(registry, opts, p, debug, error, stage, resolver, &created)) return false;
+		void *identity = source.entry;
+		VulkanRuntimeDeviceDiagnostics before = GetVulkanRuntimeDeviceDiagnostics();
+		VulkanSharedInstanceLease destination(static_cast<VulkanSharedInstanceLease&&>(source));
+		if(!source.IsEmpty() || !destination.IsAcquired() || destination.entry != identity || ((VulkanSharedInstanceEntry *)destination.entry)->acquire_count != 1 || !SameRuntimeDiagnostics(before, GetVulkanRuntimeDeviceDiagnostics()) || !destination.Reset()) return false;
+		result.move_transfer = true;
+	}
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport p;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		if(!lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created)) return false;
+		void *identity = lease.entry;
+		int count = ((VulkanSharedInstanceEntry *)identity)->acquire_count;
+		VulkanRuntimeDeviceDiagnostics before = GetVulkanRuntimeDeviceDiagnostics();
+		VulkanPreflightReport refused_p;
+		bool refused_debug = true, refused_new = true;
+		VulkanInstanceOwnerOpenFailure refused_stage = VulkanInstanceOwnerOpenFailure::Dispatch;
+		String refused_error;
+		VulkanSharedInstanceEntry *refused_entry = (VulkanSharedInstanceEntry *)identity;
+		if(lease.Acquire(registry, opts, refused_p, refused_debug, refused_error, refused_stage, resolver, &refused_new) || refused_entry != (VulkanSharedInstanceEntry *)identity || refused_new || refused_debug || refused_stage != VulkanInstanceOwnerOpenFailure::None || refused_error != "shared instance lease is already acquired" || ((VulkanSharedInstanceEntry *)identity)->acquire_count != count || registry.GetEntryCount() != 1 || !SameRuntimeDiagnostics(before, GetVulkanRuntimeDeviceDiagnostics()) || !lease.Reset()) return false;
+		result.occupied_refused = true;
+	}
+
+	struct MissingProcReset { ~MissingProcReset() { g_registry_test_missing_proc = nullptr; } } reset_missing_proc;
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport p;
+		bool debug = false, created = true;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		g_registry_test_missing_proc = "vkEnumerateInstanceLayerProperties";
+		if(lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.IsEmpty() || created || stage != VulkanInstanceOwnerOpenFailure::Dispatch || registry.GetEntryCount() != 0 || GetVulkanRuntimeDeviceDiagnostics().runtime_live_count != 0) return false;
+		g_registry_test_missing_proc = nullptr;
+		if(!lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.Reset()) return false;
+		result.dispatch_failure_empty = true;
+	}
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport p;
+		bool debug = false, created = true;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		g_registry_test_missing_proc = "vkGetDeviceProcAddr";
+		opts.validation = true;
+		if(lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.IsEmpty() || created || stage != VulkanInstanceOwnerOpenFailure::Instance || error != "vkGetDeviceProcAddr" || registry.GetEntryCount() != 0 || GetVulkanRuntimeDeviceDiagnostics().instance_live_count != 0) return false;
+		g_registry_test_missing_proc = nullptr;
+		if(!lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.Reset()) return false;
+		result.instance_failure_empty = true;
+		result.recovery = true;
+	}
+
+	ClearVulkanRuntimeDeviceDiagnostics();
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanSharedInstanceLease lease;
+		VulkanPreflightReport p;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		if(!lease.Acquire(registry, opts, p, debug, error, stage, resolver, &created) || !lease.entry) return false;
+		VulkanSharedInstanceEntry *retained = lease.entry;
+		retained->owner.cleanup_ok = false;
+		if(lease.Reset() || lease.IsAcquired() || registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared()) return false;
+		result.cleanup_failure_empty = true;
+		result.retained_acquire_count = retained->acquire_count;
+		result.retained_opened = retained->opened;
+		result.retained_cleanup_ok = retained->cleanup_ok;
+		result.retained_owner_cleared = retained->owner.IsCleared();
+		VulkanRuntimeDeviceDiagnostics before = GetVulkanRuntimeDeviceDiagnostics();
+		if(!lease.Reset() || !SameRuntimeDiagnostics(before, GetVulkanRuntimeDeviceDiagnostics())) return false;
+		result.no_double_release = true;
+	}
+
+	{
+		VulkanSharedInstanceRegistry registry;
+		VulkanPreflightReport p;
+		bool debug = false, created = false;
+		VulkanInstanceOwnerOpenFailure stage = VulkanInstanceOwnerOpenFailure::None;
+		String error;
+		VulkanSharedInstanceEntry *entry = nullptr;
+		if(!registry.Acquire(opts, p, debug, error, stage, resolver, entry, created) || !registry.Acquire(opts, p, debug, error, stage, resolver, entry, created)) return false;
+		VulkanSharedInstanceRegistry::ReleaseOutcome non_final = registry.ReleaseDetailed(entry);
+		VulkanSharedInstanceRegistry::ReleaseOutcome final = registry.ReleaseDetailed(entry);
+		VulkanSharedInstanceRegistry::ReleaseOutcome invalid = registry.ReleaseDetailed(nullptr);
+		VulkanSharedInstanceEntry *failed_entry = nullptr;
+		if(!registry.Acquire(opts, p, debug, error, stage, resolver, failed_entry, created) || !failed_entry) return false;
+		failed_entry->owner.cleanup_ok = false;
+		VulkanSharedInstanceRegistry::ReleaseOutcome cleanup_failed = registry.ReleaseDetailed(failed_entry);
+		if(!non_final.acquisition_released || !non_final.entry_retained || non_final.entry_removed || !non_final.cleanup_ok || !final.acquisition_released || final.entry_retained || !final.entry_removed || !final.cleanup_ok || invalid.acquisition_released || invalid.entry_retained || invalid.entry_removed || invalid.cleanup_ok || !cleanup_failed.acquisition_released || !cleanup_failed.entry_retained || cleanup_failed.entry_removed || cleanup_failed.cleanup_ok || registry.GetEntryCount() != 1) return false;
+		result.detailed_outcomes = true;
+	}
+	result.diag = GetVulkanRuntimeDeviceDiagnostics();
+	return result.automatic_release && result.two_lease_reuse && result.non_final_release && result.final_release && result.reset_idempotent && result.move_transfer && result.occupied_refused && result.dispatch_failure_empty && result.instance_failure_empty && result.recovery && result.cleanup_failure_empty && result.no_double_release && result.detailed_outcomes && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0;
 }
 
 } // namespace VulkanTestHooks
