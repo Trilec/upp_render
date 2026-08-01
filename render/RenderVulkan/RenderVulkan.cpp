@@ -2403,6 +2403,36 @@ bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_s
 	return true;
 }
 
+static bool SameReusablePreflight(const VulkanPreflightReport& a, const VulkanPreflightReport& b)
+{
+	if(a.status != b.status || a.status_text != b.status_text || a.loader_available != b.loader_available || a.loader_version != b.loader_version || a.validation_requested != b.validation_requested || a.validation_available != b.validation_available || a.debug_utils_available != b.debug_utils_available || a.instance_created != b.instance_created || a.clean_shutdown != b.clean_shutdown || a.cleanup_state_cleared != b.cleanup_state_cleared || a.validation_warning_count != b.validation_warning_count || a.validation_error_count != b.validation_error_count || a.runtime_error != b.runtime_error || a.loader_error != b.loader_error || a.layer_error != b.layer_error || a.extension_error != b.extension_error || a.instance_error != b.instance_error || a.physical_device_error != b.physical_device_error || a.suitable_device_count != b.suitable_device_count || a.validation_messages != b.validation_messages)
+		return false;
+	if(a.instance_layers.GetCount() != b.instance_layers.GetCount() || a.instance_extensions.GetCount() != b.instance_extensions.GetCount() || a.devices.GetCount() != b.devices.GetCount())
+		return false;
+	for(int i = 0; i < a.instance_layers.GetCount(); ++i)
+		if(a.instance_layers[i].name != b.instance_layers[i].name || a.instance_layers[i].description != b.instance_layers[i].description || a.instance_layers[i].spec_version != b.instance_layers[i].spec_version)
+			return false;
+	for(int i = 0; i < a.instance_extensions.GetCount(); ++i)
+		if(a.instance_extensions[i].name != b.instance_extensions[i].name || a.instance_extensions[i].spec_version != b.instance_extensions[i].spec_version)
+			return false;
+	for(int i = 0; i < a.devices.GetCount(); ++i) {
+		const VulkanDeviceInfo& x = a.devices[i];
+		const VulkanDeviceInfo& y = b.devices[i];
+		if(x.name != y.name || x.type != y.type || x.vendor_id != y.vendor_id || x.device_id != y.device_id || x.driver_version != y.driver_version || x.api_version != y.api_version || x.graphics_queue != y.graphics_queue || x.dynamic_rendering != y.dynamic_rendering || x.synchronization2 != y.synchronization2 || x.suitable != y.suitable || x.selection_reason != y.selection_reason || x.selected_queue_family_index != y.selected_queue_family_index || x.selected_queue_count != y.selected_queue_count || x.selected_queue_flags != y.selected_queue_flags || x.selected_queue_compute != y.selected_queue_compute || x.selected_queue_transfer != y.selected_queue_transfer || x.logical_device_created != y.logical_device_created || x.graphics_queue_acquired != y.graphics_queue_acquired || x.missing_requirements != y.missing_requirements || x.queue_families.GetCount() != y.queue_families.GetCount() || x.device_extensions.GetCount() != y.device_extensions.GetCount())
+			return false;
+		for(int j = 0; j < x.queue_families.GetCount(); ++j) {
+			const VulkanQueueFamilyInfo& q = x.queue_families[j];
+			const VulkanQueueFamilyInfo& r = y.queue_families[j];
+			if(q.index != r.index || q.flags != r.flags || q.count != r.count || q.graphics != r.graphics || q.present != r.present || q.compute != r.compute || q.transfer != r.transfer || q.sparse_binding != r.sparse_binding)
+				return false;
+		}
+		for(int j = 0; j < x.device_extensions.GetCount(); ++j)
+			if(x.device_extensions[j].name != y.device_extensions[j].name || x.device_extensions[j].spec_version != y.device_extensions[j].spec_version)
+				return false;
+	}
+	return true;
+}
+
 bool TestVulkanSharedInstanceRegistryReuse(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& first, VulkanSharedInstanceRegistryAcquireResult& second)
 {
 	first = VulkanSharedInstanceRegistryAcquireResult();
@@ -2417,6 +2447,7 @@ bool TestVulkanSharedInstanceRegistryReuse(VulkanProcResolver resolver, VulkanSh
 	bool ok = registry.Acquire(opts, first.preflight, first.debug_messenger_created, first.error, first_stage, resolver, first_entry, first.newly_created);
 	first.entry = first_entry;
 	first.failure_stage = (int)first_stage;
+	first.acquire_count = first_entry ? first_entry->acquire_count : 0;
 	first.diag = GetVulkanRuntimeDeviceDiagnostics();
 	if(!ok || !first.entry)
 		return false;
@@ -2426,7 +2457,11 @@ bool TestVulkanSharedInstanceRegistryReuse(VulkanProcResolver resolver, VulkanSh
 	ok = registry.Acquire(opts, second.preflight, second.debug_messenger_created, second.error, second_stage, resolver, second_entry, second.newly_created);
 	second.entry = second_entry;
 	second.failure_stage = (int)second_stage;
+	second.acquire_count = second_entry ? second_entry->acquire_count : 0;
 	second.diag = GetVulkanRuntimeDeviceDiagnostics();
+	first.first_discovery_count = first.diag.physical_device_discovery_count;
+	second.second_discovery_count = second.diag.physical_device_discovery_count;
+	first.reusable_preflight_equal = SameReusablePreflight(first.preflight, second.preflight);
 	if(!ok)
 		return false;
 	if(first.entry != second.entry)
@@ -2454,14 +2489,24 @@ bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, Vulk
 	if(!ok) return false;
 	VulkanSharedInstanceEntry *saved_first_entry = (VulkanSharedInstanceEntry *)first.entry;
 	opts.win32_surface = true;
+	opts.validation = false;
 	VulkanInstanceOwnerOpenFailure incompatible_stage = VulkanInstanceOwnerOpenFailure::None;
 	VulkanSharedInstanceEntry *incompatible_entry = nullptr;
 	if(!registry.Acquire(opts, incompatible.preflight, incompatible.debug_messenger_created, incompatible.error, incompatible_stage, resolver, incompatible_entry, incompatible.newly_created))
 		return false;
 	incompatible.entry = incompatible_entry;
 	incompatible.failure_stage = (int)incompatible_stage;
+	release.registry_entry_count = registry.GetEntryCount();
+	first.stable_address_preserved = first.entry == saved_first_entry && first.acquire_count == 0;
 	if(!registry.Release((VulkanSharedInstanceEntry *)incompatible.entry))
 		return false;
+	opts.validation = true;
+	incompatible_entry = nullptr;
+	if(!registry.Acquire(opts, incompatible.preflight, incompatible.debug_messenger_created, incompatible.error, incompatible_stage, resolver, incompatible_entry, incompatible.newly_created) || !incompatible_entry || incompatible_entry == saved_first_entry)
+		return false;
+	if(!registry.Release(incompatible_entry))
+		return false;
+	first.stable_address_preserved = first.stable_address_preserved && first.entry == saved_first_entry;
 	release.released = registry.Release(saved_first_entry);
 	release.registry_entry_count = registry.GetEntryCount();
 	release.diag = GetVulkanRuntimeDeviceDiagnostics();
@@ -2475,6 +2520,9 @@ bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, Vulka
 	cleanup_failure = VulkanSharedInstanceRegistryAcquireResult();
 	ClearVulkanRuntimeDeviceDiagnostics();
 	VulkanSharedInstanceRegistry registry;
+	struct MissingProcReset {
+		~MissingProcReset() { g_registry_test_missing_proc = nullptr; }
+	} reset_missing_proc;
 	VulkanInstanceOptions opts;
 	opts.validation = false;
 	opts.application_name = "RegistryFail";
@@ -2486,43 +2534,71 @@ bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, Vulka
 	dispatch_failure.entry = dispatch_entry;
 	dispatch_failure.failure_stage = (int)dispatch_stage;
 	dispatch_failure.diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(ok) return false;
+	dispatch_failure.registry_entry_count = registry.GetEntryCount();
+	if(ok || dispatch_failure.entry || dispatch_failure.failure_stage != (int)VulkanInstanceOwnerOpenFailure::Dispatch || dispatch_failure.newly_created || dispatch_failure.registry_entry_count != 0 || dispatch_failure.diag.instance_create_count != 0 || dispatch_failure.diag.runtime_live_count != 0 || dispatch_failure.diag.instance_live_count != 0)
+		return false;
+	VulkanSharedInstanceEntry *recovery_entry = nullptr;
+	VulkanPreflightReport recovery_preflight;
+	bool recovery_debug = false, recovery_new = false;
+	VulkanInstanceOwnerOpenFailure recovery_stage = VulkanInstanceOwnerOpenFailure::None;
+	String recovery_error;
+	if(!registry.Acquire(opts, recovery_preflight, recovery_debug, recovery_error, recovery_stage, resolver, recovery_entry, recovery_new) || !recovery_entry || !recovery_new || !registry.Release(recovery_entry))
+		return false;
+	dispatch_failure.recovery_succeeded = true;
+	ClearVulkanRuntimeDeviceDiagnostics();
 
 	VulkanInstanceOwnerOpenFailure instance_stage = VulkanInstanceOwnerOpenFailure::None;
 	VulkanSharedInstanceEntry *instance_entry = nullptr;
 	opts.validation = true;
 	g_registry_test_missing_proc = "vkGetDeviceProcAddr";
-	if(!registry.Acquire(opts, instance_failure.preflight, instance_failure.debug_messenger_created, instance_failure.error, instance_stage, resolver, instance_entry, instance_failure.newly_created)) {
-		g_registry_test_missing_proc = nullptr;
-		instance_failure.entry = instance_entry;
-		instance_failure.failure_stage = (int)instance_stage;
-		instance_failure.diag = GetVulkanRuntimeDeviceDiagnostics();
-	}
-	else {
-		g_registry_test_missing_proc = nullptr;
-		instance_failure.entry = instance_entry;
-		instance_failure.failure_stage = (int)instance_stage;
-		if(instance_failure.entry)
-			registry.Release((VulkanSharedInstanceEntry *)instance_failure.entry);
-	}
+	bool instance_ok = registry.Acquire(opts, instance_failure.preflight, instance_failure.debug_messenger_created, instance_failure.error, instance_stage, resolver, instance_entry, instance_failure.newly_created);
+	g_registry_test_missing_proc = nullptr;
+	instance_failure.entry = instance_entry;
+	instance_failure.failure_stage = (int)instance_stage;
+	instance_failure.diag = GetVulkanRuntimeDeviceDiagnostics();
+	instance_failure.registry_entry_count = registry.GetEntryCount();
+	if(instance_ok || instance_failure.entry || instance_failure.failure_stage != (int)VulkanInstanceOwnerOpenFailure::Instance || instance_failure.error != "vkGetDeviceProcAddr" || instance_failure.newly_created || instance_failure.registry_entry_count != 0 || instance_failure.diag.instance_create_count != 1 || instance_failure.diag.runtime_live_count != 0 || instance_failure.diag.instance_live_count != 0 || instance_failure.diag.debug_messenger_live_count != 0 || instance_failure.diag.device_create_count != 0 || instance_failure.diag.device_live_count != 0)
+		return false;
+	if(!registry.Acquire(opts, recovery_preflight, recovery_debug, recovery_error, recovery_stage, resolver, recovery_entry, recovery_new) || !recovery_entry || !recovery_new || !registry.Release(recovery_entry))
+		return false;
+	instance_failure.recovery_succeeded = true;
 
 	VulkanInstanceOwnerOpenFailure cleanup_stage = VulkanInstanceOwnerOpenFailure::None;
 	VulkanSharedInstanceEntry *cleanup_entry = nullptr;
 	opts.validation = true;
-	if(!registry.Acquire(opts, cleanup_failure.preflight, cleanup_failure.debug_messenger_created, cleanup_failure.error, cleanup_stage, resolver, cleanup_entry, cleanup_failure.newly_created)) {
-		cleanup_failure.entry = cleanup_entry;
-		cleanup_failure.failure_stage = (int)cleanup_stage;
-		cleanup_failure.diag = GetVulkanRuntimeDeviceDiagnostics();
-	}
-	else {
-		cleanup_failure.entry = cleanup_entry;
-		cleanup_failure.failure_stage = (int)cleanup_stage;
-		if(cleanup_failure.entry) {
-			((VulkanSharedInstanceEntry *)cleanup_failure.entry)->owner.cleanup_ok = false;
-			registry.Release((VulkanSharedInstanceEntry *)cleanup_failure.entry);
-		}
-	}
-	return true;
+	if(!registry.Acquire(opts, cleanup_failure.preflight, cleanup_failure.debug_messenger_created, cleanup_failure.error, cleanup_stage, resolver, cleanup_entry, cleanup_failure.newly_created) || !cleanup_entry)
+		return false;
+	cleanup_failure.entry = cleanup_entry;
+	cleanup_failure.failure_stage = (int)cleanup_stage;
+	VulkanSharedInstanceEntry *retained = cleanup_entry;
+	retained->owner.cleanup_ok = false;
+	if(registry.Release(retained) || registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared())
+		return false;
+	cleanup_failure.registry_entry_count = registry.GetEntryCount();
+	cleanup_failure.acquire_count = retained->acquire_count;
+	cleanup_failure.opened = retained->opened;
+	cleanup_failure.cleanup_ok = retained->cleanup_ok;
+	cleanup_failure.owner_cleared = retained->owner.IsCleared();
+	cleanup_failure.diag = GetVulkanRuntimeDeviceDiagnostics();
+	cleanup_failure.retained_runtime_create_count = cleanup_failure.diag.runtime_create_count;
+	cleanup_failure.retained_instance_create_count = cleanup_failure.diag.instance_create_count;
+	cleanup_failure.retained_debug_messenger_create_count = cleanup_failure.diag.debug_messenger_create_count;
+	VulkanSharedInstanceEntry *refused = nullptr;
+	VulkanPreflightReport refused_preflight;
+	bool refused_new = false;
+	VulkanInstanceOwnerOpenFailure refused_stage = VulkanInstanceOwnerOpenFailure::None;
+	String refused_error;
+	if(registry.Acquire(opts, refused_preflight, recovery_debug, refused_error, refused_stage, resolver, refused, refused_new) || refused || refused_new || refused_stage != VulkanInstanceOwnerOpenFailure::None || refused_error != "shared instance entry cleanup failed" || registry.GetEntryCount() != 1)
+		return false;
+	cleanup_failure.replacement_refused = true;
+	VulkanInstanceOptions incompatible_opts = opts;
+	incompatible_opts.win32_surface = true;
+	VulkanSharedInstanceEntry *incompatible_entry = nullptr;
+	if(!registry.Acquire(incompatible_opts, recovery_preflight, recovery_debug, recovery_error, recovery_stage, resolver, incompatible_entry, recovery_new) || !incompatible_entry || !registry.Release(incompatible_entry) || registry.GetEntryCount() != 1)
+		return false;
+	cleanup_failure.incompatible_succeeded = true;
+	cleanup_failure.retained_registry_entry_count = registry.GetEntryCount();
+	return cleanup_failure.diag.runtime_live_count == 0 && cleanup_failure.diag.instance_live_count == 0 && cleanup_failure.diag.debug_messenger_live_count == 0;
 }
 
 bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver, VulkanSharedInstanceRegistryReleaseResult& result)
@@ -2540,14 +2616,34 @@ bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver,
 	VulkanPreflightReport preflight;
 	String error;
 	bool debug = false;
-	registry_a.Acquire(opts, preflight, debug, error, stage, resolver, a, created);
-	registry_b.Acquire(opts, preflight, debug, error, stage, resolver, b, created);
-	result.released = !registry_a.Release(nullptr);
-	result.registry_entry_count = registry_a.GetEntryCount() + registry_b.GetEntryCount();
+	if(!registry_a.Acquire(opts, preflight, debug, error, stage, resolver, a, created) || !a)
+		return false;
+	if(!registry_b.Acquire(opts, preflight, debug, error, stage, resolver, b, created) || !b)
+		return false;
+	VulkanSharedInstanceEntry foreign;
+	int a_count = registry_a.GetEntryCount(), b_count = registry_b.GetEntryCount();
+	int foreign_count = foreign.acquire_count;
+	VulkanRuntimeDeviceDiagnostics before = GetVulkanRuntimeDeviceDiagnostics();
+	result.null_release_rejected = !registry_a.Release(nullptr);
+	result.foreign_release_rejected = !registry_a.Release(&foreign);
+	result.cross_release_rejected = !registry_b.Release(a) && !registry_a.Release(b);
+	VulkanRuntimeDeviceDiagnostics after = GetVulkanRuntimeDeviceDiagnostics();
+	if(!result.null_release_rejected || !result.foreign_release_rejected || !result.cross_release_rejected || registry_a.GetEntryCount() != a_count || registry_b.GetEntryCount() != b_count || foreign.acquire_count != foreign_count || memcmp(&before, &after, sizeof(before)) != 0)
+		return false;
+	if(!registry_a.Release(a) || !registry_b.Release(b))
+		return false;
+	VulkanSharedInstanceEntry *removed = nullptr;
+	if(!registry_a.Acquire(opts, preflight, debug, error, stage, resolver, removed, created) || !removed)
+		return false;
+	void *removed_identity = removed;
+	if(!registry_a.Release(removed) || registry_a.Release((VulkanSharedInstanceEntry *)removed_identity))
+		return false;
+	result.removed_release_rejected = true;
+	result.registry_a_count = registry_a.GetEntryCount();
+	result.registry_b_count = registry_b.GetEntryCount();
+	result.registry_entry_count = result.registry_a_count + result.registry_b_count;
 	result.diag = GetVulkanRuntimeDeviceDiagnostics();
-	registry_a.Release(a);
-	registry_b.Release(b);
-	return true;
+	return result.registry_entry_count == 0;
 }
 
 } // namespace VulkanTestHooks

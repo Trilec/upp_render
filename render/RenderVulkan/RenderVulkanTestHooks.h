@@ -47,12 +47,37 @@ struct VulkanSharedInstanceRegistryAcquireResult {
 	int failure_stage = 0;
 	String error;
 	VulkanRuntimeDeviceDiagnostics diag;
+	int registry_entry_count = 0;
+	int acquire_count = 0;
+	bool opened = false;
+	bool cleanup_ok = true;
+	bool owner_cleared = false;
+	bool recovery_succeeded = false;
+	bool replacement_refused = false;
+	bool incompatible_succeeded = false;
+	int retained_registry_entry_count = 0;
+	uint64_t retained_runtime_create_count = 0;
+	uint64_t retained_instance_create_count = 0;
+	uint64_t retained_debug_messenger_create_count = 0;
+	bool reusable_preflight_equal = false;
+	bool stable_address_preserved = false;
+	uint64_t first_discovery_count = 0;
+	uint64_t second_discovery_count = 0;
 };
 
 struct VulkanSharedInstanceRegistryReleaseResult {
 	bool released = false;
 	int registry_entry_count = 0;
 	VulkanRuntimeDeviceDiagnostics diag;
+	bool null_release_rejected = false;
+	bool foreign_release_rejected = false;
+	bool cross_release_rejected = false;
+	bool removed_release_rejected = false;
+	int registry_a_count = 0;
+	int registry_b_count = 0;
+	int foreign_acquire_count = 0;
+	uint64_t diagnostics_before_invalid = 0;
+	uint64_t diagnostics_after_invalid = 0;
 };
 
 enum class VulkanValidationTestPoint {
