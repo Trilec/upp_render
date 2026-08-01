@@ -976,9 +976,13 @@ static bool TestSharedInstanceLease()
 	if(!Check(TestVulkanSharedInstanceLease(&TestResolver, result), "shared instance lease tests should succeed")) return false;
 	if(!Check(result.automatic_release && result.two_lease_reuse && result.non_final_release && result.final_release, "lease destructor and shared acquisition release should be explicit")) return false;
 	if(!Check(result.reset_idempotent && result.move_transfer && result.occupied_refused, "lease reset, move, and occupied refusal should be explicit")) return false;
+	if(!Check(result.occupied_identity_preserved && result.occupied_acquire_count_preserved && result.occupied_registry_preserved && result.occupied_diagnostics_unchanged && result.occupied_outputs_reset, "occupied lease identity and state should remain unchanged")) return false;
 	if(!Check(result.dispatch_failure_empty && result.instance_failure_empty && result.recovery, "failed lease acquisitions should remain empty and recover")) return false;
+	if(!Check(result.dispatch_lease_empty && result.instance_lease_empty && result.dispatch_outputs_complete && result.instance_outputs_complete, "failed lease outputs should prove complete empty state")) return false;
 	if(!Check(result.cleanup_failure_empty && result.no_double_release && result.retained_acquire_count == 0 && !result.retained_opened && !result.retained_cleanup_ok && result.retained_owner_cleared, "cleanup failure should empty the lease without a second release")) return false;
-	if(!Check(result.detailed_outcomes, "detailed registry release outcomes should be explicit")) return false;
+	if(!Check(result.retained_identity_after_destructor && result.destructor_diagnostics_unchanged && result.same_key_refused && result.incompatible_lease_succeeded && result.refusal_registry_entry_count == 1, "cleanup-failed destructor and retained-entry blocking should be explicit")) return false;
+	if(!Check(result.source_empty_after_move && result.destination_registry_preserved && result.destination_entry_preserved && result.move_count_preserved && result.move_registry_count_preserved && result.move_diagnostics_unchanged, "move construction should transfer exactly one acquisition")) return false;
+	if(!Check(result.null_outcome_invalid && result.foreign_outcome_invalid && result.cross_outcome_invalid && result.non_final_outcome && result.final_outcome && result.cleanup_failed_outcome && result.detailed_outcomes, "each detailed registry release outcome should be explicit")) return false;
 	return Check(result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0, "lease tests should finish with zero live resources");
 }
 

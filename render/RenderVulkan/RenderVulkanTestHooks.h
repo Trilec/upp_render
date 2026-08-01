@@ -47,6 +47,8 @@ struct VulkanSharedInstanceRegistryAcquireResult {
 	int failure_stage = 0;
 	String error;
 	VulkanRuntimeDeviceDiagnostics diag;
+	VulkanRuntimeDeviceDiagnostics pre_refusal_diag;
+	VulkanRuntimeDeviceDiagnostics post_refusal_diag;
 	int registry_entry_count = 0;
 	int acquire_count = 0;
 	bool opened = false;
@@ -77,8 +79,6 @@ struct VulkanSharedInstanceRegistryAcquireResult {
 	bool state_preserved_after_first_removal = false;
 	bool state_preserved_after_second_removal = false;
 	bool compatibility_preserved = false;
-	VulkanRuntimeDeviceDiagnostics pre_refusal_diag;
-	VulkanRuntimeDeviceDiagnostics post_refusal_diag;
 	bool refusal_diagnostics_unchanged = false;
 	bool retained_identity_preserved = false;
 	bool retained_state_preserved = false;
@@ -120,6 +120,37 @@ struct VulkanSharedInstanceLeaseTestResult {
 	bool retained_opened = false;
 	bool retained_cleanup_ok = true;
 	bool retained_owner_cleared = false;
+	bool occupied_identity_preserved = false;
+	bool occupied_acquire_count_preserved = false;
+	bool occupied_registry_preserved = false;
+	bool occupied_diagnostics_unchanged = false;
+	bool occupied_outputs_reset = false;
+	bool dispatch_lease_empty = false;
+	bool instance_lease_empty = false;
+	bool dispatch_outputs_complete = false;
+	bool instance_outputs_complete = false;
+	bool retained_identity_after_destructor = false;
+	bool destructor_diagnostics_unchanged = false;
+	bool same_key_refused = false;
+	bool refusal_diagnostics_unchanged = false;
+	bool incompatible_lease_succeeded = false;
+	bool source_empty_after_move = false;
+	bool destination_registry_preserved = false;
+	bool destination_entry_preserved = false;
+	bool move_count_preserved = false;
+	bool move_registry_count_preserved = false;
+	bool move_diagnostics_unchanged = false;
+	bool null_outcome_invalid = false;
+	bool foreign_outcome_invalid = false;
+	bool cross_outcome_invalid = false;
+	bool non_final_outcome = false;
+	bool final_outcome = false;
+	bool cleanup_failed_outcome = false;
+	VulkanRuntimeDeviceDiagnostics destructor_pre_diag;
+	VulkanRuntimeDeviceDiagnostics destructor_post_diag;
+	VulkanRuntimeDeviceDiagnostics refusal_pre_diag;
+	VulkanRuntimeDeviceDiagnostics refusal_post_diag;
+	int refusal_registry_entry_count = 0;
 };
 
 enum class VulkanValidationTestPoint {
