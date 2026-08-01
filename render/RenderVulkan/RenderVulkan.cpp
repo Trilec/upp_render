@@ -2491,7 +2491,7 @@ bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, Vulka
 	VulkanInstanceOwnerOpenFailure instance_stage = VulkanInstanceOwnerOpenFailure::None;
 	VulkanSharedInstanceEntry *instance_entry = nullptr;
 	opts.validation = true;
-	g_registry_test_missing_proc = "vkDestroyInstance";
+	g_registry_test_missing_proc = "vkGetDeviceProcAddr";
 	if(!registry.Acquire(opts, instance_failure.preflight, instance_failure.debug_messenger_created, instance_failure.error, instance_stage, resolver, instance_entry, instance_failure.newly_created)) {
 		g_registry_test_missing_proc = nullptr;
 		instance_failure.entry = instance_entry;
