@@ -63,6 +63,26 @@ struct VulkanSharedInstanceRegistryAcquireResult {
 	bool stable_address_preserved = false;
 	uint64_t first_discovery_count = 0;
 	uint64_t second_discovery_count = 0;
+	int original_acquire_count = 0;
+	int validation_mismatch_entry_count = 0;
+	int surface_mismatch_entry_count = 0;
+	int after_first_removal_entry_count = 0;
+	int after_second_removal_entry_count = 0;
+	bool identity_after_validation = false;
+	bool identity_after_surface = false;
+	bool identity_after_first_removal = false;
+	bool identity_after_second_removal = false;
+	bool state_preserved_after_validation = false;
+	bool state_preserved_after_surface = false;
+	bool state_preserved_after_first_removal = false;
+	bool state_preserved_after_second_removal = false;
+	bool compatibility_preserved = false;
+	VulkanRuntimeDeviceDiagnostics pre_refusal_diag;
+	VulkanRuntimeDeviceDiagnostics post_refusal_diag;
+	bool refusal_diagnostics_unchanged = false;
+	bool retained_identity_preserved = false;
+	bool retained_state_preserved = false;
+	bool retained_compatibility_preserved = false;
 };
 
 struct VulkanSharedInstanceRegistryReleaseResult {
@@ -76,8 +96,6 @@ struct VulkanSharedInstanceRegistryReleaseResult {
 	int registry_a_count = 0;
 	int registry_b_count = 0;
 	int foreign_acquire_count = 0;
-	uint64_t diagnostics_before_invalid = 0;
-	uint64_t diagnostics_after_invalid = 0;
 };
 
 enum class VulkanValidationTestPoint {
