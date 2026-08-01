@@ -39,6 +39,22 @@ struct VulkanSurfaceSessionAccountingResult {
 	String error;
 };
 
+struct VulkanSharedInstanceRegistryAcquireResult {
+	void *entry = nullptr;
+	bool newly_created = false;
+	VulkanPreflightReport preflight;
+	bool debug_messenger_created = false;
+	int failure_stage = 0;
+	String error;
+	VulkanRuntimeDeviceDiagnostics diag;
+};
+
+struct VulkanSharedInstanceRegistryReleaseResult {
+	bool released = false;
+	int registry_entry_count = 0;
+	VulkanRuntimeDeviceDiagnostics diag;
+};
+
 enum class VulkanValidationTestPoint {
 	None,
 	BeforeDeviceCreation,
@@ -76,6 +92,9 @@ bool TestVulkanSurfaceSessionCleanupFailure(bool validation, VulkanProcResolver 
 bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface, bool test_validation, bool test_surface, VulkanRuntimeDeviceDiagnostics& out_diag);
+bool TestVulkanSharedInstanceRegistryReuse(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& first, VulkanSharedInstanceRegistryAcquireResult& second);
+bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& first, VulkanSharedInstanceRegistryAcquireResult& incompatible, VulkanSharedInstanceRegistryReleaseResult& release);
+bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& dispatch_failure, VulkanSharedInstanceRegistryAcquireResult& instance_failure, VulkanSharedInstanceRegistryAcquireResult& cleanup_failure);
 
 }
 

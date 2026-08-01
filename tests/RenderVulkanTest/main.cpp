@@ -14,11 +14,16 @@ using Upp::VulkanTestHooks::TestVulkanSurfaceOwnerCompatibility;
 using Upp::VulkanTestHooks::TestVulkanSurfaceSessionLifecycle;
 using Upp::VulkanTestHooks::TestVulkanSurfaceSessionPostCreateFailure;
 using Upp::VulkanTestHooks::TestVulkanSurfaceSessionCleanupFailure;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryReuse;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryStability;
+using Upp::VulkanTestHooks::TestVulkanSharedInstanceRegistryFailures;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryLifecycle;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntrySafety;
 using Upp::VulkanTestHooks::TestVulkanSharedInstanceEntryIncompatible;
 using Upp::VulkanTestHooks::VulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanSurfaceSessionAccountingResult;
+using Upp::VulkanTestHooks::VulkanSharedInstanceRegistryAcquireResult;
+using Upp::VulkanTestHooks::VulkanSharedInstanceRegistryReleaseResult;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics;
 using Upp::VulkanTestHooks::VulkanValidationTestInjection;
@@ -929,6 +934,20 @@ static bool TestSharedInstanceEntry()
 	return true;
 }
 
+static bool TestSharedInstanceRegistry()
+{
+	VulkanSharedInstanceRegistryAcquireResult first, second, incompatible, dispatch_failure, instance_failure, cleanup_failure;
+	VulkanSharedInstanceRegistryReleaseResult release;
+	if(!Check(TestVulkanSharedInstanceRegistryReuse(&TestResolver, first, second), "registry reuse should succeed")) return false;
+	if(!Check(first.entry != nullptr && second.entry == first.entry, "compatible reuse should return same entry")) return false;
+	if(!Check(first.newly_created && !second.newly_created, "newly_created should be true only for first acquisition")) return false;
+	if(!Check(first.diag.device_create_count == 1 && second.diag.device_create_count == 1, "reuse should not create another device")) return false;
+	if(!Check(TestVulkanSharedInstanceRegistryStability(&TestResolver, first, incompatible, release), "registry stability should succeed")) return false;
+	if(!Check(release.registry_entry_count == 0, "final release should remove entry")) return false;
+	if(!Check(TestVulkanSharedInstanceRegistryFailures(&TestResolver, dispatch_failure, instance_failure, cleanup_failure), "registry failures should succeed")) return false;
+	return true;
+}
+
 static bool TestMissingGlobalFunction(const char *name)
 {
 	VulkanBootstrapReport report = RunBootstrap(false, true, name);
@@ -959,6 +978,7 @@ CONSOLE_APP_MAIN
 	ok &= TestSurfaceOwner();
 	ok &= TestSurfaceSessionDeviceAccounting();
 	ok &= TestSharedInstanceEntry();
+	ok &= TestSharedInstanceRegistry();
 	ok &= TestRepeat();
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceLayerProperties");
 	ok &= TestMissingGlobalFunction("vkEnumerateInstanceExtensionProperties");
