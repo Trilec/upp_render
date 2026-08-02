@@ -1939,6 +1939,10 @@ static void FinalizeBootstrapStatus(VulkanBootstrapReport& report, bool create_d
 
 } // namespace
 
+struct VulkanSurfaceSessionGroup::Impl {
+	VulkanSharedInstanceRegistry registry;
+};
+
 namespace VulkanTestHooks {
 
 void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injection)
@@ -3046,9 +3050,19 @@ bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInst
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result)
 {
 	result = VulkanGroupedSurfaceSessionTestResult();
+	struct ValidationReset { ~ValidationReset() { ClearVulkanValidationTestInjection(); } } validation_reset;
 	HWND first_hwnd = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
 	HWND second_hwnd = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-	if(!first_hwnd || !second_hwnd) return false;
+	if(!first_hwnd || !second_hwnd) {
+		if(first_hwnd) DestroyWindow(first_hwnd);
+		if(second_hwnd) DestroyWindow(second_hwnd);
+		return false;
+	}
+	struct WindowGuard {
+		HWND first;
+		HWND second;
+		~WindowGuard() { if(first) DestroyWindow(first); if(second) DestroyWindow(second); }
+	} windows{first_hwnd, second_hwnd};
 	GpuNativeWindowDesc first_window;
 	first_window.kind = GpuNativeWindowKind::Win32;
 	first_window.handle = (uint64_t)(uintptr_t)first_hwnd;
@@ -3117,8 +3131,22 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		result.post_lease_failure = true;
 		result.recovery = true;
 	}
-	DestroyWindow(first_hwnd);
-	DestroyWindow(second_hwnd);
+	{
+		VulkanValidationTestInjection injection;
+		injection.enabled = true;
+		injection.point = VulkanValidationTestPoint::DuringDeviceCleanup;
+		injection.force_device_cleanup_failure = true;
+		SetVulkanValidationTestInjection(injection);
+		VulkanSurfaceSessionGroup group;
+		VulkanSurfaceSession session(group);
+		if(!session.Open(true, first_window, resolver)) return false;
+		session.Close();
+		ClearVulkanValidationTestInjection();
+		const VulkanSurfaceReport& report = session.GetReport();
+		VulkanRuntimeDeviceDiagnostics cleanup_diag = GetVulkanRuntimeDeviceDiagnostics();
+		if(report.device_cleanup_ok || !report.surface_cleanup_ok || !report.shared_instance_released || !report.cleanup_state_cleared || report.clean_shutdown || group.impl->registry.GetEntryCount() != 0 || cleanup_diag.runtime_live_count != 0 || cleanup_diag.instance_live_count != 0 || cleanup_diag.surface_live_count != 0 || cleanup_diag.device_live_count != 0) return false;
+		result.device_cleanup_failure_non_short_circuit = true;
+	}
 	result.diag = GetVulkanRuntimeDeviceDiagnostics();
 	return result.compatible_shared && result.non_final_close && result.final_close && result.reverse_close && result.incompatible_entries && result.post_lease_failure && result.recovery && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0;
 }
@@ -3466,11 +3494,10 @@ int VulkanSurfaceProbe::DeviceRank(VkPhysicalDeviceType type) { return type == V
 int VulkanSurfaceProbe::QueueRank(const VulkanQueueFamilyInfo& family) { return ::Upp::QueueRank(family); }
 String VulkanSurfaceProbe::SanitizeValidationMessage(const String& text) { return ::Upp::SanitizeValidationMessage(text); }
 
-static void FinalizeSurfaceCleanup(VulkanSurfaceReport& report, const VulkanSurfaceContext& ctx, const VulkanDeviceContext& device, bool cleanup_ok)
+static void FinalizeSurfaceCleanup(VulkanSurfaceReport& report, const VulkanSurfaceContext& ctx, const VulkanDeviceContext& device, bool lease_empty, bool cleanup_ok)
 {
-	report.cleanup_state_cleared = ctx.IsCleared() && device.IsCleared();
-	report.surface_cleanup_ok = ctx.surface == VK_NULL_HANDLE;
-	report.clean_shutdown = cleanup_ok && report.cleanup_state_cleared;
+	report.cleanup_state_cleared = ctx.IsCleared() && device.IsCleared() && lease_empty;
+	report.clean_shutdown = cleanup_ok && report.cleanup_state_cleared && report.surface_cleanup_ok && report.device_cleanup_ok && report.instance_cleanup_ok && report.dispatch_cleanup_ok && report.shared_instance_cleanup_ok;
 }
 
 static void CopySurfaceValidationCapture(VulkanSurfaceReport& report, const VulkanValidationCapture& capture)
@@ -3683,10 +3710,6 @@ struct VulkanSurfaceSession::Impl {
 	bool ready = false;
 };
 
-struct VulkanSurfaceSessionGroup::Impl {
-	VulkanSharedInstanceRegistry registry;
-};
-
 VulkanSurfaceSessionGroup::VulkanSurfaceSessionGroup()
 	: impl(new Impl)
 {
@@ -3741,9 +3764,26 @@ static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanu
 	impl.report.dispatch_cleanup_ok = owner ? owner->dispatch.cleanup_ok : impl.report.dispatch_cleanup_ok;
 	impl.report.shared_instance_released = impl.lease.IsEmpty();
 	impl.report.native_window = GpuNativeWindowDesc();
-	FinalizeSurfaceCleanup(impl.report, impl.ctx, impl.device, cleanup_ok);
+	FinalizeSurfaceCleanup(impl.report, impl.ctx, impl.device, impl.lease.IsEmpty(), cleanup_ok);
 	impl.ready = false;
 	impl.open = false;
+}
+
+static void CleanupSurfaceSession(VulkanSurfaceSession::Impl& impl)
+{
+	if(VulkanInstanceOwner *owner = impl.lease.GetOwner()) {
+		impl.report.instance_cleanup_ok = owner->cleanup_ok;
+		impl.report.dispatch_cleanup_ok = owner->dispatch.cleanup_ok;
+	}
+	bool had_lease = impl.lease.IsAcquired();
+	bool device_ok = impl.device.cleanup_ok && (!impl.device.device || impl.device.Close());
+	bool surface_ok = impl.ctx.cleanup_ok && impl.ctx.Close();
+	bool shared_ok = had_lease ? impl.lease.Reset() : (impl.report.shared_instance_released && impl.report.shared_instance_cleanup_ok);
+	if(had_lease) {
+		impl.report.shared_instance_released = impl.lease.IsEmpty();
+		impl.report.shared_instance_cleanup_ok = shared_ok;
+	}
+	FinalizeSurfaceSession(impl, device_ok && surface_ok && (!had_lease || shared_ok));
 }
 
 bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDesc& native_window, VulkanProcResolver resolver)
@@ -3806,7 +3846,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 	impl->report.shared_instance_acquired = true;
@@ -3820,7 +3860,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 
@@ -3831,7 +3871,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 	impl->report.preflight.loader_available = true;
@@ -3842,7 +3882,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 
@@ -3853,7 +3893,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 	if(discovered.IsEmpty()) {
@@ -3861,7 +3901,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 
@@ -3878,7 +3918,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 
@@ -3898,7 +3938,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
 		CopySurfaceValidationCapture(impl->report, owner->instance.capture);
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 
@@ -3947,7 +3987,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 		impl->report.preflight.status = impl->report.status;
 		impl->report.preflight.status_text = impl->report.status_text;
 		CopySurfaceValidationCapture(impl->report, owner->instance.capture);
-		FinalizeSurfaceSession(*impl, impl->ctx.Close() && impl->device.Close() && impl->lease.Reset());
+		CleanupSurfaceSession(*impl);
 		return false;
 	}
 	impl->device.RegisterDiagnostics();
@@ -4012,17 +4052,7 @@ void VulkanSurfaceSession::Close()
 {
 	if(!impl)
 		return;
-	if(VulkanInstanceOwner *owner = impl->lease.GetOwner()) {
-		impl->report.instance_cleanup_ok = owner->cleanup_ok;
-		impl->report.dispatch_cleanup_ok = owner->dispatch.cleanup_ok;
-	}
-	bool device_cleanup_ok = impl->device.cleanup_ok && (!impl->device.device || impl->device.Close());
-	bool ctx_cleanup_ok = impl->ctx.cleanup_ok && impl->ctx.Close();
-	bool had_lease = impl->lease.IsAcquired();
-	bool lease_cleanup_ok = impl->lease.Reset();
-	impl->report.shared_instance_released = had_lease && impl->lease.IsEmpty();
-	impl->report.shared_instance_cleanup_ok = lease_cleanup_ok;
-	FinalizeSurfaceSession(*impl, device_cleanup_ok && ctx_cleanup_ok && lease_cleanup_ok);
+	CleanupSurfaceSession(*impl);
 	impl->open = false;
 	impl->ready = false;
 }
@@ -4077,6 +4107,10 @@ String VulkanSurfaceProbe::Dump(const VulkanSurfaceReport& report) const
 	out << "Device cleanup ok: " << BoolText(report.device_cleanup_ok) << '\n';
 	out << "Instance cleanup ok: " << BoolText(report.instance_cleanup_ok) << '\n';
 	out << "Dispatch cleanup ok: " << BoolText(report.dispatch_cleanup_ok) << '\n';
+	out << "Shared instance acquired: " << BoolText(report.shared_instance_acquired) << '\n';
+	out << "Shared instance reused: " << BoolText(report.shared_instance_reused) << '\n';
+	out << "Shared instance released: " << BoolText(report.shared_instance_released) << '\n';
+	out << "Shared instance cleanup ok: " << BoolText(report.shared_instance_cleanup_ok) << '\n';
 	out << "Clean shutdown: " << BoolText(report.clean_shutdown) << '\n';
 	out << "Cleanup state cleared: " << BoolText(report.cleanup_state_cleared) << '\n';
 	out << "Validation warnings: " << AsString(report.validation_warning_count) << '\n';

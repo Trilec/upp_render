@@ -109,11 +109,6 @@ struct VulkanSharedInstanceLeaseTestResult {
 	bool dispatch_failure_empty = false;
 	bool instance_failure_empty = false;
 	bool recovery = false;
-	int compatible_registry_entries = 0;
-	int non_final_registry_entries = 0;
-	int final_registry_entries = 0;
-	int incompatible_registry_entries = 0;
-	int failure_registry_entries = 0;
 	bool cleanup_failure_empty = false;
 	bool no_double_release = false;
 	bool detailed_outcomes = false;
@@ -166,6 +161,12 @@ struct VulkanGroupedSurfaceSessionTestResult {
 	bool incompatible_entries = false;
 	bool post_lease_failure = false;
 	bool recovery = false;
+	bool device_cleanup_failure_non_short_circuit = false;
+	int compatible_registry_entries = 0;
+	int non_final_registry_entries = 0;
+	int final_registry_entries = 0;
+	int incompatible_registry_entries = 0;
+	int failure_registry_entries = 0;
 	VulkanRuntimeDeviceDiagnostics compatible_diag;
 	VulkanRuntimeDeviceDiagnostics non_final_diag;
 	VulkanRuntimeDeviceDiagnostics final_diag;
