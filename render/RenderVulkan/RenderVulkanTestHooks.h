@@ -109,6 +109,11 @@ struct VulkanSharedInstanceLeaseTestResult {
 	bool dispatch_failure_empty = false;
 	bool instance_failure_empty = false;
 	bool recovery = false;
+	int compatible_registry_entries = 0;
+	int non_final_registry_entries = 0;
+	int final_registry_entries = 0;
+	int incompatible_registry_entries = 0;
+	int failure_registry_entries = 0;
 	bool cleanup_failure_empty = false;
 	bool no_double_release = false;
 	bool detailed_outcomes = false;
@@ -153,6 +158,20 @@ struct VulkanSharedInstanceLeaseTestResult {
 	int refusal_registry_entry_count = 0;
 };
 
+struct VulkanGroupedSurfaceSessionTestResult {
+	bool compatible_shared = false;
+	bool non_final_close = false;
+	bool final_close = false;
+	bool reverse_close = false;
+	bool incompatible_entries = false;
+	bool post_lease_failure = false;
+	bool recovery = false;
+	VulkanRuntimeDeviceDiagnostics compatible_diag;
+	VulkanRuntimeDeviceDiagnostics non_final_diag;
+	VulkanRuntimeDeviceDiagnostics final_diag;
+	VulkanRuntimeDeviceDiagnostics diag;
+};
+
 enum class VulkanValidationTestPoint {
 	None,
 	BeforeDeviceCreation,
@@ -195,6 +214,7 @@ bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, Vulk
 bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& dispatch_failure, VulkanSharedInstanceRegistryAcquireResult& instance_failure, VulkanSharedInstanceRegistryAcquireResult& cleanup_failure);
 bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver, VulkanSharedInstanceRegistryReleaseResult& result);
 bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result);
+bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
 
 }
 

@@ -138,6 +138,12 @@ The two should stay separate so layout code does not become a surface factory we
 
 `VulkanSurfaceSession` is shared by `VulkanSurfaceProbe` and `GpuCtrl` so there is one production surface bring-up path for loader startup, instance creation, surface creation, physical-device discovery, queue selection, capability queries, logical-device creation, and cleanup.
 
+Explicitly constructed `VulkanSurfaceSessionGroup` objects may share runtime and
+instance ownership between grouped sessions. Each session still owns its own
+surface, logical device and queues. Default sessions, including current
+`GpuCtrl` instances, retain isolated private groups; a backend-neutral shared
+control context is deferred until a later design task.
+
 ## OpenGL Integration Findings
 
 ### Files And Methods Inspected

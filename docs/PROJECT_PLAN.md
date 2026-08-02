@@ -126,10 +126,14 @@ additional backends beyond the first ones already planned.
 
 - TASK-007 surface bring-up passes the ten-cycle validation gate
 - TASK-007A4 control/session cleanup is accepted and no longer the active focus
-- TASK-008A1 ownership work is accepted through S8-R3
-- the Vulkan shared-instance lifecycle, surface ownership, and compatibility
-  handling are now covered by committed S1-S8 ownership work
-- TASK-009 registry work is the active next task
+- TASK-008A1 S9 private shared-instance registry is accepted
+- TASK-008A1 S10 private RAII lease is accepted after the release-build
+  destructor fix
+- TASK-008A1 S11 explicit grouped Vulkan surface-session integration is active
+- grouped sessions share runtime and instance state while logical devices,
+  queues and surfaces remain owned per session
+- ordinary GpuCtrl instances remain isolated through their default session groups
 - swapchain and rendering remain unimplemented
+- swapchain and presentation are the next Vulkan ownership stage
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

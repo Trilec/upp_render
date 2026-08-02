@@ -60,6 +60,9 @@ Run the test and demo executables after building.
   passes the ten-cycle validation gate
 - `GpuCtrl` now hosts a surface-level Vulkan session with a deterministic retry
   policy and no test-only public hooks
+- explicitly grouped `VulkanSurfaceSession` instances share runtime and
+  instance state while retaining per-session surfaces and logical devices;
+  default sessions and `GpuCtrl` instances remain isolated
 - no Vulkan rendering backend yet; surface, swapchain, presentation, and
   visible rendering still are not
 - no other GPU backend yet

@@ -170,6 +170,10 @@ struct VulkanSurfaceReport : Moveable<VulkanSurfaceReport> {
 	bool surface_cleanup_ok = false;
 	bool device_cleanup_ok = false;
 	bool dispatch_cleanup_ok = false;
+	bool shared_instance_acquired = false;
+	bool shared_instance_reused = false;
+	bool shared_instance_released = false;
+	bool shared_instance_cleanup_ok = false;
 	int validation_warning_count = 0;
 	int validation_error_count = 0;
 	Vector<String> validation_messages;
