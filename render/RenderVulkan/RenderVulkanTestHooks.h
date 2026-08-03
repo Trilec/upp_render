@@ -197,6 +197,9 @@ struct VulkanSwapchainTestResult {
 	bool invalid_size_refused = false;
 	bool already_created_refused = false;
 	bool missing_procedure_recovered = false;
+	bool rollback = false;
+	bool active_idle_failure_cleanup = false;
+	bool destructor_cleanup = false;
 	VulkanSurfaceReport active_report;
 	VulkanSurfaceReport destroyed_report;
 	VulkanRuntimeDeviceDiagnostics active_diag;
@@ -215,6 +218,7 @@ struct VulkanValidationTestInjection {
 	bool error = false;
 	VulkanValidationTestPoint point = VulkanValidationTestPoint::None;
 	bool force_device_cleanup_failure = false;
+	bool force_swapchain_image_enumeration_failure = false;
 	VkResult device_cleanup_result = VK_ERROR_DEVICE_LOST;
 	String message;
 };

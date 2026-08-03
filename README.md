@@ -63,12 +63,12 @@ Run the test and demo executables after building.
 - explicitly grouped `VulkanSurfaceSession` instances share runtime and
   instance state while retaining per-session surfaces and logical devices;
   default sessions and `GpuCtrl` instances remain isolated
-- no Vulkan rendering backend yet; surface, swapchain, presentation, and
-  visible rendering still are not
+- no Vulkan rendering backend yet; presentation and visible rendering still
+  are not implemented
 - private swapchain ownership is now available through `VulkanSurfaceSession`,
   but frame acquisition, presentation, and visible rendering are not
 - no other GPU backend yet
-- no swapchain, frame acquisition, or presentation path yet
+- no frame acquisition or presentation path yet
 - no text, image, gradient, shadow, or shader pipeline yet
 - no compute API or execution path yet
 - no speculative backend packages are present
