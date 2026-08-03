@@ -3194,13 +3194,13 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		VulkanSurfaceSessionGroup group;
 		VulkanSurfaceSession first(group), second(group);
 		if(!first.Open(true, first_window, resolver) || !second.Open(true, second_window, resolver)) return false;
+		if(!first.CreateSwapchain(Size(64, 64)) || !second.CreateSwapchain(Size(64, 64))) return false;
 		VulkanSurfaceReport first_report = first.GetReport();
 		String first_error = first.GetError();
 		second.Close();
-		if(!first.IsReady()) return false;
-		first.Close();
-		result.second_survivor_state = first.GetError() == first_error && first.GetReport().shared_instance_acquired == first_report.shared_instance_acquired;
+		result.second_survivor_state = first.IsReady() && first.GetError() == first_error && first.GetReport().shared_instance_acquired == first_report.shared_instance_acquired && first.HasSwapchain() && GetVulkanRuntimeDeviceDiagnostics().swapchain_live_count == 1;
 		if(!result.second_survivor_state) return false;
+		first.Close();
 		result.reverse_close = true;
 	}
 	ClearVulkanRuntimeDeviceDiagnostics();
