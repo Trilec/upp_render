@@ -65,6 +65,8 @@ Run the test and demo executables after building.
   default sessions and `GpuCtrl` instances remain isolated
 - no Vulkan rendering backend yet; surface, swapchain, presentation, and
   visible rendering still are not
+- private swapchain ownership is now available through `VulkanSurfaceSession`,
+  but frame acquisition, presentation, and visible rendering are not
 - no other GPU backend yet
 - no swapchain, frame acquisition, or presentation path yet
 - no text, image, gradient, shadow, or shader pipeline yet

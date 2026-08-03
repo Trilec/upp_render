@@ -129,13 +129,13 @@ additional backends beyond the first ones already planned.
 - TASK-008A1 S9 private shared-instance registry is accepted
 - TASK-008A1 S10 private RAII lease is accepted after the release-build
   destructor fix
-- TASK-008A1 S11 grouped surface-session integration is implemented and
-  awaiting final acceptance
+- TASK-008A1 S11 grouped surface-session integration is accepted
+- TASK-008A1 S12 private Vulkan swapchain ownership is active
 - grouped sessions share runtime and instance state while logical devices,
   queues and surfaces remain owned per session
 - ordinary GpuCtrl instances remain isolated through their default session groups
 - swapchain and rendering remain unimplemented
-- private swapchain ownership, frame acquisition and presentation, and the
-  clear-colour presented-frame demo are the next Vulkan stages
+- frame acquisition and presentation remain deferred; the clear-colour
+  presented-frame demo remains the next visible milestone
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

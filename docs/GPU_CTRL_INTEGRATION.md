@@ -144,6 +144,10 @@ surface, logical device and queues. Default sessions, including current
 `GpuCtrl` instances, retain isolated private groups; a backend-neutral shared
 control context is deferred until a later design task.
 
+Surface/device readiness and private swapchain readiness are separate states.
+Swapchain ownership exists for explicit Vulkan sessions, but frame acquisition,
+presentation and visible rendering are not implemented yet.
+
 ## OpenGL Integration Findings
 
 ### Files And Methods Inspected

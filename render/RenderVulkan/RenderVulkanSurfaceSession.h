@@ -42,6 +42,9 @@ public:
 	bool IsReady() const;
 	const VulkanSurfaceReport& GetReport() const;
 	const String& GetError() const;
+	bool CreateSwapchain(Size requested_size);
+	bool DestroySwapchain();
+	bool HasSwapchain() const;
 
 	private:
 	std::unique_ptr<Impl> impl;

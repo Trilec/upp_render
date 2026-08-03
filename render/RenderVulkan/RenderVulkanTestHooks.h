@@ -21,6 +21,9 @@ struct VulkanRuntimeDeviceDiagnostics {
 	uint64_t surface_create_count = 0;
 	uint64_t surface_live_count = 0;
 	uint64_t surface_id = 0;
+	uint64_t swapchain_create_count = 0;
+	uint64_t swapchain_live_count = 0;
+	uint64_t swapchain_id = 0;
 };
 
 struct VulkanInstanceOptionsTestResult {
@@ -162,6 +165,7 @@ struct VulkanGroupedSurfaceSessionTestResult {
 	bool post_lease_failure = false;
 	bool recovery = false;
 	bool device_cleanup_failure_non_short_circuit = false;
+	bool grouped_swapchains_separate = false;
 	bool first_report_authoritative = false;
 	bool second_report_authoritative = false;
 	bool first_survivor_state = false;
@@ -178,10 +182,25 @@ struct VulkanGroupedSurfaceSessionTestResult {
 	int final_registry_entries = 0;
 	int incompatible_registry_entries = 0;
 	int failure_registry_entries = 0;
+	int compatible_acquire_count = 0;
+	int non_final_acquire_count = 0;
 	VulkanRuntimeDeviceDiagnostics compatible_diag;
 	VulkanRuntimeDeviceDiagnostics non_final_diag;
 	VulkanRuntimeDeviceDiagnostics final_diag;
 	VulkanRuntimeDeviceDiagnostics diag;
+};
+
+struct VulkanSwapchainTestResult {
+	bool created = false;
+	bool destroyed = false;
+	bool idempotent = false;
+	bool invalid_size_refused = false;
+	bool already_created_refused = false;
+	bool missing_procedure_recovered = false;
+	VulkanSurfaceReport active_report;
+	VulkanSurfaceReport destroyed_report;
+	VulkanRuntimeDeviceDiagnostics active_diag;
+	VulkanRuntimeDeviceDiagnostics final_diag;
 };
 
 enum class VulkanValidationTestPoint {
@@ -227,6 +246,7 @@ bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, Vulka
 bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver, VulkanSharedInstanceRegistryReleaseResult& result);
 bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result);
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
+bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult& result);
 
 }
 
