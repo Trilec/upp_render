@@ -3068,6 +3068,15 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 	first_window.handle = (uint64_t)(uintptr_t)first_hwnd;
 	GpuNativeWindowDesc second_window = first_window;
 	second_window.handle = (uint64_t)(uintptr_t)second_hwnd;
+	{
+		VulkanSurfaceSession invalid;
+		GpuNativeWindowDesc invalid_window;
+		if(invalid.Open(true, invalid_window) || invalid.IsReady()) return false;
+		const VulkanSurfaceReport& invalid_report = invalid.GetReport();
+		VulkanRuntimeDeviceDiagnostics invalid_diag = GetVulkanRuntimeDeviceDiagnostics();
+		if(invalid_report.shared_instance_acquired || invalid_report.shared_instance_reused || invalid_report.shared_instance_released || invalid_report.shared_instance_cleanup_ok || !invalid_report.cleanup_state_cleared || invalid_diag.runtime_live_count != 0 || invalid_diag.instance_live_count != 0 || invalid_diag.surface_live_count != 0 || invalid_diag.device_live_count != 0) return false;
+		result.never_acquired_report = true;
+	}
 	ClearVulkanRuntimeDeviceDiagnostics();
 	{
 		VulkanSurfaceSessionGroup group;
@@ -3075,15 +3084,20 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		bool first_ok = first.Open(true, first_window, resolver);
 		bool second_ok = second.Open(true, second_window, resolver);
 		if(!first_ok || !second_ok || !first.IsReady() || !second.IsReady() || !second.GetReport().shared_instance_reused) return false;
+		result.first_report_authoritative = first.GetReport().shared_instance_acquired && !first.GetReport().shared_instance_reused;
+		result.second_report_authoritative = second.GetReport().shared_instance_acquired && second.GetReport().shared_instance_reused;
+		if(!result.first_report_authoritative || !result.second_report_authoritative) return false;
 		result.compatible_diag = GetVulkanRuntimeDeviceDiagnostics();
 		result.compatible_registry_entries = group.impl->registry.GetEntryCount();
 		if(result.compatible_diag.runtime_create_count != 1 || result.compatible_diag.runtime_live_count != 1 || result.compatible_diag.instance_create_count != 1 || result.compatible_diag.instance_live_count != 1 || result.compatible_diag.surface_create_count != 2 || result.compatible_diag.surface_live_count != 2 || result.compatible_diag.device_create_count != 2 || result.compatible_diag.device_live_count != 2) return false;
 		result.compatible_shared = true;
 		String second_error = second.GetError();
+		VulkanSurfaceReport second_report = second.GetReport();
 		second.Close();
 		result.non_final_diag = GetVulkanRuntimeDeviceDiagnostics();
 		result.non_final_registry_entries = group.impl->registry.GetEntryCount();
-		if(!first.IsReady() || second.GetError() != second_error || result.non_final_diag.runtime_live_count != 1 || result.non_final_diag.instance_live_count != 1 || result.non_final_diag.surface_live_count != 1 || result.non_final_diag.device_live_count != 1) return false;
+		result.first_survivor_state = first.IsReady() && second.GetError() == second_error && second.GetReport().shared_instance_acquired == second_report.shared_instance_acquired && second.GetReport().shared_instance_reused == second_report.shared_instance_reused && result.non_final_diag.runtime_live_count == 1 && result.non_final_diag.instance_live_count == 1 && result.non_final_diag.surface_live_count == 1 && result.non_final_diag.device_live_count == 1;
+		if(!result.first_survivor_state) return false;
 		result.non_final_close = true;
 		first.Close();
 		result.final_diag = GetVulkanRuntimeDeviceDiagnostics();
@@ -3096,8 +3110,12 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		VulkanSurfaceSession first(group), second(group);
 		if(!first.Open(true, first_window, resolver) || !second.Open(true, second_window, resolver)) return false;
 		second.Close();
+		VulkanSurfaceReport first_report = first.GetReport();
+		String first_error = first.GetError();
 		if(!first.IsReady()) return false;
 		first.Close();
+		result.second_survivor_state = first.GetError() == first_error && first.GetReport().shared_instance_acquired == first_report.shared_instance_acquired;
+		if(!result.second_survivor_state) return false;
 		result.reverse_close = true;
 	}
 	ClearVulkanRuntimeDeviceDiagnostics();
@@ -3147,8 +3165,29 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		if(report.device_cleanup_ok || !report.surface_cleanup_ok || !report.shared_instance_released || !report.cleanup_state_cleared || report.clean_shutdown || group.impl->registry.GetEntryCount() != 0 || cleanup_diag.runtime_live_count != 0 || cleanup_diag.instance_live_count != 0 || cleanup_diag.surface_live_count != 0 || cleanup_diag.device_live_count != 0) return false;
 		result.device_cleanup_failure_non_short_circuit = true;
 	}
+	{
+		VulkanSurfaceSessionGroup group;
+		VulkanSurfaceSession session(group);
+		if(!session.Open(true, first_window, resolver)) return false;
+		VulkanSharedInstanceEntry *retained = &*group.impl->registry.entries[0];
+		retained->owner.cleanup_ok = false;
+		session.Close();
+		const VulkanSurfaceReport& failed_report = session.GetReport();
+		VulkanRuntimeDeviceDiagnostics retained_before = GetVulkanRuntimeDeviceDiagnostics();
+		if(session.IsOpen() || session.IsReady() || !failed_report.shared_instance_acquired || !failed_report.shared_instance_released || failed_report.shared_instance_cleanup_ok || !failed_report.cleanup_state_cleared || failed_report.clean_shutdown || group.impl->registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared() || retained_before.runtime_live_count != 0 || retained_before.instance_live_count != 0 || retained_before.surface_live_count != 0 || retained_before.device_live_count != 0) return false;
+	result.retained_cleanup_failure = true;
+	VulkanSurfaceSession refused(group);
+	if(refused.Open(true, first_window, resolver) || refused.IsOpen() || refused.IsReady() || refused.GetReport().shared_instance_acquired || refused.GetReport().shared_instance_released || refused.GetReport().shared_instance_cleanup_ok || refused.GetError() != "shared instance entry cleanup failed" || group.impl->registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared() || !SameRuntimeDiagnostics(retained_before, GetVulkanRuntimeDeviceDiagnostics())) return false;
+	result.same_key_refused = true;
+	VulkanSurfaceSession incompatible(group);
+	if(!incompatible.Open(false, first_window, resolver) || !incompatible.IsReady()) return false;
+	incompatible.Close();
+	if(group.impl->registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared()) return false;
+	result.incompatible_after_failure = true;
+	result.retained_state_unchanged = true;
+	}
 	result.diag = GetVulkanRuntimeDeviceDiagnostics();
-	return result.compatible_shared && result.non_final_close && result.final_close && result.reverse_close && result.incompatible_entries && result.post_lease_failure && result.recovery && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0;
+	return result.compatible_shared && result.non_final_close && result.final_close && result.reverse_close && result.incompatible_entries && result.post_lease_failure && result.recovery && result.never_acquired_report && result.first_report_authoritative && result.second_report_authoritative && result.first_survivor_state && result.second_survivor_state && result.retained_cleanup_failure && result.same_key_refused && result.incompatible_after_failure && result.retained_state_unchanged && result.device_cleanup_failure_non_short_circuit && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0;
 }
 
 } // namespace VulkanTestHooks
@@ -3762,7 +3801,6 @@ static void FinalizeSurfaceSession(VulkanSurfaceSession::Impl& impl, bool cleanu
 	impl.report.surface_cleanup_ok = impl.ctx.cleanup_ok;
 	impl.report.device_cleanup_ok = impl.device.cleanup_ok;
 	impl.report.dispatch_cleanup_ok = owner ? owner->dispatch.cleanup_ok : impl.report.dispatch_cleanup_ok;
-	impl.report.shared_instance_released = impl.lease.IsEmpty();
 	impl.report.native_window = GpuNativeWindowDesc();
 	FinalizeSurfaceCleanup(impl.report, impl.ctx, impl.device, impl.lease.IsEmpty(), cleanup_ok);
 	impl.ready = false;
@@ -3776,9 +3814,13 @@ static void CleanupSurfaceSession(VulkanSurfaceSession::Impl& impl)
 		impl.report.dispatch_cleanup_ok = owner->dispatch.cleanup_ok;
 	}
 	bool had_lease = impl.lease.IsAcquired();
-	bool device_ok = impl.device.cleanup_ok && (!impl.device.device || impl.device.Close());
-	bool surface_ok = impl.ctx.cleanup_ok && impl.ctx.Close();
+	bool device_was_ok = impl.device.cleanup_ok;
+	bool surface_was_ok = impl.ctx.cleanup_ok;
+	bool device_close_ok = impl.device.Close();
+	bool surface_close_ok = impl.ctx.Close();
 	bool shared_ok = had_lease ? impl.lease.Reset() : (impl.report.shared_instance_released && impl.report.shared_instance_cleanup_ok);
+	bool device_ok = device_was_ok && device_close_ok;
+	bool surface_ok = surface_was_ok && surface_close_ok;
 	if(had_lease) {
 		impl.report.shared_instance_released = impl.lease.IsEmpty();
 		impl.report.shared_instance_cleanup_ok = shared_ok;

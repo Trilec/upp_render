@@ -162,6 +162,17 @@ struct VulkanGroupedSurfaceSessionTestResult {
 	bool post_lease_failure = false;
 	bool recovery = false;
 	bool device_cleanup_failure_non_short_circuit = false;
+	bool first_report_authoritative = false;
+	bool second_report_authoritative = false;
+	bool first_survivor_state = false;
+	bool second_survivor_state = false;
+	bool never_acquired_report = false;
+	bool retained_cleanup_failure = false;
+	bool same_key_refused = false;
+	bool incompatible_after_failure = false;
+	bool retained_state_unchanged = false;
+	VulkanRuntimeDeviceDiagnostics refusal_pre_diag;
+	VulkanRuntimeDeviceDiagnostics refusal_post_diag;
 	int compatible_registry_entries = 0;
 	int non_final_registry_entries = 0;
 	int final_registry_entries = 0;

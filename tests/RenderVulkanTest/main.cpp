@@ -993,9 +993,12 @@ static bool TestGroupedSurfaceSessions()
 	VulkanGroupedSurfaceSessionTestResult result;
 	if(!Check(TestVulkanGroupedSurfaceSessions(&TestResolver, result), "grouped surface-session tests should succeed")) return false;
 	if(!Check(result.compatible_shared && result.compatible_registry_entries == 1 && result.compatible_diag.runtime_create_count == 1 && result.compatible_diag.instance_create_count == 1 && result.compatible_diag.surface_create_count == 2 && result.compatible_diag.device_create_count == 2, "compatible grouped sessions should share runtime and instance only")) return false;
+	if(!Check(result.first_report_authoritative && result.second_report_authoritative, "grouped acquisition reports should distinguish new and reused leases")) return false;
 	if(!Check(result.non_final_close && result.non_final_registry_entries == 1 && result.non_final_diag.runtime_live_count == 1 && result.non_final_diag.instance_live_count == 1 && result.non_final_diag.surface_live_count == 1 && result.non_final_diag.device_live_count == 1, "non-final grouped close should preserve the second session")) return false;
+	if(!Check(result.first_survivor_state && result.second_survivor_state, "both grouped close orders should preserve the survivor")) return false;
 	if(!Check(result.final_close && result.final_registry_entries == 0 && result.reverse_close && result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0, "grouped final and reverse close should clear all resources")) return false;
 	if(!Check(result.incompatible_entries && result.incompatible_registry_entries == 2 && result.post_lease_failure && result.failure_registry_entries == 1 && result.recovery && result.device_cleanup_failure_non_short_circuit, "incompatible groups and post-lease failure recovery should be explicit")) return false;
+	if(!Check(result.never_acquired_report && result.retained_cleanup_failure && result.same_key_refused && result.incompatible_after_failure && result.retained_state_unchanged, "never-acquired and retained-failure production reports should be authoritative")) return false;
 	return Check(result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0, "grouped sessions should finish with zero live resources");
 }
 
