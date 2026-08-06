@@ -200,6 +200,9 @@ struct VulkanSwapchainTestResult {
 	bool rollback = false;
 	bool active_idle_failure_cleanup = false;
 	bool destructor_cleanup = false;
+	bool transient_incomplete_recovered = false;
+	bool persistent_incomplete_rolled_back = false;
+	bool rollback_cleanup_sticky = false;
 	VulkanSurfaceReport active_report;
 	VulkanSurfaceReport destroyed_report;
 	VulkanRuntimeDeviceDiagnostics active_diag;
@@ -219,6 +222,8 @@ struct VulkanValidationTestInjection {
 	VulkanValidationTestPoint point = VulkanValidationTestPoint::None;
 	bool force_device_cleanup_failure = false;
 	bool force_swapchain_image_enumeration_failure = false;
+	int swapchain_incomplete_data_calls = 0;
+	bool swapchain_incomplete_persistent = false;
 	VkResult device_cleanup_result = VK_ERROR_DEVICE_LOST;
 	String message;
 };
