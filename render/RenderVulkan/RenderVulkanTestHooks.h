@@ -1,6 +1,7 @@
 #pragma once
 
 #include <RenderVulkan/RenderVulkan.h>
+#include <RenderVulkan/RenderVulkanSurfaceSession.h>
 
 namespace Upp {
 
@@ -209,6 +210,22 @@ struct VulkanSwapchainTestResult {
 	VulkanRuntimeDeviceDiagnostics final_diag;
 };
 
+struct VulkanFrameTestResult {
+	bool no_swapchain_refused = false;
+	bool acquire_present = false;
+	bool repeat_present = false;
+	bool duplicate_acquire_refused = false;
+	bool missing_procedure_recovered = false;
+	bool acquire_out_of_date = false;
+	bool present_suboptimal = false;
+	bool present_out_of_date = false;
+	bool submit_failure_recovered = false;
+	bool destroy_with_acquired_cleanup = false;
+	bool destructor_cleanup = false;
+	bool grouped_isolation = false;
+	VulkanRuntimeDeviceDiagnostics final_diag;
+};
+
 enum class VulkanValidationTestPoint {
 	None,
 	BeforeDeviceCreation,
@@ -256,7 +273,8 @@ bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver,
 bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result);
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
 bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult& result);
+bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);
 
 }
 
-} // namespace Upp
+}
