@@ -210,6 +210,14 @@ struct VulkanSwapchainTestResult {
 	VulkanRuntimeDeviceDiagnostics final_diag;
 };
 
+struct VulkanClearFrameTestResult {
+	bool clear_present = false;
+	bool repeat_clear = false;
+	bool missing_clear_procedure_recovered = false;
+	bool validation_clean = false;
+	VulkanRuntimeDeviceDiagnostics final_diag;
+};
+
 struct VulkanFrameTestResult {
 	bool no_swapchain_refused = false;
 	bool acquire_present = false;
@@ -277,6 +285,7 @@ bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInst
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
 bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult& result);
 bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);
+bool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result);
 
 }
 

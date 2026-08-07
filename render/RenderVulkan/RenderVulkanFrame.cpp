@@ -25,6 +25,8 @@ struct VulkanFrameState {
 	PFN_vkQueueSubmit2 queue_submit_2 = nullptr;
 	PFN_vkAcquireNextImageKHR acquire_next_image = nullptr;
 	PFN_vkQueuePresentKHR queue_present = nullptr;
+	PFN_vkDestroyImageView destroy_image_view = nullptr;
+	VkImageView transient_clear_view = VK_NULL_HANDLE;
 	Vector<VkSemaphore> render_finished;
 	VkFence in_flight = VK_NULL_HANDLE;
 	VkCommandPool command_pool = VK_NULL_HANDLE;
@@ -71,7 +73,7 @@ static bool ResolveFrameProc(T& out, const Interop& interop, const char *name, S
 
 static bool IsFrameStateCleared(const VulkanFrameState& state)
 {
-	if(state.in_flight || state.command_pool || state.command_buffer)
+	if(state.in_flight || state.command_pool || state.command_buffer || state.transient_clear_view)
 		return false;
 	for(VkSemaphore semaphore : state.render_finished)
 		if(semaphore)
@@ -131,6 +133,13 @@ bool VulkanSurfaceSession::DestroyFrameState()
 	bool have_device = GetFrameInterop(interop) && interop.device != VK_NULL_HANDLE;
 	bool ok = idle_ok && have_device;
 	VkDevice device = have_device ? interop.device : VK_NULL_HANDLE;
+
+	if(state->transient_clear_view && state->destroy_image_view && device)
+		state->destroy_image_view(device, state->transient_clear_view, nullptr);
+	else if(state->transient_clear_view)
+		ok = false;
+	state->transient_clear_view = VK_NULL_HANDLE;
+	state->destroy_image_view = nullptr;
 
 	if(state->in_flight && state->destroy_fence && device)
 		state->destroy_fence(device, state->in_flight, nullptr);
@@ -340,6 +349,35 @@ bool VulkanSurfaceSession::AcquireFrame()
 
 bool VulkanSurfaceSession::PresentFrame()
 {
+	return SubmitPresentFrame(false, 0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)
+{
+	FrameInterop interop;
+	if(!GetFrameInterop(interop) || interop.device == VK_NULL_HANDLE || interop.swapchain == VK_NULL_HANDLE || interop.images.IsEmpty()) {
+		frame_report.error = "Vulkan swapchain is not ready for clear presentation";
+		return false;
+	}
+	String error;
+	PFN_vkCreateImageView create_image_view = nullptr;
+	PFN_vkDestroyImageView destroy_image_view = nullptr;
+	PFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;
+	PFN_vkCmdEndRendering cmd_end_rendering = nullptr;
+	if(!ResolveFrameProc(create_image_view, interop, "vkCreateImageView", error) ||
+	   !ResolveFrameProc(destroy_image_view, interop, "vkDestroyImageView", error) ||
+	   !ResolveFrameProc(cmd_begin_rendering, interop, "vkCmdBeginRendering", error) ||
+	   !ResolveFrameProc(cmd_end_rendering, interop, "vkCmdEndRendering", error)) {
+		frame_report.error = error;
+		return false;
+	}
+	if(!AcquireFrame())
+		return false;
+	return SubmitPresentFrame(true, red, green, blue, alpha);
+}
+
+bool VulkanSurfaceSession::SubmitPresentFrame(bool clear, float red, float green, float blue, float alpha)
+{
 	VulkanFrameState *state = reinterpret_cast<VulkanFrameState *>(frame_impl);
 	if(!state || !state->acquired) {
 		frame_report.error = "No Vulkan frame is acquired";
@@ -353,14 +391,124 @@ bool VulkanSurfaceSession::PresentFrame()
 		return false;
 	}
 
-	VkResult vr = state->reset_command_buffer(state->command_buffer, 0);
+	frame_report.clear_requested = clear;
+	frame_report.cleared = false;
+	if(clear) {
+		frame_report.clear_red = red;
+		frame_report.clear_green = green;
+		frame_report.clear_blue = blue;
+		frame_report.clear_alpha = alpha;
+	}
+
+	PFN_vkCreateImageView create_image_view = nullptr;
+	PFN_vkDestroyImageView destroy_image_view = nullptr;
+	PFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;
+	PFN_vkCmdEndRendering cmd_end_rendering = nullptr;
+	String clear_error;
+	if(clear && (!ResolveFrameProc(create_image_view, interop, "vkCreateImageView", clear_error) ||
+	             !ResolveFrameProc(destroy_image_view, interop, "vkDestroyImageView", clear_error) ||
+	             !ResolveFrameProc(cmd_begin_rendering, interop, "vkCmdBeginRendering", clear_error) ||
+	             !ResolveFrameProc(cmd_end_rendering, interop, "vkCmdEndRendering", clear_error))) {
+		frame_report.error = clear_error;
+		DestroyFrameState();
+		return false;
+	}
+
+	VkResult vr = VK_SUCCESS;
+	if(clear) {
+		VkImageViewCreateInfo view_info{};
+		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_info.image = interop.images[state->image_index];
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_info.format = GetReport().swapchain_format;
+		view_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		view_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		view_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		view_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view_info.subresourceRange.baseMipLevel = 0;
+		view_info.subresourceRange.levelCount = 1;
+		view_info.subresourceRange.baseArrayLayer = 0;
+		view_info.subresourceRange.layerCount = 1;
+		vr = create_image_view(interop.device, &view_info, nullptr, &state->transient_clear_view);
+		state->destroy_image_view = destroy_image_view;
+		if(vr != VK_SUCCESS) {
+			frame_report.error = String("vkCreateImageView failed: ") + AsString((int)vr);
+			DestroyFrameState();
+			return false;
+		}
+	}
+	vr = state->reset_command_buffer(state->command_buffer, 0);
 	VkCommandBufferBeginInfo begin_info{};
 	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	if(vr == VK_SUCCESS)
 		vr = state->begin_command_buffer(state->command_buffer, &begin_info);
 
-	if(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {
+	if(vr == VK_SUCCESS && clear) {
+		VkImageMemoryBarrier2 to_color{};
+		to_color.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+		to_color.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+		to_color.srcAccessMask = 0;
+		to_color.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+		to_color.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+		to_color.oldLayout = state->image_initialized[state->image_index] ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+		to_color.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		to_color.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		to_color.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		to_color.image = interop.images[state->image_index];
+		to_color.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		to_color.subresourceRange.baseMipLevel = 0;
+		to_color.subresourceRange.levelCount = 1;
+		to_color.subresourceRange.baseArrayLayer = 0;
+		to_color.subresourceRange.layerCount = 1;
+		VkDependencyInfo to_color_dependency{};
+		to_color_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		to_color_dependency.imageMemoryBarrierCount = 1;
+		to_color_dependency.pImageMemoryBarriers = &to_color;
+		state->cmd_pipeline_barrier_2(state->command_buffer, &to_color_dependency);
+
+		VkClearValue clear_value{};
+		clear_value.color.float32[0] = red;
+		clear_value.color.float32[1] = green;
+		clear_value.color.float32[2] = blue;
+		clear_value.color.float32[3] = alpha;
+		VkRenderingAttachmentInfo attachment{};
+		attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		attachment.imageView = state->transient_clear_view;
+		attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.clearValue = clear_value;
+		VkRenderingInfo rendering{};
+		rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+		rendering.renderArea.offset = { 0, 0 };
+		rendering.renderArea.extent = { (uint32_t)GetReport().swapchain_extent.cx, (uint32_t)GetReport().swapchain_extent.cy };
+		rendering.layerCount = 1;
+		rendering.colorAttachmentCount = 1;
+		rendering.pColorAttachments = &attachment;
+		cmd_begin_rendering(state->command_buffer, &rendering);
+		cmd_end_rendering(state->command_buffer);
+
+		VkImageMemoryBarrier2 to_present{};
+		to_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+		to_present.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+		to_present.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+		to_present.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+		to_present.dstAccessMask = 0;
+		to_present.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		to_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		to_present.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		to_present.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		to_present.image = interop.images[state->image_index];
+		to_present.subresourceRange = to_color.subresourceRange;
+		VkDependencyInfo to_present_dependency{};
+		to_present_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		to_present_dependency.imageMemoryBarrierCount = 1;
+		to_present_dependency.pImageMemoryBarriers = &to_present;
+		state->cmd_pipeline_barrier_2(state->command_buffer, &to_present_dependency);
+	}
+	else if(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {
 		VkImageMemoryBarrier2 barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
 		barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
@@ -426,6 +574,20 @@ bool VulkanSurfaceSession::PresentFrame()
 
 	frame_report.frame_submitted = true;
 	state->image_initialized[state->image_index] = 1;
+	if(clear) {
+		VkResult clear_wait = state->wait_for_fences(interop.device, 1, &state->in_flight, VK_TRUE, UINT64_MAX);
+		if(clear_wait != VK_SUCCESS) {
+			frame_report.error = String("vkWaitForFences after clear submission failed: ") + AsString((int)clear_wait);
+			DestroyFrameState();
+			return false;
+		}
+		if(state->transient_clear_view && state->destroy_image_view)
+			state->destroy_image_view(interop.device, state->transient_clear_view, nullptr);
+		state->transient_clear_view = VK_NULL_HANDLE;
+		state->destroy_image_view = nullptr;
+		frame_report.cleared = true;
+		frame_report.clear_count++;
+	}
 	frame_report.present_requested = true;
 	VkSwapchainKHR swapchain = interop.swapchain;
 	uint32_t image_index = state->image_index;
@@ -617,6 +779,69 @@ bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestRes
 	g_frame_test_missing_proc = nullptr;
 	g_frame_test_injection = VulkanFrameTestInjection();
 	return result.no_swapchain_refused && result.acquire_present && result.repeat_present && result.duplicate_acquire_refused && result.missing_procedure_recovered && result.acquire_suboptimal && result.acquire_out_of_date && result.present_suboptimal && result.present_out_of_date && result.submit_failure_recovered && result.destroy_with_acquired_cleanup && result.close_with_acquired_cleanup && result.destructor_cleanup && result.grouped_isolation && result.validation_clean && result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;
+}
+
+bool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result)
+{
+	result = VulkanClearFrameTestResult();
+	g_frame_test_base_resolver = resolver;
+	g_frame_test_missing_proc = nullptr;
+	g_frame_test_injection = VulkanFrameTestInjection();
+	struct ClearTestReset {
+		~ClearTestReset()
+		{
+			g_frame_test_base_resolver = nullptr;
+			g_frame_test_missing_proc = nullptr;
+			g_frame_test_injection = VulkanFrameTestInjection();
+		}
+	} clear_test_reset;
+	ClearVulkanRuntimeDeviceDiagnostics();
+
+	HWND hwnd = CreateHiddenFrameTestWindow();
+	if(!hwnd)
+		return false;
+	struct WindowGuard { HWND hwnd; ~WindowGuard() { if(hwnd) DestroyWindow(hwnd); } } window{hwnd};
+	GpuNativeWindowDesc native_window;
+	native_window.kind = GpuNativeWindowKind::Win32;
+	native_window.handle = (uint64_t)(uintptr_t)hwnd;
+
+	VulkanSurfaceSession session;
+	if(!session.Open(true, native_window, &FrameTestResolver) || !session.IsReady()) return false;
+	if(!session.CreateSwapchain(Size(96, 64))) return false;
+	if(!session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) return false;
+	const VulkanFrameReport& first = session.GetFrameReport();
+	if(!first.clear_requested || !first.cleared || !first.presented || first.clear_count != 1 || first.clear_red != 0.08f || first.clear_green != 0.24f || first.clear_blue != 0.58f || first.clear_alpha != 1.0f) return false;
+	result.clear_present = true;
+
+	const float colors[][4] = {
+		{ 0.65f, 0.10f, 0.12f, 1.0f },
+		{ 0.08f, 0.55f, 0.22f, 1.0f },
+		{ 0.10f, 0.22f, 0.70f, 1.0f },
+		{ 0.55f, 0.18f, 0.62f, 1.0f },
+	};
+	for(const auto& c : colors)
+		if(!session.PresentClearFrame(c[0], c[1], c[2], c[3])) return false;
+	if(session.GetFrameReport().clear_count != 5 || !session.GetFrameReport().cleared) return false;
+	result.repeat_clear = true;
+
+	const char *missing[] = { "vkCreateImageView", "vkDestroyImageView", "vkCmdBeginRendering", "vkCmdEndRendering" };
+	for(const char *name : missing) {
+		if(!session.DestroyFrameState()) return false;
+		g_frame_test_missing_proc = name;
+		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f) || session.GetFrameReport().error != name || session.HasAcquiredFrame() || !session.GetFrameReport().state_cleared) return false;
+		g_frame_test_missing_proc = nullptr;
+		if(!session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) return false;
+	}
+	result.missing_clear_procedure_recovered = true;
+
+	if(session.GetReport().validation_warning_count != 0 || session.GetReport().validation_error_count != 0) return false;
+	result.validation_clean = true;
+	session.Close();
+	result.final_diag = GetVulkanRuntimeDeviceDiagnostics();
+	return result.clear_present && result.repeat_clear && result.missing_clear_procedure_recovered && result.validation_clean &&
+	       result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 &&
+	       result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 &&
+	       result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;
 }
 
 } // namespace VulkanTestHooks

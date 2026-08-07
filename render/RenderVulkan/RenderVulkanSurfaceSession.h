@@ -8,8 +8,10 @@ namespace Upp {
 namespace VulkanTestHooks {
 struct VulkanGroupedSurfaceSessionTestResult;
 struct VulkanFrameTestResult;
+struct VulkanClearFrameTestResult;
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
 bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);
+bool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result);
 }
 
 struct VulkanFrameReport {
@@ -21,6 +23,13 @@ struct VulkanFrameReport {
 	bool frame_submitted = false;
 	bool present_requested = false;
 	bool presented = false;
+	bool clear_requested = false;
+	bool cleared = false;
+	uint64_t clear_count = 0;
+	float clear_red = 0.0f;
+	float clear_green = 0.0f;
+	float clear_blue = 0.0f;
+	float clear_alpha = 1.0f;
 	bool suboptimal = false;
 	bool out_of_date = false;
 	int image_index = -1;
@@ -68,6 +77,7 @@ public:
 
 	bool AcquireFrame();
 	bool PresentFrame();
+	bool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);
 	bool HasAcquiredFrame() const;
 	const VulkanFrameReport& GetFrameReport() const;
 
@@ -92,8 +102,10 @@ private:
 	bool WaitFrameIdle(String& error);
 	void SyncFrameValidation();
 	bool DestroyFrameState();
+	bool SubmitPresentFrame(bool clear, float red, float green, float blue, float alpha);
 
 	friend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);
+	friend bool VulkanTestHooks::TestVulkanClearFrame(VulkanProcResolver, VulkanTestHooks::VulkanClearFrameTestResult&);
 };
 
 }

@@ -132,13 +132,14 @@ additional backends beyond the first ones already planned.
   destructor fix
 - TASK-008A1 S11 grouped surface-session integration is accepted
 - TASK-008A1 S12 private Vulkan swapchain ownership is accepted
-- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is implemented
-  and awaiting Windows/runtime acceptance
+- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted
+- TASK-008A1 S14 first visible Vulkan clear-colour frame is implemented and awaiting
+  Windows/runtime/visual acceptance
 - grouped sessions share runtime and instance state while logical devices,
   queues, surfaces, swapchains, and frame state remain owned per session
 - ordinary GpuCtrl instances remain isolated through their default session groups
-- private swapchain plus explicit acquisition/presentation are implemented; visible
-  rendering remains unimplemented
-- the clear-colour presented-frame path remains the next visible milestone after S13
+- private swapchain plus explicit acquisition/presentation are implemented
+- the S14 clear-colour path is the first visible Vulkan frame; general 2D rendering,
+  shaders, resize/recreation, and automatic GpuCtrl presentation remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only
