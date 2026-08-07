@@ -4,5 +4,7 @@ uses
 
 file
 	RenderVulkan.h,
+	RenderVulkanSurfaceSession.h,
 	RenderVulkanTestHooks.h,
-	RenderVulkan.cpp;
+	RenderVulkan.cpp,
+	RenderVulkanFrame.cpp;
