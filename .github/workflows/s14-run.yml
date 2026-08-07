@@ -1,0 +1,49 @@
+name: Run S14 candidate builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s14-clear-frame
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract patch script
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path('.github/workflows/s14-candidate.yml').read_text()
+          body = src.split("          python3 <<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
+          body = '\n'.join(line[10:] if line.startswith('          ') else line for line in body.splitlines()) + '\n'
+          Path('/tmp/build_s14.py').write_text(body)
+          compile(body, '/tmp/build_s14.py', 'exec')
+          PY
+      - name: Apply exact S14 patch and publish candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=4cdcb1acb5d500a3c747acfcaa4e8991d2120f72
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          python3 /tmp/build_s14.py
+          git diff --check
+          git status --short
+          git add README.md docs/GPU_CTRL_INTEGRATION.md docs/PROJECT_PLAN.md \
+            render/RenderVulkan/RenderVulkanFrame.cpp render/RenderVulkan/RenderVulkanSurfaceSession.h \
+            render/RenderVulkan/RenderVulkanTestHooks.h tests/RenderVulkanClearFrameTest examples/VulkanClearFrameDemo
+          git diff --cached --check
+          git -c user.name='OpenAI' -c user.email='noreply@openai.com' commit -m 'TASK-008A1-S14: present first Vulkan clear-colour frame' \
+            -m 'Add a validation-clean dynamic-rendering clear path on acquired swapchain images without introducing shaders, pipelines, or GpuCtrl integration.' \
+            -m 'Use a transient image view whose lifetime is fenced before presentation, preserve the accepted S13 present-only path, and add focused automated plus visible demo coverage.' \
+            -m 'Document the clear-colour frame as the first visible Vulkan milestone while leaving the general 2D renderer and resize/recreation for later stages.'
+          git branch -f chatgpt/s14-candidate HEAD
+          git push -f origin chatgpt/s14-candidate
