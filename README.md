@@ -27,6 +27,7 @@ still comes later.
 - `tests/RenderCanvasTest`
 - `tests/RenderRhiTest`
 - `tests/RenderVulkanTest`
+- `tests/RenderVulkanFrameTest`
 - `tests/RenderPlatformWin32Test`
 - `tools/VulkanProbe`
 - `tools/VulkanSurfaceProbe`
@@ -63,12 +64,12 @@ Run the test and demo executables after building.
 - explicitly grouped `VulkanSurfaceSession` instances share runtime and
   instance state while retaining per-session surfaces and logical devices;
   default sessions and `GpuCtrl` instances remain isolated
-- no Vulkan rendering backend yet; presentation and visible rendering still
-  are not implemented
-- private swapchain ownership is now available through `VulkanSurfaceSession`,
-  but frame acquisition, presentation, and visible rendering are not
+- no Vulkan rendering backend yet; visible rendering is still not implemented
+- private swapchain ownership plus explicit frame acquisition and presentation are
+  available through `VulkanSurfaceSession`; this path currently performs only the
+  synchronization and image-layout work required for a valid presentation
 - no other GPU backend yet
-- no frame acquisition or presentation path yet
+- `GpuCtrl` does not automatically create a swapchain, acquire frames, or present yet
 - no text, image, gradient, shadow, or shader pipeline yet
 - no compute API or execution path yet
 - no speculative backend packages are present

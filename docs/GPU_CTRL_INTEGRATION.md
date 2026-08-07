@@ -145,8 +145,9 @@ surface, logical device and queues. Default sessions, including current
 control context is deferred until a later design task.
 
 Surface/device readiness and private swapchain readiness are separate states.
-Swapchain ownership exists for explicit Vulkan sessions, but frame acquisition,
-presentation and visible rendering are not implemented yet.
+Explicit `VulkanSurfaceSession` instances now provide manual frame acquisition and
+presentation, but current `GpuCtrl` instances do not invoke that path automatically.
+Visible rendering is not implemented yet.
 
 ## OpenGL Integration Findings
 

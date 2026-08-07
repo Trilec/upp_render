@@ -60,8 +60,9 @@ It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
 and keeps the SDK header path local via a build method with `INCLUDE` extended
 by `%VULKAN_SDK%\Include`.
 
-Next milestone: surface and platform design, followed by swapchain and present
-lifecycle work.
+Surface/platform bring-up, grouped ownership, and private swapchain lifecycle
+are complete. The active milestone is explicit frame acquisition and presentation;
+visible rendering follows after that boundary is accepted.
 
 TASK-007 completed the surface and platform bridge layer, with a Win32
 native-window contract, bridge test coverage, a live Vulkan surface probe, and
@@ -130,13 +131,14 @@ additional backends beyond the first ones already planned.
 - TASK-008A1 S10 private RAII lease is accepted after the release-build
   destructor fix
 - TASK-008A1 S11 grouped surface-session integration is accepted
-- TASK-008A1 S12 private Vulkan swapchain ownership is implemented and
-  awaiting final acceptance
+- TASK-008A1 S12 private Vulkan swapchain ownership is accepted
+- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is implemented
+  and awaiting Windows/runtime acceptance
 - grouped sessions share runtime and instance state while logical devices,
-  queues and surfaces remain owned per session
+  queues, surfaces, swapchains, and frame state remain owned per session
 - ordinary GpuCtrl instances remain isolated through their default session groups
-- swapchain and rendering remain unimplemented
-- frame acquisition and presentation remain deferred; the clear-colour
-  presented-frame demo remains the next visible milestone
+- private swapchain plus explicit acquisition/presentation are implemented; visible
+  rendering remains unimplemented
+- the clear-colour presented-frame path remains the next visible milestone after S13
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

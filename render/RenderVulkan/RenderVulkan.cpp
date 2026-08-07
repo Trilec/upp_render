@@ -4017,6 +4017,51 @@ const String& VulkanSurfaceSession::GetError() const
 	return impl->error;
 }
 
+bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
+{
+	out.device = VK_NULL_HANDLE;
+	out.graphics_queue = VK_NULL_HANDLE;
+	out.present_queue = VK_NULL_HANDLE;
+	out.swapchain = VK_NULL_HANDLE;
+	out.images.Clear();
+	out.graphics_queue_family_index = 0;
+	out.swapchain_id = 0;
+	out.get_device_proc_addr = nullptr;
+	out.proc_filter = nullptr;
+	if(!impl || !impl->lease.IsAcquired() || !impl->device.device)
+		return false;
+	VulkanInstanceOwner *owner = impl->lease.GetOwner();
+	if(!owner || !owner->instance.get_device_proc_addr)
+		return false;
+	out.device = impl->device.device;
+	out.graphics_queue = impl->device.graphics_queue;
+	out.present_queue = impl->device.present_queue;
+	out.swapchain = impl->swapchain.swapchain;
+	for(VkImage image : impl->swapchain.images)
+		out.images.Add(image);
+	out.graphics_queue_family_index = impl->report.graphics_queue_family_index >= 0 ? (uint32_t)impl->report.graphics_queue_family_index : 0;
+	out.swapchain_id = impl->swapchain.diagnostic_id;
+	out.get_device_proc_addr = owner->instance.get_device_proc_addr;
+	out.proc_filter = owner->dispatch.proc_filter;
+	return out.graphics_queue != VK_NULL_HANDLE && out.present_queue != VK_NULL_HANDLE;
+}
+
+bool VulkanSurfaceSession::WaitFrameIdle(String& error)
+{
+	error.Clear();
+	if(!impl || !impl->device.device)
+		return true;
+	return impl->device.WaitIdle(error);
+}
+
+void VulkanSurfaceSession::SyncFrameValidation()
+{
+	if(!impl)
+		return;
+	if(VulkanInstanceOwner *owner = impl->lease.GetOwner())
+		CopySurfaceValidationCapture(impl->report, owner->instance.capture);
+}
+
 bool VulkanSurfaceSession::HasSwapchain() const
 {
 	return impl && impl->swapchain.swapchain != VK_NULL_HANDLE;
@@ -4024,12 +4069,15 @@ bool VulkanSurfaceSession::HasSwapchain() const
 
 bool VulkanSurfaceSession::DestroySwapchain()
 {
-	if(!impl || !impl->swapchain.swapchain)
-		return true;
+	if(!impl)
+		return DestroyFrameState();
+	bool frame_ok = DestroyFrameState();
+	if(!impl->swapchain.swapchain)
+		return frame_ok;
 	bool ok = impl->swapchain.Destroy(impl->device, impl->report.swapchain_error);
 	impl->report.swapchain_state_cleared = impl->swapchain.IsCleared();
 	impl->report.swapchain_cleanup_ok = impl->report.swapchain_cleanup_ok && ok;
-	return ok;
+	return frame_ok && ok;
 }
 
 bool VulkanSurfaceSession::CreateSwapchain(Size requested_size)
@@ -4258,6 +4306,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 {
 	Close();
 	impl->report = VulkanSurfaceReport();
+	frame_report = VulkanFrameReport();
 	impl->error.Clear();
 	impl->report.validation_requested = request_validation;
 	impl->report.surface_requested = true;
@@ -4520,7 +4569,10 @@ void VulkanSurfaceSession::Close()
 {
 	if(!impl)
 		return;
+	bool frame_ok = DestroyFrameState();
 	CleanupSurfaceSession(*impl);
+	if(!frame_ok)
+		impl->report.clean_shutdown = false;
 	impl->open = false;
 	impl->ready = false;
 }
