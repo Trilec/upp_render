@@ -1,90 +1,10 @@
 name: Harden S13 candidate
 
 on:
-  push:
-    branches:
-      - chatgpt/s13-frame-presentation
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  harden-candidate:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Replace acquire semaphore with CPU-confirmed acquire fence
-        shell: bash
-        run: |
-          set -euo pipefail
-          EXPECTED_BASE="aeadf51a8460803edbfc062adac7ea6a60724629"
-          git fetch origin main chatgpt/s13-candidate
-          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
-          CANDIDATE="$(git rev-parse origin/chatgpt/s13-candidate)"
-          test "$(git rev-parse "$CANDIDATE^")" = "$EXPECTED_BASE"
-          git checkout --detach "$CANDIDATE"
-
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('render/RenderVulkan/RenderVulkanFrame.cpp')
-          text = p.read_text(encoding='utf-8')
-
-          def one(old, new):
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'expected one match, found {count}: {old[:80]!r}')
-              text = text.replace(old, new, 1)
-
-          one('\tVkSemaphore image_available = VK_NULL_HANDLE;\n', '')
-
-          one(
-              '''\tif(state.image_available || state.in_flight || state.command_pool || state.command_buffer)\n\t\treturn false;''',
-              '''\tif(state.in_flight || state.command_pool || state.command_buffer)\n\t\treturn false;''')
-
-          one(
-              '''\tif(state.image_available && state.destroy_semaphore)\n\t\tstate.destroy_semaphore(device, state.image_available, nullptr);\n\tstate.image_available = VK_NULL_HANDLE;\n''',
-              '')
-
-          one(
-              '''\tif(state->image_available && state->destroy_semaphore && device)\n\t\tstate->destroy_semaphore(device, state->image_available, nullptr);\n\telse if(state->image_available)\n\t\tok = false;\n\tstate->image_available = VK_NULL_HANDLE;\n\n''',
-              '')
-
-          one(
-              '''\t\tVkSemaphoreCreateInfo semaphore_info{};\n\t\tsemaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;\n\t\tVkResult vr = created->create_semaphore(interop.device, &semaphore_info, nullptr, &created->image_available);\n\t\tif(vr == VK_SUCCESS) {\n\t\t\tcreated->render_finished.SetCount(interop.images.GetCount(), VK_NULL_HANDLE);\n\t\t\tfor(int i = 0; i < created->render_finished.GetCount() && vr == VK_SUCCESS; ++i)\n\t\t\t\tvr = created->create_semaphore(interop.device, &semaphore_info, nullptr, &created->render_finished[i]);\n\t\t}\n''',
-              '''\t\tVkSemaphoreCreateInfo semaphore_info{};\n\t\tsemaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;\n\t\tVkResult vr = VK_SUCCESS;\n\t\tcreated->render_finished.SetCount(interop.images.GetCount(), VK_NULL_HANDLE);\n\t\tfor(int i = 0; i < created->render_finished.GetCount() && vr == VK_SUCCESS; ++i)\n\t\t\tvr = created->create_semaphore(interop.device, &semaphore_info, nullptr, &created->render_finished[i]);\n''')
-
-          one(
-              '''\tVkResult vr = state->wait_for_fences(interop.device, 1, &state->in_flight, VK_TRUE, UINT64_MAX);\n\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("vkWaitForFences failed: ") + AsString((int)vr);\n\t\tSyncFrameValidation();\n\t\treturn false;\n\t}\n\n\tframe_report.frame_submitted = false;''',
-              '''\tVkResult vr = state->wait_for_fences(interop.device, 1, &state->in_flight, VK_TRUE, UINT64_MAX);\n\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("vkWaitForFences failed: ") + AsString((int)vr);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\tvr = state->reset_fences(interop.device, 1, &state->in_flight);\n\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("vkResetFences before acquire failed: ") + AsString((int)vr);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tframe_report.frame_submitted = false;''')
-
-          one(
-              '''\t\tvr = state->acquire_next_image(interop.device, interop.swapchain, UINT64_MAX, state->image_available, VK_NULL_HANDLE, &image_index);''',
-              '''\t\tvr = state->acquire_next_image(interop.device, interop.swapchain, UINT64_MAX, VK_NULL_HANDLE, state->in_flight, &image_index);''')
-
-          one(
-              '''\tif(vr != VK_SUCCESS && vr != VK_SUBOPTIMAL_KHR) {\n\t\tframe_report.error = String("vkAcquireNextImageKHR failed: ") + AsString((int)vr);\n\t\tSyncFrameValidation();\n\t\treturn false;\n\t}\n\tif(image_index >= (uint32_t)interop.images.GetCount()) {''',
-              '''\tif(vr != VK_SUCCESS && vr != VK_SUBOPTIMAL_KHR) {\n\t\tframe_report.error = String("vkAcquireNextImageKHR failed: ") + AsString((int)vr);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\tVkResult acquire_wait = state->wait_for_fences(interop.device, 1, &state->in_flight, VK_TRUE, UINT64_MAX);\n\tif(acquire_wait != VK_SUCCESS) {\n\t\tframe_report.error = String("vkWaitForFences after vkAcquireNextImageKHR failed: ") + AsString((int)acquire_wait);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\tif(image_index >= (uint32_t)interop.images.GetCount()) {''')
-
-          one(
-              '''\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("Vulkan frame command recording failed: ") + AsString((int)vr);\n\t\tSyncFrameValidation();\n\t\treturn false;\n\t}\n\n\tvr = state->reset_fences(interop.device, 1, &state->in_flight);\n\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("vkResetFences failed: ") + AsString((int)vr);\n\t\tSyncFrameValidation();\n\t\treturn false;\n\t}\n\n\tVkSemaphoreSubmitInfo wait_info{};\n\twait_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;\n\twait_info.semaphore = state->image_available;\n\twait_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;\n\tVkCommandBufferSubmitInfo command_info{};''',
-              '''\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("Vulkan frame command recording failed: ") + AsString((int)vr);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tvr = state->reset_fences(interop.device, 1, &state->in_flight);\n\tif(vr != VK_SUCCESS) {\n\t\tframe_report.error = String("vkResetFences failed: ") + AsString((int)vr);\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tVkCommandBufferSubmitInfo command_info{};''')
-
-          one(
-              '''\tsubmit_info.waitSemaphoreInfoCount = 1;\n\tsubmit_info.pWaitSemaphoreInfos = &wait_info;\n\tsubmit_info.commandBufferInfoCount = 1;''',
-              '''\tsubmit_info.commandBufferInfoCount = 1;''')
-
-          p.write_text(text, encoding='utf-8', newline='\n')
-          PY
-
-          git diff --check
-          git diff -- render/RenderVulkan/RenderVulkanFrame.cpp
-          git config user.name "ChatGPT"
-          git config user.email "chatgpt@users.noreply.github.com"
-          git add render/RenderVulkan/RenderVulkanFrame.cpp
-          git diff --cached --check
-          git commit --amend --no-edit
-          git push --force origin HEAD:refs/heads/chatgpt/s13-candidate
+      - run: echo "S13 candidate hardening pass retained only for audit history."
