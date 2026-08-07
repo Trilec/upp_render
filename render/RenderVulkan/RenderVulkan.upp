@@ -7,4 +7,5 @@ file
 	RenderVulkanSurfaceSession.h,
 	RenderVulkanTestHooks.h,
 	RenderVulkan.cpp,
-	RenderVulkanFrame.cpp;
+	RenderVulkanFrame.cpp,
+	RenderVulkanClearFrame.cpp;

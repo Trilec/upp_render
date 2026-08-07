@@ -60,9 +60,9 @@ It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
 and keeps the SDK header path local via a build method with `INCLUDE` extended
 by `%VULKAN_SDK%\Include`.
 
-Surface/platform bring-up, grouped ownership, and private swapchain lifecycle
-are complete. The active milestone is explicit frame acquisition and presentation;
-visible rendering follows after that boundary is accepted.
+Surface/platform bring-up, grouped ownership, private swapchain lifecycle, and
+explicit frame acquisition/presentation are complete. The active milestone is
+the first visible Vulkan clear-colour frame.
 
 TASK-007 completed the surface and platform bridge layer, with a Win32
 native-window contract, bridge test coverage, a live Vulkan surface probe, and
@@ -132,13 +132,15 @@ additional backends beyond the first ones already planned.
   destructor fix
 - TASK-008A1 S11 grouped surface-session integration is accepted
 - TASK-008A1 S12 private Vulkan swapchain ownership is accepted
-- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is implemented
-  and awaiting Windows/runtime acceptance
+- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted
+- TASK-008A1 S14 first visible Vulkan clear-colour frame is implemented and
+  awaiting Windows/runtime/visual acceptance
 - grouped sessions share runtime and instance state while logical devices,
   queues, surfaces, swapchains, and frame state remain owned per session
 - ordinary GpuCtrl instances remain isolated through their default session groups
-- private swapchain plus explicit acquisition/presentation are implemented; visible
-  rendering remains unimplemented
-- the clear-colour presented-frame path remains the next visible milestone after S13
+- S14 uses a temporary dynamic-rendering clear submission and deliberately keeps
+  the accepted S13 present-only implementation unchanged
+- general 2D rendering, shaders, resize/recreation, and automatic GpuCtrl
+  presentation remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

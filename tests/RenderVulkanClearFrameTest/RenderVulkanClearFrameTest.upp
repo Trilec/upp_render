@@ -1,0 +1,9 @@
+uses
+	Core,
+	RenderVulkan;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";

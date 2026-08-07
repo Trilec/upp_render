@@ -21,6 +21,13 @@ struct VulkanFrameReport {
 	bool frame_submitted = false;
 	bool present_requested = false;
 	bool presented = false;
+	bool clear_requested = false;
+	bool cleared = false;
+	uint64_t clear_count = 0;
+	float clear_red = 0.0f;
+	float clear_green = 0.0f;
+	float clear_blue = 0.0f;
+	float clear_alpha = 1.0f;
 	bool suboptimal = false;
 	bool out_of_date = false;
 	int image_index = -1;
@@ -68,6 +75,7 @@ public:
 
 	bool AcquireFrame();
 	bool PresentFrame();
+	bool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);
 	bool HasAcquiredFrame() const;
 	const VulkanFrameReport& GetFrameReport() const;
 
@@ -87,6 +95,8 @@ private:
 	std::unique_ptr<Impl> impl;
 	void *frame_impl = nullptr;
 	VulkanFrameReport frame_report;
+	uint64_t clear_swapchain_id = 0;
+	Vector<uint8_t> clear_image_initialized;
 
 	bool GetFrameInterop(FrameInterop& out) const;
 	bool WaitFrameIdle(String& error);

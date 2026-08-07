@@ -7,7 +7,7 @@ preflight probe, which is a little unsettling but useful.
 The first planned GPU backend is Vulkan, but this stage is backend-neutral.
 It establishes value types, display-list recording, deterministic inspection,
 software replay, tests, and demos before any GPU API is introduced.
-`GpuCtrl` now provides the embedded surface/session boundary; visible rendering
+`GpuCtrl` now provides the embedded surface/session boundary; general UI rendering
 still comes later.
 
 ## Current packages
@@ -24,10 +24,12 @@ still comes later.
 - `examples/GpuCtrlBasicDemo`
 - `examples/GpuCtrlLifecycleDemo`
 - `examples/GpuCtrlMultiViewDemo`
+- `examples/VulkanClearFrameDemo`
 - `tests/RenderCanvasTest`
 - `tests/RenderRhiTest`
 - `tests/RenderVulkanTest`
 - `tests/RenderVulkanFrameTest`
+- `tests/RenderVulkanClearFrameTest`
 - `tests/RenderPlatformWin32Test`
 - `tools/VulkanProbe`
 - `tools/VulkanSurfaceProbe`
@@ -64,12 +66,15 @@ Run the test and demo executables after building.
 - explicitly grouped `VulkanSurfaceSession` instances share runtime and
   instance state while retaining per-session surfaces and logical devices;
   default sessions and `GpuCtrl` instances remain isolated
-- no Vulkan rendering backend yet; visible rendering is still not implemented
-- private swapchain ownership plus explicit frame acquisition and presentation are
-  available through `VulkanSurfaceSession`; this path currently performs only the
-  synchronization and image-layout work required for a valid presentation
+- no general Vulkan 2D rendering backend yet
+- private swapchain ownership, explicit frame acquisition/presentation, and the
+  first visible clear-colour frame are available through `VulkanSurfaceSession`
+- S14 uses Vulkan 1.3 dynamic rendering with a color-attachment clear and no
+  shaders, graphics pipeline, render pass, or renderer abstraction
 - no other GPU backend yet
-- `GpuCtrl` does not automatically create a swapchain, acquire frames, or present yet
+- `GpuCtrl` does not automatically create a swapchain, acquire frames, clear,
+  or present yet
+- resize/recreation is still manual and out-of-date handling remains explicit
 - no text, image, gradient, shadow, or shader pipeline yet
 - no compute API or execution path yet
 - no speculative backend packages are present
