@@ -1,0 +1,301 @@
+name: Build S14 candidate
+
+on:
+  push:
+    branches:
+      - chatgpt/s14-clear-frame
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build exact S14 candidate from accepted S13
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=4cdcb1acb5d500a3c747acfcaa4e8991d2120f72
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if s.count(old) != 1:
+                  raise SystemExit(f"anchor mismatch in {path}: {s.count(old)} occurrences")
+              p.write_text(s.replace(old, new, 1))
+
+          # Public session/report API.
+          replace_once('render/RenderVulkan/RenderVulkanSurfaceSession.h',
+          '''struct VulkanFrameTestResult;\nbool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);\nbool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);''',
+          '''struct VulkanFrameTestResult;\nstruct VulkanClearFrameTestResult;\nbool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);\nbool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);\nbool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result);''')
+
+          replace_once('render/RenderVulkan/RenderVulkanSurfaceSession.h',
+          '''\tbool present_requested = false;\n\tbool presented = false;\n\tbool suboptimal = false;''',
+          '''\tbool present_requested = false;\n\tbool presented = false;\n\tbool clear_requested = false;\n\tbool cleared = false;\n\tuint64_t clear_count = 0;\n\tfloat clear_red = 0.0f;\n\tfloat clear_green = 0.0f;\n\tfloat clear_blue = 0.0f;\n\tfloat clear_alpha = 1.0f;\n\tbool suboptimal = false;''')
+
+          replace_once('render/RenderVulkan/RenderVulkanSurfaceSession.h',
+          '''\tbool AcquireFrame();\n\tbool PresentFrame();\n\tbool HasAcquiredFrame() const;''',
+          '''\tbool AcquireFrame();\n\tbool PresentFrame();\n\tbool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);\n\tbool HasAcquiredFrame() const;''')
+
+          replace_once('render/RenderVulkan/RenderVulkanSurfaceSession.h',
+          '''\tvoid SyncFrameValidation();\n\tbool DestroyFrameState();\n\n\tfriend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);''',
+          '''\tvoid SyncFrameValidation();\n\tbool DestroyFrameState();\n\tbool SubmitPresentFrame(bool clear, float red, float green, float blue, float alpha);\n\n\tfriend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);\n\tfriend bool VulkanTestHooks::TestVulkanClearFrame(VulkanProcResolver, VulkanTestHooks::VulkanClearFrameTestResult&);''')
+
+          # Clear-frame test result and hook.
+          replace_once('render/RenderVulkan/RenderVulkanTestHooks.h',
+          '''struct VulkanFrameTestResult {\n\tbool no_swapchain_refused = false;''',
+          '''struct VulkanClearFrameTestResult {\n\tbool clear_present = false;\n\tbool repeat_clear = false;\n\tbool missing_clear_procedure_recovered = false;\n\tbool validation_clean = false;\n\tVulkanRuntimeDeviceDiagnostics final_diag;\n};\n\nstruct VulkanFrameTestResult {\n\tbool no_swapchain_refused = false;''')
+
+          replace_once('render/RenderVulkan/RenderVulkanTestHooks.h',
+          '''bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);\n\n}\n\n}''',
+          '''bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);\nbool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result);\n\n}\n\n}''')
+
+          # Frame-state support for a transient image view used only by the clear submission.
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''\tPFN_vkAcquireNextImageKHR acquire_next_image = nullptr;\n\tPFN_vkQueuePresentKHR queue_present = nullptr;\n\tVector<VkSemaphore> render_finished;''',
+          '''\tPFN_vkAcquireNextImageKHR acquire_next_image = nullptr;\n\tPFN_vkQueuePresentKHR queue_present = nullptr;\n\tPFN_vkDestroyImageView destroy_image_view = nullptr;\n\tVkImageView transient_clear_view = VK_NULL_HANDLE;\n\tVector<VkSemaphore> render_finished;''')
+
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''static bool IsFrameStateCleared(const VulkanFrameState& state)\n{\n\tif(state.in_flight || state.command_pool || state.command_buffer)''',
+          '''static bool IsFrameStateCleared(const VulkanFrameState& state)\n{\n\tif(state.in_flight || state.command_pool || state.command_buffer || state.transient_clear_view)''')
+
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''\tVkDevice device = have_device ? interop.device : VK_NULL_HANDLE;\n\n\tif(state->in_flight && state->destroy_fence && device)''',
+          '''\tVkDevice device = have_device ? interop.device : VK_NULL_HANDLE;\n\n\tif(state->transient_clear_view && state->destroy_image_view && device)\n\t\tstate->destroy_image_view(device, state->transient_clear_view, nullptr);\n\telse if(state->transient_clear_view)\n\t\tok = false;\n\tstate->transient_clear_view = VK_NULL_HANDLE;\n\tstate->destroy_image_view = nullptr;\n\n\tif(state->in_flight && state->destroy_fence && device)''')
+
+          # Rename the existing presenter into the shared submit helper and add public wrappers.
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''bool VulkanSurfaceSession::PresentFrame()\n{\n\tVulkanFrameState *state = reinterpret_cast<VulkanFrameState *>(frame_impl);''',
+          '''bool VulkanSurfaceSession::PresentFrame()\n{\n\treturn SubmitPresentFrame(false, 0.0f, 0.0f, 0.0f, 1.0f);\n}\n\nbool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)\n{\n\tFrameInterop interop;\n\tif(!GetFrameInterop(interop) || interop.device == VK_NULL_HANDLE || interop.swapchain == VK_NULL_HANDLE || interop.images.IsEmpty()) {\n\t\tframe_report.error = "Vulkan swapchain is not ready for clear presentation";\n\t\treturn false;\n\t}\n\tString error;\n\tPFN_vkCreateImageView create_image_view = nullptr;\n\tPFN_vkDestroyImageView destroy_image_view = nullptr;\n\tPFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;\n\tPFN_vkCmdEndRendering cmd_end_rendering = nullptr;\n\tif(!ResolveFrameProc(create_image_view, interop, "vkCreateImageView", error) ||\n\t   !ResolveFrameProc(destroy_image_view, interop, "vkDestroyImageView", error) ||\n\t   !ResolveFrameProc(cmd_begin_rendering, interop, "vkCmdBeginRendering", error) ||\n\t   !ResolveFrameProc(cmd_end_rendering, interop, "vkCmdEndRendering", error)) {\n\t\tframe_report.error = error;\n\t\treturn false;\n\t}\n\tif(!AcquireFrame())\n\t\treturn false;\n\treturn SubmitPresentFrame(true, red, green, blue, alpha);\n}\n\nbool VulkanSurfaceSession::SubmitPresentFrame(bool clear, float red, float green, float blue, float alpha)\n{\n\tVulkanFrameState *state = reinterpret_cast<VulkanFrameState *>(frame_impl);''')
+
+          # Prepare clear reporting and clear-only Vulkan procedures/view before command recording.
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''\tFrameInterop interop;\n\tif(!GetFrameInterop(interop) || interop.swapchain == VK_NULL_HANDLE || interop.swapchain_id != state->swapchain_id || state->image_index >= (uint32_t)interop.images.GetCount()) {\n\t\tframe_report.error = "Vulkan frame state does not match the active swapchain";\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tVkResult vr = state->reset_command_buffer(state->command_buffer, 0);''',
+          '''\tFrameInterop interop;\n\tif(!GetFrameInterop(interop) || interop.swapchain == VK_NULL_HANDLE || interop.swapchain_id != state->swapchain_id || state->image_index >= (uint32_t)interop.images.GetCount()) {\n\t\tframe_report.error = "Vulkan frame state does not match the active swapchain";\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tframe_report.clear_requested = clear;\n\tframe_report.cleared = false;\n\tif(clear) {\n\t\tframe_report.clear_red = red;\n\t\tframe_report.clear_green = green;\n\t\tframe_report.clear_blue = blue;\n\t\tframe_report.clear_alpha = alpha;\n\t}\n\n\tPFN_vkCreateImageView create_image_view = nullptr;\n\tPFN_vkDestroyImageView destroy_image_view = nullptr;\n\tPFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;\n\tPFN_vkCmdEndRendering cmd_end_rendering = nullptr;\n\tString clear_error;\n\tif(clear && (!ResolveFrameProc(create_image_view, interop, "vkCreateImageView", clear_error) ||\n\t             !ResolveFrameProc(destroy_image_view, interop, "vkDestroyImageView", clear_error) ||\n\t             !ResolveFrameProc(cmd_begin_rendering, interop, "vkCmdBeginRendering", clear_error) ||\n\t             !ResolveFrameProc(cmd_end_rendering, interop, "vkCmdEndRendering", clear_error))) {\n\t\tframe_report.error = clear_error;\n\t\tDestroyFrameState();\n\t\treturn false;\n\t}\n\n\tVkResult vr = VK_SUCCESS;\n\tif(clear) {\n\t\tVkImageViewCreateInfo view_info{};\n\t\tview_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;\n\t\tview_info.image = interop.images[state->image_index];\n\t\tview_info.viewType = VK_IMAGE_VIEW_TYPE_2D;\n\t\tview_info.format = GetReport().swapchain_format;\n\t\tview_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;\n\t\tview_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;\n\t\tview_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;\n\t\tview_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;\n\t\tview_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;\n\t\tview_info.subresourceRange.baseMipLevel = 0;\n\t\tview_info.subresourceRange.levelCount = 1;\n\t\tview_info.subresourceRange.baseArrayLayer = 0;\n\t\tview_info.subresourceRange.layerCount = 1;\n\t\tvr = create_image_view(interop.device, &view_info, nullptr, &state->transient_clear_view);\n\t\tstate->destroy_image_view = destroy_image_view;\n\t\tif(vr != VK_SUCCESS) {\n\t\t\tframe_report.error = String("vkCreateImageView failed: ") + AsString((int)vr);\n\t\t\tDestroyFrameState();\n\t\t\treturn false;\n\t\t}\n\t}\n\tvr = state->reset_command_buffer(state->command_buffer, 0);''')
+
+          # Replace the old first-use-only present transition with clear rendering or the original present-only path.
+          old = '''\tif(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {\n\t\tVkImageMemoryBarrier2 barrier{};\n\t\tbarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;\n\t\tbarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;\n\t\tbarrier.srcAccessMask = 0;\n\t\tbarrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;\n\t\tbarrier.dstAccessMask = 0;\n\t\tbarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;\n\t\tbarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;\n\t\tbarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tbarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tbarrier.image = interop.images[state->image_index];\n\t\tbarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;\n\t\tbarrier.subresourceRange.baseMipLevel = 0;\n\t\tbarrier.subresourceRange.levelCount = 1;\n\t\tbarrier.subresourceRange.baseArrayLayer = 0;\n\t\tbarrier.subresourceRange.layerCount = 1;\n\t\tVkDependencyInfo dependency{};\n\t\tdependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;\n\t\tdependency.imageMemoryBarrierCount = 1;\n\t\tdependency.pImageMemoryBarriers = &barrier;\n\t\tstate->cmd_pipeline_barrier_2(state->command_buffer, &dependency);\n\t}\n'''
+          new = '''\tif(vr == VK_SUCCESS && clear) {\n\t\tVkImageMemoryBarrier2 to_color{};\n\t\tto_color.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;\n\t\tto_color.srcStageMask = VK_PIPELINE_STAGE_2_NONE;\n\t\tto_color.srcAccessMask = 0;\n\t\tto_color.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;\n\t\tto_color.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;\n\t\tto_color.oldLayout = state->image_initialized[state->image_index] ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;\n\t\tto_color.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;\n\t\tto_color.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tto_color.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tto_color.image = interop.images[state->image_index];\n\t\tto_color.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;\n\t\tto_color.subresourceRange.baseMipLevel = 0;\n\t\tto_color.subresourceRange.levelCount = 1;\n\t\tto_color.subresourceRange.baseArrayLayer = 0;\n\t\tto_color.subresourceRange.layerCount = 1;\n\t\tVkDependencyInfo to_color_dependency{};\n\t\tto_color_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;\n\t\tto_color_dependency.imageMemoryBarrierCount = 1;\n\t\tto_color_dependency.pImageMemoryBarriers = &to_color;\n\t\tstate->cmd_pipeline_barrier_2(state->command_buffer, &to_color_dependency);\n\n\t\tVkClearValue clear_value{};\n\t\tclear_value.color.float32[0] = red;\n\t\tclear_value.color.float32[1] = green;\n\t\tclear_value.color.float32[2] = blue;\n\t\tclear_value.color.float32[3] = alpha;\n\t\tVkRenderingAttachmentInfo attachment{};\n\t\tattachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;\n\t\tattachment.imageView = state->transient_clear_view;\n\t\tattachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;\n\t\tattachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;\n\t\tattachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;\n\t\tattachment.clearValue = clear_value;\n\t\tVkRenderingInfo rendering{};\n\t\trendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;\n\t\trendering.renderArea.offset = { 0, 0 };\n\t\trendering.renderArea.extent = { (uint32_t)GetReport().swapchain_extent.cx, (uint32_t)GetReport().swapchain_extent.cy };\n\t\trendering.layerCount = 1;\n\t\trendering.colorAttachmentCount = 1;\n\t\trendering.pColorAttachments = &attachment;\n\t\tcmd_begin_rendering(state->command_buffer, &rendering);\n\t\tcmd_end_rendering(state->command_buffer);\n\n\t\tVkImageMemoryBarrier2 to_present{};\n\t\tto_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;\n\t\tto_present.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;\n\t\tto_present.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;\n\t\tto_present.dstStageMask = VK_PIPELINE_STAGE_2_NONE;\n\t\tto_present.dstAccessMask = 0;\n\t\tto_present.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;\n\t\tto_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;\n\t\tto_present.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tto_present.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tto_present.image = interop.images[state->image_index];\n\t\tto_present.subresourceRange = to_color.subresourceRange;\n\t\tVkDependencyInfo to_present_dependency{};\n\t\tto_present_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;\n\t\tto_present_dependency.imageMemoryBarrierCount = 1;\n\t\tto_present_dependency.pImageMemoryBarriers = &to_present;\n\t\tstate->cmd_pipeline_barrier_2(state->command_buffer, &to_present_dependency);\n\t}\n\telse if(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {\n\t\tVkImageMemoryBarrier2 barrier{};\n\t\tbarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;\n\t\tbarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;\n\t\tbarrier.srcAccessMask = 0;\n\t\tbarrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;\n\t\tbarrier.dstAccessMask = 0;\n\t\tbarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;\n\t\tbarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;\n\t\tbarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tbarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;\n\t\tbarrier.image = interop.images[state->image_index];\n\t\tbarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;\n\t\tbarrier.subresourceRange.baseMipLevel = 0;\n\t\tbarrier.subresourceRange.levelCount = 1;\n\t\tbarrier.subresourceRange.baseArrayLayer = 0;\n\t\tbarrier.subresourceRange.layerCount = 1;\n\t\tVkDependencyInfo dependency{};\n\t\tdependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;\n\t\tdependency.imageMemoryBarrierCount = 1;\n\t\tdependency.pImageMemoryBarriers = &barrier;\n\t\tstate->cmd_pipeline_barrier_2(state->command_buffer, &dependency);\n\t}\n'''
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp', old, new)
+
+          # Wait for clear submission completion before destroying its temporary view and queuing present.
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''\tframe_report.frame_submitted = true;\n\tstate->image_initialized[state->image_index] = 1;\n\tframe_report.present_requested = true;''',
+          '''\tframe_report.frame_submitted = true;\n\tstate->image_initialized[state->image_index] = 1;\n\tif(clear) {\n\t\tVkResult clear_wait = state->wait_for_fences(interop.device, 1, &state->in_flight, VK_TRUE, UINT64_MAX);\n\t\tif(clear_wait != VK_SUCCESS) {\n\t\t\tframe_report.error = String("vkWaitForFences after clear submission failed: ") + AsString((int)clear_wait);\n\t\t\tDestroyFrameState();\n\t\t\treturn false;\n\t\t}\n\t\tif(state->transient_clear_view && state->destroy_image_view)\n\t\t\tstate->destroy_image_view(interop.device, state->transient_clear_view, nullptr);\n\t\tstate->transient_clear_view = VK_NULL_HANDLE;\n\t\tstate->destroy_image_view = nullptr;\n\t\tframe_report.cleared = true;\n\t\tframe_report.clear_count++;\n\t}\n\tframe_report.present_requested = true;''')
+
+          # Add automated S14 test after the existing S13 hook, before namespace close.
+          replace_once('render/RenderVulkan/RenderVulkanFrame.cpp',
+          '''} // namespace VulkanTestHooks\n\n}''',
+          '''bool TestVulkanClearFrame(VulkanProcResolver resolver, VulkanClearFrameTestResult& result)\n{\n\tresult = VulkanClearFrameTestResult();\n\tg_frame_test_base_resolver = resolver;\n\tg_frame_test_missing_proc = nullptr;\n\tg_frame_test_injection = VulkanFrameTestInjection();\n\tstruct ClearTestReset {\n\t\t~ClearTestReset()\n\t\t{\n\t\t\tg_frame_test_base_resolver = nullptr;\n\t\t\tg_frame_test_missing_proc = nullptr;\n\t\t\tg_frame_test_injection = VulkanFrameTestInjection();\n\t\t}\n\t} clear_test_reset;\n\tClearVulkanRuntimeDeviceDiagnostics();\n\n\tHWND hwnd = CreateHiddenFrameTestWindow();\n\tif(!hwnd)\n\t\treturn false;\n\tstruct WindowGuard { HWND hwnd; ~WindowGuard() { if(hwnd) DestroyWindow(hwnd); } } window{hwnd};\n\tGpuNativeWindowDesc native_window;\n\tnative_window.kind = GpuNativeWindowKind::Win32;\n\tnative_window.handle = (uint64_t)(uintptr_t)hwnd;\n\n\tVulkanSurfaceSession session;\n\tif(!session.Open(true, native_window, &FrameTestResolver) || !session.IsReady()) return false;\n\tif(!session.CreateSwapchain(Size(96, 64))) return false;\n\tif(!session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) return false;\n\tconst VulkanFrameReport& first = session.GetFrameReport();\n\tif(!first.clear_requested || !first.cleared || !first.presented || first.clear_count != 1 || first.clear_red != 0.08f || first.clear_green != 0.24f || first.clear_blue != 0.58f || first.clear_alpha != 1.0f) return false;\n\tresult.clear_present = true;\n\n\tconst float colors[][4] = {\n\t\t{ 0.65f, 0.10f, 0.12f, 1.0f },\n\t\t{ 0.08f, 0.55f, 0.22f, 1.0f },\n\t\t{ 0.10f, 0.22f, 0.70f, 1.0f },\n\t\t{ 0.55f, 0.18f, 0.62f, 1.0f },\n\t};\n\tfor(const auto& c : colors)\n\t\tif(!session.PresentClearFrame(c[0], c[1], c[2], c[3])) return false;\n\tif(session.GetFrameReport().clear_count != 5 || !session.GetFrameReport().cleared) return false;\n\tresult.repeat_clear = true;\n\n\tconst char *missing[] = { "vkCreateImageView", "vkDestroyImageView", "vkCmdBeginRendering", "vkCmdEndRendering" };\n\tfor(const char *name : missing) {\n\t\tif(!session.DestroyFrameState()) return false;\n\t\tg_frame_test_missing_proc = name;\n\t\tif(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f) || session.GetFrameReport().error != name || session.HasAcquiredFrame() || !session.GetFrameReport().state_cleared) return false;\n\t\tg_frame_test_missing_proc = nullptr;\n\t\tif(!session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) return false;\n\t}\n\tresult.missing_clear_procedure_recovered = true;\n\n\tif(session.GetReport().validation_warning_count != 0 || session.GetReport().validation_error_count != 0) return false;\n\tresult.validation_clean = true;\n\tsession.Close();\n\tresult.final_diag = GetVulkanRuntimeDeviceDiagnostics();\n\treturn result.clear_present && result.repeat_clear && result.missing_clear_procedure_recovered && result.validation_clean &&\n\t       result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 &&\n\t       result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 &&\n\t       result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;\n}\n\n} // namespace VulkanTestHooks\n\n}''')
+
+          # New focused test package.
+          Path('tests/RenderVulkanClearFrameTest').mkdir(parents=True, exist_ok=True)
+          Path('tests/RenderVulkanClearFrameTest/RenderVulkanClearFrameTest.upp').write_text('''uses\n\tCore,\n\tRenderVulkan;\n\nfile\n\tmain.cpp;\n\nmainconfig\n\t"" = "CONSOLE";\n''')
+          Path('tests/RenderVulkanClearFrameTest/main.cpp').write_text(r'''#include <RenderVulkan/RenderVulkan.h>
+#include <RenderVulkan/RenderVulkanSurfaceSession.h>
+#include <RenderVulkan/RenderVulkanTestHooks.h>
+
+using namespace Upp;
+using Upp::VulkanTestHooks::TestVulkanClearFrame;
+using Upp::VulkanTestHooks::VulkanClearFrameTestResult;
+
+static FARPROC WINAPI TestResolver(HMODULE module, LPCSTR name)
+{
+	(void)module;
+	(void)name;
+	return reinterpret_cast<FARPROC>(1);
+}
+
+static bool Check(bool condition, const char *message)
+{
+	if(!condition)
+		Cout() << "FAIL: " << message << EOL;
+	return condition;
+}
+
+CONSOLE_APP_MAIN
+{
+	VulkanClearFrameTestResult result;
+	bool ok = TestVulkanClearFrame(&TestResolver, result);
+	ok &= Check(result.clear_present, "clear-colour frame should submit and present");
+	ok &= Check(result.repeat_clear, "repeated clear-colour frames should remain valid");
+	ok &= Check(result.missing_clear_procedure_recovered, "missing clear-frame procedures should refuse cleanly and recover");
+	ok &= Check(result.validation_clean, "clear-colour presentation should remain validation-clean");
+	ok &= Check(result.final_diag.runtime_live_count == 0 &&
+	            result.final_diag.instance_live_count == 0 &&
+	            result.final_diag.debug_messenger_live_count == 0 &&
+	            result.final_diag.surface_live_count == 0 &&
+	            result.final_diag.device_live_count == 0 &&
+	            result.final_diag.swapchain_live_count == 0,
+	            "clear-colour test should finish with zero live Vulkan ownership diagnostics");
+	if(ok) {
+		Cout() << "RenderVulkanClearFrameTest passed" << EOL;
+		return;
+	}
+	SetExitCode(1);
+}
+''')
+
+          # Visible S14 demo.
+          Path('examples/VulkanClearFrameDemo').mkdir(parents=True, exist_ok=True)
+          Path('examples/VulkanClearFrameDemo/VulkanClearFrameDemo.upp').write_text('''uses\n\tCore,\n\tCtrlLib,\n\tRenderPlatformWin32,\n\tRenderVulkan;\n\nfile\n\tmain.cpp;\n\nmainconfig\n\t"" = "GUI";\n''')
+          Path('examples/VulkanClearFrameDemo/main.cpp').write_text(r'''#include <CtrlLib/CtrlLib.h>
+#include <RenderPlatformWin32/RenderPlatformWin32.h>
+#include <RenderVulkan/RenderVulkanSurfaceSession.h>
+
+using namespace Upp;
+
+static bool HasArg(const Vector<String>& args, const char *name)
+{
+	for(const String& arg : args)
+		if(arg == name)
+			return true;
+	return false;
+}
+
+static int ParseFrames(const Vector<String>& args)
+{
+	for(int i = 0; i + 1 < args.GetCount(); ++i)
+		if(args[i] == "--frames")
+			return max(1, StrInt(args[i + 1]));
+	return 8;
+}
+
+GUI_APP_MAIN
+{
+	Vector<String> args;
+	for(int i = 1; i < __argc; ++i)
+		args.Add(__argv[i]);
+	bool validation = HasArg(args, "--validation");
+	bool hold = HasArg(args, "--hold");
+	int frames = ParseFrames(args);
+
+	TopWindow win;
+	win.Title("Vulkan Clear Frame Demo - expected blue").SetRect(120, 120, 720, 480);
+	win.Open();
+	if(!win.IsOpen()) {
+		Cout() << "FAIL: window did not open" << EOL;
+		SetExitCode(1);
+		return;
+	}
+	Ctrl::ProcessEvents();
+
+	GpuNativeWindowDesc native_window;
+	String error;
+	if(GetGpuNativeWindowDesc(win, native_window, error) != GpuResult::Ok) {
+		Cout() << "FAIL: " << error << EOL;
+		SetExitCode(1);
+		return;
+	}
+
+	VulkanSurfaceSession session;
+	if(!session.Open(validation, native_window) || !session.IsReady()) {
+		Cout() << "FAIL: session open: " << session.GetError() << EOL;
+		SetExitCode(1);
+		return;
+	}
+	Size size = win.GetSize();
+	if(!session.CreateSwapchain(size)) {
+		Cout() << "FAIL: swapchain: " << session.GetReport().swapchain_error << EOL;
+		SetExitCode(1);
+		return;
+	}
+
+	constexpr float kRed = 0.08f;
+	constexpr float kGreen = 0.24f;
+	constexpr float kBlue = 0.58f;
+	constexpr float kAlpha = 1.0f;
+	bool ok = true;
+	for(int i = 0; i < frames && win.IsOpen(); ++i) {
+		if(!session.PresentClearFrame(kRed, kGreen, kBlue, kAlpha)) {
+			Cout() << "FAIL: clear/present: " << session.GetFrameReport().error << EOL;
+			ok = false;
+			break;
+		}
+		Ctrl::ProcessEvents();
+		Ctrl::GuiSleep(16);
+	}
+
+	if(ok) {
+		const VulkanFrameReport& frame = session.GetFrameReport();
+		const VulkanSurfaceReport& surface = session.GetReport();
+		ok = frame.cleared && frame.presented && frame.clear_count == (uint64_t)frames &&
+		     surface.validation_warning_count == 0 && surface.validation_error_count == 0;
+		Cout() << "Expected clear RGB: 0.08 0.24 0.58" << EOL;
+		Cout() << "Presented clear frames: " << frame.clear_count << EOL;
+		Cout() << "Validation warnings: " << surface.validation_warning_count << EOL;
+		Cout() << "Validation errors: " << surface.validation_error_count << EOL;
+	}
+
+	if(ok && hold) {
+		while(win.IsOpen()) {
+			bool quit = false;
+			Ctrl::ProcessEvents(&quit);
+			if(quit)
+				break;
+			Ctrl::GuiSleep(50);
+		}
+	}
+
+	session.Close();
+	win.Close();
+	Ctrl::ProcessEvents();
+	if(!ok) {
+		SetExitCode(1);
+		return;
+	}
+	Cout() << "VulkanClearFrameDemo passed" << EOL;
+}
+''')
+
+          # Documentation/status updates.
+          replace_once('README.md',
+          '''- `examples/GpuCtrlMultiViewDemo`\n- `tests/RenderCanvasTest`''',
+          '''- `examples/GpuCtrlMultiViewDemo`\n- `examples/VulkanClearFrameDemo`\n- `tests/RenderCanvasTest`''')
+          replace_once('README.md',
+          '''- no Vulkan rendering backend yet; visible rendering is still not implemented\n- private swapchain ownership plus explicit frame acquisition and presentation are\n  available through `VulkanSurfaceSession`; this path currently performs only the\n  synchronization and image-layout work required for a valid presentation''',
+          '''- no general Vulkan 2D rendering backend yet\n- private swapchain ownership, explicit frame acquisition/presentation, and the first\n  visible clear-colour frame are available through `VulkanSurfaceSession`; S14 uses\n  Vulkan 1.3 dynamic rendering with a color-attachment clear and no shaders or pipeline''')
+          replace_once('README.md',
+          '''- `GpuCtrl` does not automatically create a swapchain, acquire frames, or present yet''',
+          '''- `GpuCtrl` does not automatically create a swapchain, acquire frames, clear, or present yet''')
+
+          replace_once('docs/PROJECT_PLAN.md',
+          '''- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is implemented\n  and awaiting Windows/runtime acceptance''',
+          '''- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted\n- TASK-008A1 S14 first visible Vulkan clear-colour frame is implemented and awaiting\n  Windows/runtime/visual acceptance''')
+          replace_once('docs/PROJECT_PLAN.md',
+          '''- private swapchain plus explicit acquisition/presentation are implemented; visible\n  rendering remains unimplemented\n- the clear-colour presented-frame path remains the next visible milestone after S13''',
+          '''- private swapchain plus explicit acquisition/presentation are implemented\n- the S14 clear-colour path is the first visible Vulkan frame; general 2D rendering,\n  shaders, resize/recreation, and automatic GpuCtrl presentation remain deferred''')
+
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          '''Explicit `VulkanSurfaceSession` instances now provide manual frame acquisition and\npresentation, but current `GpuCtrl` instances do not invoke that path automatically.\nVisible rendering is not implemented yet.''',
+          '''Explicit `VulkanSurfaceSession` instances now provide manual frame acquisition,\npresentation, and a first visible clear-colour frame through `PresentClearFrame()`.\nCurrent `GpuCtrl` instances do not invoke that path automatically; general UI rendering\nremains deferred.''')
+
+          # Sanity checks: S13 regression test remains untouched.
+          import subprocess
+          changed = subprocess.check_output(['git', 'diff', '--name-only']).decode().splitlines()
+          if 'tests/RenderVulkanFrameTest/main.cpp' in changed:
+              raise SystemExit('S13 focused test was unexpectedly modified')
+          PY
+
+          git diff --check
+          git status --short
+          git add README.md docs/GPU_CTRL_INTEGRATION.md docs/PROJECT_PLAN.md \
+            render/RenderVulkan/RenderVulkanFrame.cpp render/RenderVulkan/RenderVulkanSurfaceSession.h \
+            render/RenderVulkan/RenderVulkanTestHooks.h tests/RenderVulkanClearFrameTest examples/VulkanClearFrameDemo
+          git diff --cached --check
+          git -c user.name='OpenAI' -c user.email='noreply@openai.com' commit -m 'TASK-008A1-S14: present first Vulkan clear-colour frame' \
+            -m 'Add a validation-clean dynamic-rendering clear path on acquired swapchain images without introducing shaders, pipelines, or GpuCtrl integration.' \
+            -m 'Use a transient image view whose lifetime is fenced before presentation, preserve the accepted S13 present-only path, and add focused automated plus visible demo coverage.' \
+            -m 'Document the clear-colour frame as the first visible Vulkan milestone while leaving the general 2D renderer and resize/recreation for later stages.'
+          git branch -f chatgpt/s14-candidate HEAD
+          git push -f origin chatgpt/s14-candidate
