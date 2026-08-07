@@ -1,0 +1,77 @@
+name: Complete S13 candidate acceptance
+
+on:
+  push:
+    branches:
+      - chatgpt/s13-frame-presentation
+
+permissions:
+  contents: write
+
+jobs:
+  complete-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add post-close validation and active-frame close coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_BASE="aeadf51a8460803edbfc062adac7ea6a60724629"
+          git fetch origin main chatgpt/s13-candidate
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
+          CANDIDATE="$(git rev-parse origin/chatgpt/s13-candidate)"
+          test "$(git rev-parse "$CANDIDATE^")" = "$EXPECTED_BASE"
+          git checkout --detach "$CANDIDATE"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          replace_once(
+              'render/RenderVulkan/RenderVulkanTestHooks.h',
+              '''\tbool submit_failure_recovered = false;\n\tbool destroy_with_acquired_cleanup = false;\n\tbool destructor_cleanup = false;''',
+              '''\tbool submit_failure_recovered = false;\n\tbool destroy_with_acquired_cleanup = false;\n\tbool close_with_acquired_cleanup = false;\n\tbool destructor_cleanup = false;''')
+
+          replace_once(
+              'tests/RenderVulkanFrameTest/main.cpp',
+              '''\tok &= Check(result.submit_failure_recovered, "submit failure should clear frame synchronization and recover");\n\tok &= Check(result.destroy_with_acquired_cleanup, "swapchain destruction should clear an acquired frame");\n\tok &= Check(result.destructor_cleanup, "frame resources should be released by session destruction");''',
+              '''\tok &= Check(result.submit_failure_recovered, "submit failure should clear frame synchronization and recover");\n\tok &= Check(result.destroy_with_acquired_cleanup, "swapchain destruction should clear an acquired frame");\n\tok &= Check(result.close_with_acquired_cleanup, "session close should clear an acquired frame without validation errors");\n\tok &= Check(result.destructor_cleanup, "frame resources should be released by session destruction");''')
+
+          replace_once(
+              'render/RenderVulkan/RenderVulkanFrame.cpp',
+              '''\tif(session.GetReport().validation_warning_count != 0 || session.GetReport().validation_error_count != 0) return false;\n\tresult.validation_clean = true;\n\tsession.Close();\n\n\t{\n\t\tVulkanSurfaceSession destructor_session;''',
+              '''\tif(session.GetReport().validation_warning_count != 0 || session.GetReport().validation_error_count != 0) return false;\n\tresult.validation_clean = true;\n\tsession.Close();\n\tif(session.GetReport().validation_warning_count != 0 || session.GetReport().validation_error_count != 0 || !session.GetFrameReport().state_cleared || !session.GetFrameReport().cleanup_ok || !session.GetReport().clean_shutdown) return false;\n\n\t{\n\t\tVulkanSurfaceSession close_session;\n\t\tif(!close_session.Open(true, first_window, &FrameTestResolver) || !close_session.CreateSwapchain(Size(64, 64)) || !close_session.AcquireFrame()) return false;\n\t\tclose_session.Close();\n\t\tif(close_session.IsOpen() || close_session.IsReady() || close_session.HasSwapchain() || close_session.HasAcquiredFrame() || !close_session.GetFrameReport().state_cleared || !close_session.GetFrameReport().cleanup_ok || !close_session.GetReport().clean_shutdown || close_session.GetReport().validation_warning_count != 0 || close_session.GetReport().validation_error_count != 0) return false;\n\t}\n\tresult.close_with_acquired_cleanup = true;\n\n\t{\n\t\tVulkanSurfaceSession destructor_session;''')
+
+          replace_once(
+              'render/RenderVulkan/RenderVulkanFrame.cpp',
+              '''\t\tif(first.GetReport().validation_warning_count != 0 || first.GetReport().validation_error_count != 0 || second.GetReport().validation_warning_count != 0 || second.GetReport().validation_error_count != 0) return false;\n\t\tsecond.Close();\n\t}\n\tresult.grouped_isolation = true;''',
+              '''\t\tif(first.GetReport().validation_warning_count != 0 || first.GetReport().validation_error_count != 0 || second.GetReport().validation_warning_count != 0 || second.GetReport().validation_error_count != 0) return false;\n\t\tsecond.Close();\n\t\tif(second.GetReport().validation_warning_count != 0 || second.GetReport().validation_error_count != 0 || !second.GetFrameReport().state_cleared || !second.GetFrameReport().cleanup_ok || !second.GetReport().clean_shutdown) return false;\n\t}\n\tresult.grouped_isolation = true;''')
+
+          replace_once(
+              'render/RenderVulkan/RenderVulkanFrame.cpp',
+              '''result.submit_failure_recovered && result.destroy_with_acquired_cleanup && result.destructor_cleanup''',
+              '''result.submit_failure_recovered && result.destroy_with_acquired_cleanup && result.close_with_acquired_cleanup && result.destructor_cleanup''')
+          PY
+
+          git diff --check
+          git diff --stat
+          git config user.name "ChatGPT"
+          git config user.email "chatgpt@users.noreply.github.com"
+          git add \
+            render/RenderVulkan/RenderVulkanFrame.cpp \
+            render/RenderVulkan/RenderVulkanTestHooks.h \
+            tests/RenderVulkanFrameTest/main.cpp
+          git diff --cached --check
+          git commit --amend --no-edit
+          git push --force origin HEAD:refs/heads/chatgpt/s13-candidate
