@@ -7,8 +7,28 @@ namespace Upp {
 
 namespace VulkanTestHooks {
 struct VulkanGroupedSurfaceSessionTestResult;
+struct VulkanFrameTestResult;
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
+bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);
 }
+
+struct VulkanFrameReport {
+	bool sync_requested = false;
+	bool sync_created = false;
+	bool state_cleared = true;
+	bool cleanup_ok = true;
+	bool image_acquired = false;
+	bool frame_submitted = false;
+	bool present_requested = false;
+	bool presented = false;
+	bool suboptimal = false;
+	bool out_of_date = false;
+	int image_index = -1;
+	uint64_t acquire_count = 0;
+	uint64_t present_count = 0;
+	uint64_t swapchain_id = 0;
+	String error;
+};
 
 class VulkanSurfaceSessionGroup {
 public:
@@ -46,8 +66,34 @@ public:
 	bool DestroySwapchain();
 	bool HasSwapchain() const;
 
-	private:
+	bool AcquireFrame();
+	bool PresentFrame();
+	bool HasAcquiredFrame() const;
+	const VulkanFrameReport& GetFrameReport() const;
+
+private:
+	struct FrameInterop {
+		VkDevice device = VK_NULL_HANDLE;
+		VkQueue graphics_queue = VK_NULL_HANDLE;
+		VkQueue present_queue = VK_NULL_HANDLE;
+		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+		Vector<VkImage> images;
+		uint32_t graphics_queue_family_index = 0;
+		uint64_t swapchain_id = 0;
+		PFN_vkGetDeviceProcAddr get_device_proc_addr = nullptr;
+		VulkanProcResolver proc_filter = nullptr;
+	};
+
 	std::unique_ptr<Impl> impl;
+	void *frame_impl = nullptr;
+	VulkanFrameReport frame_report;
+
+	bool GetFrameInterop(FrameInterop& out) const;
+	bool WaitFrameIdle(String& error);
+	void SyncFrameValidation();
+	bool DestroyFrameState();
+
+	friend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);
 };
 
 }
