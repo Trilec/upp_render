@@ -1,0 +1,571 @@
+diff --git a/render/GpuCtrl/GpuCtrl.cpp b/render/GpuCtrl/GpuCtrl.cpp
+--- a/render/GpuCtrl/GpuCtrl.cpp
++++ b/render/GpuCtrl/GpuCtrl.cpp
+@@ -13,6 +13,7 @@ public:
+ 	virtual void Close() = 0;
+ 	virtual bool IsReady() const = 0;
+ 	virtual const String& GetError() const = 0;
++	virtual bool Present(Size requested_size, String& error) = 0;
+ };
+ 
+ class VulkanGpuCtrlBackendSession : public GpuCtrlBackendSession {
+@@ -31,6 +32,7 @@ public:
+ 	void Close() override
+ 	{
+ 		session.Close();
++		swapchain_request_size = Size(0, 0);
+ 	}
+ 
+ 	bool IsReady() const override
+@@ -43,8 +45,59 @@ public:
+ 		return session.GetError();
+ 	}
+ 
++	bool Present(Size requested_size, String& error) override
++	{
++		error.Clear();
++		if(requested_size.cx <= 0 || requested_size.cy <= 0)
++			return true;
++		if(!session.IsReady()) {
++			error = session.GetError();
++			return false;
++		}
++		if(!EnsureSwapchain(requested_size, error))
++			return false;
++		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f))
++			return true;
++
++		error = session.GetFrameReport().error;
++		if(!session.GetFrameReport().out_of_date)
++			return false;
++
++		if(!session.DestroySwapchain()) {
++			if(error.IsEmpty())
++				error = session.GetReport().swapchain_error;
++			if(error.IsEmpty())
++				error = "Vulkan swapchain cleanup failed";
++			return false;
++		}
++		swapchain_request_size = Size(0, 0);
++		if(!EnsureSwapchain(requested_size, error))
++			return false;
++		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) {
++			error.Clear();
++			return true;
++		}
++		error = session.GetFrameReport().error;
++		return false;
++	}
++
+ private:
++	bool EnsureSwapchain(Size requested_size, String& error)
++	{
++		if(session.HasSwapchain() && requested_size != swapchain_request_size) {
++			if(!session.DestroySwapchain()) {
++				error = session.GetReport().swapchain_error;
++				if(error.IsEmpty())
++					error = "Vulkan swapchain cleanup failed";
++				return false;
++			}
++			swapchain_request_size = Size(0, 0);
++		}
++		if(!session.HasSwapchain()) {
++			if(!session.CreateSwapchain(requested_size)) {
++				error = session.GetReport().swapchain_error;
++				return false;
++			}
++			swapchain_request_size = requested_size;
++		}
++		return true;
++	}
++
+ 	VulkanSurfaceSession session;
++	Size swapchain_request_size = Size(0, 0);
+ };
+@@ -89,9 +142,12 @@ struct GpuCtrl::Impl {
+ 				return 1;
+ 			if(message == WM_PAINT) {
+ 				PAINTSTRUCT ps;
+ 				HWND hwnd = GetHWND();
+-				BeginPaint(hwnd, &ps);
++				HDC dc = BeginPaint(hwnd, &ps);
++				bool gpu_painted = impl && impl->OnHostPaint();
++				if(!gpu_painted)
++					FillRect(dc, &ps.rcPaint, GetSysColorBrush(COLOR_WINDOW));
+ 				EndPaint(hwnd, &ps);
+ 				return 0;
+ 			}
+@@ -130,13 +186,32 @@ struct GpuCtrl::Impl {
+ 
+ 	String GetGpuError() const
+ 	{
+-		// API errors describe rejected configuration; session errors describe
+-		// backend bring-up or teardown failures.
+-		return api_error.IsEmpty() ? session_error : api_error;
++		// API errors describe rejected configuration; session errors describe
++		// backend bring-up failures; presentation errors preserve a healthy
++		// session so a later invalidation can recover without a repaint loop.
++		if(!api_error.IsEmpty())
++			return api_error;
++		if(!session_error.IsEmpty())
++			return session_error;
++		return presentation_error;
++	}
++
++	bool OnHostPaint()
++	{
++		if(!IsGpuReady() || !backend)
++			return false;
++		Size requested_size = host.GetSize();
++		String error;
++		if(backend->Present(requested_size, error)) {
++			presentation_error.Clear();
++			return true;
++		}
++		presentation_error = error.IsEmpty() ? backend->GetError() : error;
++		return false;
+ 	}
+ 
+ 	void RequestGpuRefresh()
+ 	{
+-		if(IsGpuReady())
++		if(IsNativeHostReady())
+ 			host.Refresh();
+ 	}
+@@ -170,6 +245,8 @@ struct GpuCtrl::Impl {
+ 		else
+ 			SetApiError("backend not selected");
++		if(host_ready && !gpu_ready && kind == GpuBackendKind::Vulkan)
++			StartGpuSession();
+ 	}
+@@ -186,6 +263,8 @@ struct GpuCtrl::Impl {
+ 		validation_requested = validation;
+ 		init_attempted = false;
+ 		ClearError();
++		if(host_ready && !gpu_ready)
++			StartGpuSession();
+ 	}
+@@ -205,6 +284,8 @@ struct GpuCtrl::Impl {
+ 				StartGpuSession();
+ 			}
+ 			SyncHostBounds();
++			if(reason == SHOW && IsGpuReady())
++				host.Refresh();
+ 			break;
+@@ -230,13 +311,18 @@ struct GpuCtrl::Impl {
+ 	void SyncHostBounds()
+ 	{
+-		// Ordinary resize and visibility notifications keep the host child sized;
+-		// the surface-level session itself is intentionally independent of any
+-		// swapchain/presentation lifetime.
++		// Host sizing stays backend-neutral. A real size change invalidates one
++		// frame; the private backend reconciles its swapchain on that paint.
+ 		Size sz = owner->GetSize();
++		bool size_changed = sz != last_host_size;
++		last_host_size = sz;
+ 		host.SetRect(0, 0, sz.cx, sz.cy);
+ 		if(IsNativeHostReady()) {
+ 			HWND hwnd = host.GetHWND();
+ 			EnableWindow(hwnd, owner->IsEnabled());
+ 		}
++		if(size_changed && IsGpuReady() && sz.cx > 0 && sz.cy > 0)
++			host.Refresh();
+ 	}
+@@ -277,8 +363,11 @@ struct GpuCtrl::Impl {
+ 
+ 		gpu_ready = backend->IsReady();
+-		if(gpu_ready)
++		if(gpu_ready) {
+ 			ClearError();
+-		else
++			// Initial presentation is event driven exactly once after session bring-up.
++			host.Refresh();
++		}
++		else
+ 			SetSessionError(backend->GetError());
+ 	}
+@@ -296,6 +385,7 @@ struct GpuCtrl::Impl {
+ 		backend.Clear();
+ 		ClearError();
+ 		session_error.Clear();
++		presentation_error.Clear();
+ 		host_ready = false;
+@@ -316,6 +406,7 @@ struct GpuCtrl::Impl {
+ 	void ClearError()
+ 	{
+ 		api_error.Clear();
+ 		session_error.Clear();
++		presentation_error.Clear();
+ 	}
+@@ -325,10 +416,12 @@ struct GpuCtrl::Impl {
+ 	GpuBackendKind backend_kind = GpuBackendKind::Vulkan;
+ 	String api_error;
+ 	String session_error;
++	String presentation_error;
++	Size last_host_size = Size(-1, -1);
+ 	bool validation_requested = false;
+ 	bool host_ready = false;
+ 	bool gpu_ready = false;
+ 	bool init_attempted = false;
+ 	bool destroying = false;
+ };
+diff --git a/examples/GpuCtrlDemoSupport.h b/examples/GpuCtrlDemoSupport.h
+--- a/examples/GpuCtrlDemoSupport.h
++++ b/examples/GpuCtrlDemoSupport.h
+@@ -17,6 +17,7 @@ inline String GpuDiagText(const VulkanTestHooks::VulkanRuntimeDeviceDiagnostics& diag)
+ 	     << " instance=" << diag.instance_create_count << "/" << diag.instance_live_count
+ 	     << " device=" << diag.device_create_count << "/" << diag.device_live_count
+ 	     << " surface=" << diag.surface_create_count << "/" << diag.surface_live_count
++	     << " swapchain=" << diag.swapchain_create_count << "/" << diag.swapchain_live_count
+ 	     << " discovery=" << diag.physical_device_discovery_count
+ 	     << " runtime-id=" << diag.runtime_id
+ 	     << " device-id=" << diag.device_id
+ diff --git a/examples/GpuCtrlBasicDemo/main.cpp b/examples/GpuCtrlBasicDemo/main.cpp
+--- a/examples/GpuCtrlBasicDemo/main.cpp
++++ b/examples/GpuCtrlBasicDemo/main.cpp
+@@ -93,7 +93,14 @@ GUI_APP_MAIN
+ 	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+ 	Cout() << "GpuCtrlBasicDemo diagnostics: " << GpuDiagText(diag) << EOL;
+ 	if(auto_close) {
+-		if(!opened || !ready || !error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
++		if(!opened || !ready || !error.IsEmpty() ||
++		   diag.swapchain_create_count < 1 ||
++		   diag.runtime_live_count != 0 ||
++		   diag.instance_live_count != 0 ||
++		   diag.debug_messenger_live_count != 0 ||
++		   diag.device_live_count != 0 ||
++		   diag.surface_live_count != 0 ||
++		   diag.swapchain_live_count != 0) {
+ 			SetExitCode(1);
+ 			return;
+ 		}
+diff --git a/examples/GpuCtrlMultiViewDemo/main.cpp b/examples/GpuCtrlMultiViewDemo/main.cpp
+--- a/examples/GpuCtrlMultiViewDemo/main.cpp
++++ b/examples/GpuCtrlMultiViewDemo/main.cpp
+@@ -161,7 +161,14 @@ GUI_APP_MAIN
+ 	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+ 	Cout() << "GpuCtrlMultiViewDemo diagnostics: " << GpuDiagText(diag) << EOL;
+ 	if(auto_close) {
+-		if(!opened || !ready || !left_error.IsEmpty() || !right_error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
++		if(!opened || !ready || !left_error.IsEmpty() || !right_error.IsEmpty() ||
++		   diag.swapchain_create_count < 2 ||
++		   diag.runtime_live_count != 0 ||
++		   diag.instance_live_count != 0 ||
++		   diag.debug_messenger_live_count != 0 ||
++		   diag.device_live_count != 0 ||
++		   diag.surface_live_count != 0 ||
++		   diag.swapchain_live_count != 0) {
+ 			SetExitCode(1);
+ 			return;
+ 		}
+diff --git a/tests/GpuCtrlPresentationTest/GpuCtrlPresentationTest.upp b/tests/GpuCtrlPresentationTest/GpuCtrlPresentationTest.upp
+new file mode 100644
+--- /dev/null
++++ b/tests/GpuCtrlPresentationTest/GpuCtrlPresentationTest.upp
+@@ -0,0 +1,12 @@
++uses
++	Core,
++	CtrlLib,
++	GpuCtrl,
++	RenderVulkan;
++
++file
++	main.cpp;
++
++mainconfig
++	"" = "GUI";
++
+diff --git a/tests/GpuCtrlPresentationTest/main.cpp b/tests/GpuCtrlPresentationTest/main.cpp
+new file mode 100644
+--- /dev/null
++++ b/tests/GpuCtrlPresentationTest/main.cpp
+@@ -0,0 +1,151 @@
++#include <CtrlLib/CtrlLib.h>
++#include <GpuCtrl/GpuCtrl.h>
++#include <RenderVulkan/RenderVulkanTestHooks.h>
++
++using namespace Upp;
++
++namespace {
++
++static bool Check(bool condition, const char *message)
++{
++	if(!condition)
++		Cout() << "FAIL: " << message << EOL;
++	return condition;
++}
++
++static void PumpEvents(int count)
++{
++	for(int i = 0; i < count; ++i) {
++		Ctrl::ProcessEvents();
++		Ctrl::GuiSleep(2);
++	}
++}
++
++class PresentationWindow : public TopWindow {
++public:
++	PresentationWindow()
++	{
++		Title("GpuCtrlPresentationTest");
++		SetRect(100, 100, 900, 360);
++		first.SetValidation(true);
++		second.SetValidation(true);
++		fallback.SetBackend(GpuBackendKind::Null);
++		Add(first);
++		Add(second);
++		Add(fallback);
++	}
++
++	void Layout() override
++	{
++		Size sz = GetSize();
++		int w = max(1, sz.cx / 3);
++		first.SetRect(0, 0, w, sz.cy);
++		second.SetRect(w, 0, w, sz.cy);
++		fallback.SetRect(2 * w, 0, max(0, sz.cx - 2 * w), sz.cy);
++	}
++
++	GpuCtrl first;
++	GpuCtrl second;
++	GpuCtrl fallback;
++};
++
++} // namespace
++
++GUI_APP_MAIN
++{
++	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
++	bool ok = true;
++	{
++		PresentationWindow win;
++		win.Open();
++		ok &= Check(win.IsOpen(), "test window should open");
++		if(!win.IsOpen()) {
++			SetExitCode(1);
++			return;
++		}
++
++		VulkanTestHooks::VulkanRuntimeDeviceDiagnostics active;
++		for(int i = 0; i < 500; ++i) {
++			Ctrl::ProcessEvents();
++			active = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
++			if(win.first.IsGpuReady() && win.second.IsGpuReady() &&
++			   win.fallback.IsNativeHostReady() && active.swapchain_live_count == 2)
++				break;
++			Ctrl::GuiSleep(2);
++		}
++
++		ok &= Check(win.first.IsGpuReady(), "first Vulkan control should be ready");
++		ok &= Check(win.second.IsGpuReady(), "second Vulkan control should be ready");
++		ok &= Check(win.first.GetGpuError().IsEmpty(), "first Vulkan control should have no error");
++		ok &= Check(win.second.GetGpuError().IsEmpty(), "second Vulkan control should have no error");
++		ok &= Check(win.fallback.IsNativeHostReady(), "fallback control should keep its native host");
++		ok &= Check(!win.fallback.IsGpuReady(), "unsupported backend should use fallback rather than report GPU readiness");
++		ok &= Check(win.fallback.GetGpuError() == "backend not supported", "fallback should report unsupported backend");
++		ok &= Check(active.swapchain_create_count >= 2, "two Vulkan controls should create independent swapchains");
++		ok &= Check(active.swapchain_live_count == 2, "two Vulkan swapchains should be live while the window is open");
++		ok &= Check(active.surface_live_count == 2 && active.device_live_count == 2,
++		            "two Vulkan controls should retain isolated surfaces and devices");
++
++		uint64_t stable_swapchain_creates = active.swapchain_create_count;
++		PumpEvents(100);
++		auto stable = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
++		ok &= Check(stable.swapchain_create_count == stable_swapchain_creates,
++		            "idle event processing must not recreate swapchains");
++		ok &= Check(stable.swapchain_live_count == 2,
++		            "idle event processing should keep both swapchains live");
++
++		win.first.RequestGpuRefresh();
++		win.second.RequestGpuRefresh();
++		win.fallback.RequestGpuRefresh();
++		PumpEvents(80);
++		auto refreshed = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
++		ok &= Check(refreshed.swapchain_create_count == stable_swapchain_creates,
++		            "explicit refresh should present without recreating same-size swapchains");
++		ok &= Check(win.first.GetGpuError().IsEmpty() && win.second.GetGpuError().IsEmpty(),
++		            "explicit refresh should remain presentation-clean");
++
++		win.SetRect(100, 100, 1050, 420);
++		PumpEvents(120);
++		auto resized = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
++		ok &= Check(resized.swapchain_create_count >= stable_swapchain_creates + 2,
++		            "resizing should recreate one swapchain per Vulkan control");
++		ok &= Check(resized.swapchain_live_count == 2,
++		            "resize recreation should leave exactly two live swapchains");
++		ok &= Check(win.first.IsGpuReady() && win.second.IsGpuReady(),
++		            "both Vulkan controls should remain ready after resize");
++		ok &= Check(win.first.GetGpuError().IsEmpty() && win.second.GetGpuError().IsEmpty(),
++		            "resize recreation should remain error-free");
++
++		win.first.Hide();
++		PumpEvents(40);
++		ok &= Check(win.second.IsGpuReady() && win.second.GetGpuError().IsEmpty(),
++		            "hiding one control must not disturb its sibling");
++		win.first.Show();
++		win.first.RequestGpuRefresh();
++		win.second.RequestGpuRefresh();
++		PumpEvents(80);
++		ok &= Check(win.first.IsGpuReady() && win.second.IsGpuReady(),
++		            "both controls should remain ready after hide/show");
++		ok &= Check(win.first.GetGpuError().IsEmpty() && win.second.GetGpuError().IsEmpty(),
++		            "hide/show presentation should remain error-free");
++
++		win.Close();
++		PumpEvents(20);
++	}
++
++	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
++	ok &= Check(final_diag.runtime_live_count == 0 &&
++	            final_diag.instance_live_count == 0 &&
++	            final_diag.debug_messenger_live_count == 0 &&
++	            final_diag.surface_live_count == 0 &&
++	            final_diag.device_live_count == 0 &&
++	            final_diag.swapchain_live_count == 0,
++	            "GpuCtrl presentation lifecycle should finish with zero live Vulkan ownership");
++	if(ok) {
++		Cout() << "GpuCtrlPresentationTest passed" << EOL;
++		return;
++	}
++	SetExitCode(1);
++}
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -29,6 +29,7 @@ still comes later.
+ - `tests/RenderVulkanTest`
+ - `tests/RenderVulkanFrameTest`
+ - `tests/RenderVulkanClearFrameTest`
++- `tests/GpuCtrlPresentationTest`
+ - `tests/RenderPlatformWin32Test`
+@@ -57,8 +58,8 @@ Run the test and demo executables after building.
+ - Vulkan loader, instance, physical-device selection, logical-device creation,
+   and graphics-queue bootstrap are implemented; TASK-007 surface bring-up also
+   passes the ten-cycle validation gate
+-- `GpuCtrl` now hosts a surface-level Vulkan session with a deterministic retry
+-  policy and no test-only public hooks
++- `GpuCtrl` now owns a private Vulkan surface/swapchain/presentation lifecycle
++  with a deterministic retry policy and no test-only public hooks
+@@ -73,10 +74,11 @@ Run the test and demo executables after building.
+   shaders, graphics pipeline, render pass, or renderer abstraction
+ - no other GPU backend yet
+-- `GpuCtrl` does not automatically create a swapchain, acquire frames, clear,
+-  or present yet
+-- resize/recreation is still manual and out-of-date handling remains explicit
++- `GpuCtrl` now automatically creates/recreates its private swapchain and presents
++  the S14 clear frame from ordinary invalidation/paint events
++- unsupported or failed presentation falls back to normal host painting; later
++  invalidation can recover without a busy repaint loop
++- the public `GpuCtrl` API remains backend-neutral
+ - no text, image, gradient, shadow, or shader pipeline yet
+ diff --git a/docs/PROJECT_PLAN.md b/docs/PROJECT_PLAN.md
+--- a/docs/PROJECT_PLAN.md
++++ b/docs/PROJECT_PLAN.md
+@@ -60,9 +60,9 @@ It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
+ and keeps the SDK header path local via a build method with `INCLUDE` extended
+ by `%VULKAN_SDK%\Include`.
+ 
+-Surface/platform bring-up, grouped ownership, private swapchain lifecycle, and
+-explicit frame acquisition/presentation are complete. The active milestone is
+-the first visible Vulkan clear-colour frame.
++Surface/platform bring-up, grouped ownership, private swapchain lifecycle,
++explicit frame acquisition/presentation, and the first visible clear frame are
++accepted. The active milestone is embedded `GpuCtrl` Vulkan presentation.
+@@ -136,15 +136,17 @@ additional backends beyond the first ones already planned.
+ - TASK-008A1 S12 private Vulkan swapchain ownership is accepted
+ - TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted
+-- TASK-008A1 S14 first visible Vulkan clear-colour frame is implemented and
+-  awaiting Windows/runtime/visual acceptance
++- TASK-008A1 S14 first visible Vulkan clear-colour frame is accepted
++- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is implemented and
++  awaiting Windows/runtime/visual acceptance
+ - grouped sessions share runtime and instance state while logical devices,
+   queues, surfaces, swapchains, and frame state remain owned per session
+ - ordinary GpuCtrl instances remain isolated through their default session groups
+ - S14 uses a temporary dynamic-rendering clear submission and deliberately keeps
+   the accepted S13 present-only implementation unchanged
+-- general 2D rendering, shaders, resize/recreation, and automatic GpuCtrl
+-  presentation remain deferred
++- S15 drives private swapchain recreation and S14 clear presentation from native
++  paint invalidation without adding a timer/render loop or Vulkan public API
++- general 2D rendering, shaders, painter callbacks, and shared control device
++  ownership remain deferred
+ diff --git a/docs/GPU_CTRL_USAGE.md b/docs/GPU_CTRL_USAGE.md
+--- a/docs/GPU_CTRL_USAGE.md
++++ b/docs/GPU_CTRL_USAGE.md
+@@ -68,11 +68,17 @@ This keeps repeated layout or visibility notifications from redoing expensive
+ 
+ `GpuCtrl` handles host sizing and child-window lifecycle automatically.
+ 
+-It currently keeps a valid GPU surface/session only. It does not present visible frames yet.
++The Vulkan backend now owns a private swapchain for the child window and presents
++the accepted S14 clear frame on ordinary paint invalidation. A real size change
++reconciles the swapchain on the next paint; zero-size states do not spin or poll.
+ 
+-`RequestGpuRefresh()` is still a no-op style host repaint hook until the rendering callback exists.
++`RequestGpuRefresh()` requests one host repaint. It does not start a render loop.
++If presentation is unavailable, the child uses normal GDI fallback painting and
++keeps the presentation error available through `GetGpuError()`. A later resize,
++show or explicit refresh may recover without recreating the whole control.
+@@ -94,4 +100,7 @@ Later work may share GPU device resources, but that is a backend optimization,
+ 
+ ## Current Limitation
+ 
+-`GpuCtrl` currently creates a valid embedded GPU surface/session and reports readiness and errors, but it does not render or present visible frames.
++`GpuCtrl` currently presents only the fixed S14 clear colour. There is still no
++public painter callback, general 2D renderer, text/image pipeline, or shared GPU
++device context. Those remain later renderer milestones; the hosting and
++presentation lifecycle is now live.
+diff --git a/docs/GPU_CTRL_INTEGRATION.md b/docs/GPU_CTRL_INTEGRATION.md
+--- a/docs/GPU_CTRL_INTEGRATION.md
++++ b/docs/GPU_CTRL_INTEGRATION.md
+@@ -24,7 +24,9 @@ public:
+ };
+ ```
+ 
+-`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the embedded surface-level session is open and ready. `GetGpuError()` returns the last API or session error without clearing a healthy ready state.
++`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the
++embedded backend session is open and ready. `GetGpuError()` reports API, startup,
++or presentation failures without exposing backend-specific public types.
+@@ -39,6 +41,8 @@ TopWindow
+   -> private DHCtrl child host
+   -> Win32 native-handle helper
+   -> VulkanSurfaceSession
++  -> private swapchain reconciliation
++  -> S14 clear-frame presentation
+   -> RenderVulkan surface/session code
+@@ -85,7 +89,10 @@ Repeated `Layout()` calls are safe.
+ Repeated `OPEN`/`CLOSE`/`SHOW`/`ENABLE` notifications are treated as idempotent state updates.
+ 
+-Ordinary resize and visibility changes update the embedded host; they do not create or destroy a swapchain yet.
++Ordinary resize and visibility changes update the embedded host. A genuine size
++change invalidates one paint; the private Vulkan backend destroys/recreates its
++swapchain on that paint if the requested size changed. No resize timer or polling
++loop is used.
+@@ -102,13 +109,17 @@ In the current implementation it is intentionally boring: if the native host i
+ 
+-## Future Swapchain Ownership
++## Swapchain And Presentation Ownership
+ 
+-Swapchain ownership is intentionally not part of the current control boundary.
++Swapchain ownership remains private to the backend session and is not exposed by
++the `GpuCtrl` header. The current Vulkan backend presents the fixed S14 clear
++colour from the child HWND's `WM_PAINT` path.
+ 
+-Future backend objects should live behind the host lifecycle, after the native child window is stable and before any actual frame presentation begins.
++Initial session readiness requests one paint. Size changes, show notifications,
++and `RequestGpuRefresh()` request later paints. A successful presentation never
++invalidates itself, so there is no implicit busy render loop.
++
++If presentation fails, the native child is filled by the ordinary GDI fallback.
++The backend session stays available for a later event-driven recovery attempt.
+@@ -178,10 +189,10 @@ control context is deferred until a later design task.
+ 
+ Surface/device readiness and private swapchain readiness are separate states.
+-Explicit `VulkanSurfaceSession` instances now provide manual frame acquisition and
+-presentation, but current `GpuCtrl` instances do not invoke that path automatically.
+-Visible rendering is not implemented yet.
++Explicit `VulkanSurfaceSession` instances provide manual frame acquisition,
++presentation and clear rendering. `GpuCtrl` now invokes that private Vulkan path
++automatically from normal paint invalidation while keeping its public surface
++backend-neutral. General UI rendering is not implemented yet.
