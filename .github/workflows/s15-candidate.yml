@@ -15,18 +15,73 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply exact S15 patch to accepted S14
+      - name: Apply exact S15 changes to accepted S14
         shell: bash
         run: |
           set -euo pipefail
           BASE=2851559ac6fe4dc05476c5cddaf3eaff607880d8
           cp .github/s15.patch /tmp/s15.patch
           sed -i 's/^ diff --git/diff --git/' /tmp/s15.patch
+          awk '/^diff --git a\/README.md/{exit} {print}' /tmp/s15.patch > /tmp/s15-source.patch
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$BASE"
           git checkout --detach "$BASE"
-          git apply --check --recount /tmp/s15.patch
-          git apply --recount /tmp/s15.patch
+          git apply --check --recount /tmp/s15-source.patch
+          git apply --recount /tmp/s15-source.patch
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one anchor, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once('README.md',
+          '- `tests/RenderVulkanClearFrameTest`\n- `tests/RenderPlatformWin32Test`',
+          '- `tests/RenderVulkanClearFrameTest`\n- `tests/GpuCtrlPresentationTest`\n- `tests/RenderPlatformWin32Test`')
+          replace_once('README.md',
+          '- `GpuCtrl` now hosts a surface-level Vulkan session with a deterministic retry\n  policy and no test-only public hooks',
+          '- `GpuCtrl` now owns a private Vulkan surface/swapchain/presentation lifecycle\n  with a deterministic retry policy and no test-only public hooks')
+          replace_once('README.md',
+          '- `GpuCtrl` does not automatically create a swapchain, acquire frames, clear,\n  or present yet\n- resize/recreation is still manual and out-of-date handling remains explicit',
+          '- `GpuCtrl` now automatically creates/recreates its private swapchain and presents\n  the S14 clear frame from ordinary invalidation/paint events\n- unsupported or failed presentation falls back to normal host painting; later\n  invalidation can recover without a busy repaint loop\n- the public `GpuCtrl` API remains backend-neutral')
+
+          replace_once('docs/PROJECT_PLAN.md',
+          'Surface/platform bring-up, grouped ownership, private swapchain lifecycle, and\nexplicit frame acquisition/presentation are complete. The active milestone is\nthe first visible Vulkan clear-colour frame.',
+          'Surface/platform bring-up, grouped ownership, private swapchain lifecycle,\nexplicit frame acquisition/presentation, and the first visible clear frame are\naccepted. The active milestone is embedded `GpuCtrl` Vulkan presentation.')
+          replace_once('docs/PROJECT_PLAN.md',
+          '- TASK-008A1 S14 first visible Vulkan clear-colour frame is implemented and\n  awaiting Windows/runtime/visual acceptance',
+          '- TASK-008A1 S14 first visible Vulkan clear-colour frame is accepted\n- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is implemented and\n  awaiting Windows/runtime/visual acceptance')
+          replace_once('docs/PROJECT_PLAN.md',
+          '- general 2D rendering, shaders, resize/recreation, and automatic GpuCtrl\n  presentation remain deferred',
+          '- S15 drives private swapchain recreation and S14 clear presentation from native\n  paint invalidation without adding a timer/render loop or Vulkan public API\n- general 2D rendering, shaders, painter callbacks, and shared control device\n  ownership remain deferred')
+
+          replace_once('docs/GPU_CTRL_USAGE.md',
+          'It currently keeps a valid GPU surface/session only. It does not present visible frames yet.\n\n`RequestGpuRefresh()` is still a no-op style host repaint hook until the rendering callback exists.',
+          'The Vulkan backend now owns a private swapchain for the child window and presents\nthe accepted S14 clear frame on ordinary paint invalidation. A real size change\nreconciles the swapchain on the next paint; zero-size states do not spin or poll.\n\n`RequestGpuRefresh()` requests one host repaint. It does not start a render loop.\nIf presentation is unavailable, the child uses normal GDI fallback painting and\nkeeps the presentation error available through `GetGpuError()`. A later resize,\nshow or explicit refresh may recover without recreating the whole control.')
+          replace_once('docs/GPU_CTRL_USAGE.md',
+          '`GpuCtrl` currently creates a valid embedded GPU surface/session and reports readiness and errors, but it does not render or present visible frames.',
+          '`GpuCtrl` currently presents only the fixed S14 clear colour. There is still no\npublic painter callback, general 2D renderer, text/image pipeline, or shared GPU\ndevice context. Those remain later renderer milestones; the hosting and\npresentation lifecycle is now live.')
+
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          '`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the embedded surface-level session is open and ready. `GetGpuError()` returns the last API or session error without clearing a healthy ready state.',
+          '`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the\nembedded backend session is open and ready. `GetGpuError()` reports API, startup,\nor presentation failures without exposing backend-specific public types.')
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          '  -> Win32 native-handle helper\n  -> VulkanSurfaceSession\n  -> RenderVulkan surface/session code',
+          '  -> Win32 native-handle helper\n  -> VulkanSurfaceSession\n  -> private swapchain reconciliation\n  -> S14 clear-frame presentation\n  -> RenderVulkan surface/session code')
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          'Ordinary resize and visibility changes update the embedded host; they do not create or destroy a swapchain yet.',
+          'Ordinary resize and visibility changes update the embedded host. A genuine size\nchange invalidates one paint; the private Vulkan backend destroys/recreates its\nswapchain on that paint if the requested size changed. No resize timer or polling\nloop is used.')
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          '## Future Swapchain Ownership\n\nSwapchain ownership is intentionally not part of the current control boundary.\n\nFuture backend objects should live behind the host lifecycle, after the native child window is stable and before any actual frame presentation begins.',
+          '## Swapchain And Presentation Ownership\n\nSwapchain ownership remains private to the backend session and is not exposed by\nthe `GpuCtrl` header. The current Vulkan backend presents the fixed S14 clear\ncolour from the child HWND\'s `WM_PAINT` path.\n\nInitial session readiness requests one paint. Size changes, show notifications,\nand `RequestGpuRefresh()` request later paints. A successful presentation never\ninvalidates itself, so there is no implicit busy render loop.\n\nIf presentation fails, the native child is filled by the ordinary GDI fallback.\nThe backend session stays available for a later event-driven recovery attempt.')
+          replace_once('docs/GPU_CTRL_INTEGRATION.md',
+          'Surface/device readiness and private swapchain readiness are separate states.\nExplicit `VulkanSurfaceSession` instances now provide manual frame acquisition and\npresentation, but current `GpuCtrl` instances do not invoke that path automatically.\nVisible rendering is not implemented yet.',
+          'Surface/device readiness and private swapchain readiness are separate states.\nExplicit `VulkanSurfaceSession` instances provide manual frame acquisition,\npresentation and clear rendering. `GpuCtrl` now invokes that private Vulkan path\nautomatically from normal paint invalidation while keeping its public surface\nbackend-neutral. General UI rendering is not implemented yet.')
+          PY
           git diff --check
           git add render/GpuCtrl/GpuCtrl.cpp examples/GpuCtrlDemoSupport.h examples/GpuCtrlBasicDemo/main.cpp examples/GpuCtrlMultiViewDemo/main.cpp tests/GpuCtrlPresentationTest README.md docs/PROJECT_PLAN.md docs/GPU_CTRL_USAGE.md docs/GPU_CTRL_INTEGRATION.md
           git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S15: integrate Vulkan presentation into GpuCtrl" -m "Drive the accepted Vulkan clear-frame path from GpuCtrl paint invalidation with private swapchain resize recovery and GDI fallback." -m "Keep the public control API backend-neutral, avoid self-sustaining repaint loops, and preserve per-control Vulkan isolation." -m "Add focused multi-control presentation coverage and strengthen the existing GpuCtrl demo diagnostics."
