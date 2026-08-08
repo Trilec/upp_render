@@ -30,6 +30,7 @@ still comes later.
 - `tests/RenderVulkanTest`
 - `tests/RenderVulkanFrameTest`
 - `tests/RenderVulkanClearFrameTest`
+- `tests/GpuCtrlPresentationTest`
 - `tests/RenderPlatformWin32Test`
 - `tools/VulkanProbe`
 - `tools/VulkanSurfaceProbe`
@@ -61,8 +62,8 @@ Run the test and demo executables after building.
 - Vulkan loader, instance, physical-device selection, logical-device creation,
   and graphics-queue bootstrap are implemented; TASK-007 surface bring-up also
   passes the ten-cycle validation gate
-- `GpuCtrl` now hosts a surface-level Vulkan session with a deterministic retry
-  policy and no test-only public hooks
+- `GpuCtrl` now owns a private Vulkan surface/swapchain/presentation lifecycle
+  with a deterministic retry policy and no test-only public hooks
 - explicitly grouped `VulkanSurfaceSession` instances share runtime and
   instance state while retaining per-session surfaces and logical devices;
   default sessions and `GpuCtrl` instances remain isolated
@@ -72,9 +73,11 @@ Run the test and demo executables after building.
 - S14 uses Vulkan 1.3 dynamic rendering with a color-attachment clear and no
   shaders, graphics pipeline, render pass, or renderer abstraction
 - no other GPU backend yet
-- `GpuCtrl` does not automatically create a swapchain, acquire frames, clear,
-  or present yet
-- resize/recreation is still manual and out-of-date handling remains explicit
+- `GpuCtrl` now automatically creates/recreates its private swapchain and presents
+  the S14 clear frame from ordinary invalidation/paint events
+- unsupported or failed presentation falls back to normal host painting; later
+  invalidation can recover without a busy repaint loop
+- the public `GpuCtrl` API remains backend-neutral
 - no text, image, gradient, shadow, or shader pipeline yet
 - no compute API or execution path yet
 - no speculative backend packages are present

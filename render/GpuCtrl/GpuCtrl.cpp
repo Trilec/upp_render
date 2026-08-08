@@ -14,6 +14,7 @@ public:
 	virtual void Close() = 0;
 	virtual bool IsReady() const = 0;
 	virtual const String& GetError() const = 0;
+	virtual bool Present(Size requested_size, String& error) = 0;
 };
 
 class VulkanGpuCtrlBackendSession : public GpuCtrlBackendSession {
@@ -31,6 +32,7 @@ public:
 	void Close() override
 	{
 		session.Close();
+		swapchain_request_size = Size(0, 0);
 	}
 
 	bool IsReady() const override
@@ -43,8 +45,66 @@ public:
 		return session.GetError();
 	}
 
+	bool Present(Size requested_size, String& error) override
+	{
+		error.Clear();
+		if(requested_size.cx <= 0 || requested_size.cy <= 0)
+			return true;
+		if(!session.IsReady()) {
+			error = session.GetError();
+			return false;
+		}
+		if(!EnsureSwapchain(requested_size, error))
+			return false;
+		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f))
+			return true;
+
+		error = session.GetFrameReport().error;
+		if(!session.GetFrameReport().out_of_date)
+			return false;
+
+		if(!session.DestroySwapchain()) {
+			if(error.IsEmpty())
+				error = session.GetReport().swapchain_error;
+			if(error.IsEmpty())
+				error = "Vulkan swapchain cleanup failed";
+			return false;
+		}
+		swapchain_request_size = Size(0, 0);
+		if(!EnsureSwapchain(requested_size, error))
+			return false;
+		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) {
+			error.Clear();
+			return true;
+		}
+		error = session.GetFrameReport().error;
+		return false;
+	}
+
 private:
+	bool EnsureSwapchain(Size requested_size, String& error)
+	{
+		if(session.HasSwapchain() && requested_size != swapchain_request_size) {
+			if(!session.DestroySwapchain()) {
+				error = session.GetReport().swapchain_error;
+				if(error.IsEmpty())
+					error = "Vulkan swapchain cleanup failed";
+				return false;
+			}
+			swapchain_request_size = Size(0, 0);
+		}
+		if(!session.HasSwapchain()) {
+			if(!session.CreateSwapchain(requested_size)) {
+				error = session.GetReport().swapchain_error;
+				return false;
+			}
+			swapchain_request_size = requested_size;
+		}
+		return true;
+	}
+
 	VulkanSurfaceSession session;
+	Size swapchain_request_size = Size(0, 0);
 };
 
 static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
@@ -92,7 +152,10 @@ struct GpuCtrl::Impl {
 			if(message == WM_PAINT) {
 				PAINTSTRUCT ps;
 				HWND hwnd = GetHWND();
-				BeginPaint(hwnd, &ps);
+				HDC dc = BeginPaint(hwnd, &ps);
+				bool gpu_painted = impl && impl->OnHostPaint();
+				if(!gpu_painted)
+					FillRect(dc, &ps.rcPaint, GetSysColorBrush(COLOR_WINDOW));
 				EndPaint(hwnd, &ps);
 				return 0;
 			}
@@ -133,13 +196,32 @@ struct GpuCtrl::Impl {
 	String GetGpuError() const
 	{
 		// API errors describe rejected configuration; session errors describe
-		// backend bring-up or teardown failures.
-		return api_error.IsEmpty() ? session_error : api_error;
+		// backend bring-up failures; presentation errors preserve a healthy
+		// session so a later invalidation can recover without a repaint loop.
+		if(!api_error.IsEmpty())
+			return api_error;
+		if(!session_error.IsEmpty())
+			return session_error;
+		return presentation_error;
+	}
+
+	bool OnHostPaint()
+	{
+		if(!IsGpuReady() || !backend)
+			return false;
+		Size requested_size = host.GetSize();
+		String error;
+		if(backend->Present(requested_size, error)) {
+			presentation_error.Clear();
+			return true;
+		}
+		presentation_error = error.IsEmpty() ? backend->GetError() : error;
+		return false;
 	}
 
 	void RequestGpuRefresh()
 	{
-		if(IsGpuReady())
+		if(IsNativeHostReady())
 			host.Refresh();
 	}
 
@@ -171,6 +253,8 @@ struct GpuCtrl::Impl {
 			SetApiError("backend not supported");
 		else
 			SetApiError("backend not selected");
+		if(host_ready && !gpu_ready && kind == GpuBackendKind::Vulkan)
+			StartGpuSession();
 	}
 
 	void SetValidation(bool validation)
@@ -184,6 +268,8 @@ struct GpuCtrl::Impl {
 		validation_requested = validation;
 		init_attempted = false;
 		ClearError();
+		if(host_ready && !gpu_ready)
+			StartGpuSession();
 	}
 
 	void OnHostState(int reason)
@@ -202,6 +288,8 @@ struct GpuCtrl::Impl {
 				StartGpuSession();
 			}
 			SyncHostBounds();
+			if(reason == SHOW && IsGpuReady())
+				host.Refresh();
 			break;
 		case CLOSE:
 			StopGpuSession();
@@ -228,15 +316,18 @@ struct GpuCtrl::Impl {
 
 	void SyncHostBounds()
 	{
-		// Ordinary resize and visibility notifications keep the host child sized;
-		// the surface-level session itself is intentionally independent of any
-		// swapchain/presentation lifetime.
+		// Host sizing stays backend-neutral. A real size change invalidates one
+		// frame; the private backend reconciles its swapchain on that paint.
 		Size sz = owner->GetSize();
+		bool size_changed = sz != last_host_size;
+		last_host_size = sz;
 		host.SetRect(0, 0, sz.cx, sz.cy);
 		if(IsNativeHostReady()) {
 			HWND hwnd = host.GetHWND();
 			EnableWindow(hwnd, owner->IsEnabled());
 		}
+		if(size_changed && IsGpuReady() && sz.cx > 0 && sz.cy > 0)
+			host.Refresh();
 	}
 
 	void StartGpuSession()
@@ -276,8 +367,11 @@ struct GpuCtrl::Impl {
 		}
 
 		gpu_ready = backend->IsReady();
-		if(gpu_ready)
+		if(gpu_ready) {
 			ClearError();
+			// Initial presentation is event driven exactly once after session bring-up.
+			host.Refresh();
+		}
 		else
 			SetSessionError(backend->GetError());
 	}
@@ -292,6 +386,7 @@ struct GpuCtrl::Impl {
 		backend.Clear();
 		ClearError();
 		session_error.Clear();
+		presentation_error.Clear();
 		host_ready = false;
 		gpu_ready = false;
 		init_attempted = false;
@@ -312,6 +407,7 @@ struct GpuCtrl::Impl {
 	{
 		api_error.Clear();
 		session_error.Clear();
+		presentation_error.Clear();
 	}
 
 	GpuCtrl *owner = nullptr;
@@ -320,6 +416,8 @@ struct GpuCtrl::Impl {
 	GpuBackendKind backend_kind = GpuBackendKind::Vulkan;
 	String api_error;
 	String session_error;
+	String presentation_error;
+	Size last_host_size = Size(-1, -1);
 	bool validation_requested = false;
 	bool host_ready = false;
 	bool gpu_ready = false;

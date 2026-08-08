@@ -177,7 +177,14 @@ GUI_APP_MAIN
 	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 	Cout() << "GpuCtrlMultiViewDemo diagnostics: " << GpuDiagText(diag) << EOL;
 	if(auto_close) {
-		if(!opened || !ready || !left_error.IsEmpty() || !right_error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
+		if(!opened || !ready || !left_error.IsEmpty() || !right_error.IsEmpty() ||
+		   diag.swapchain_create_count < 2 ||
+		   diag.runtime_live_count != 0 ||
+		   diag.instance_live_count != 0 ||
+		   diag.debug_messenger_live_count != 0 ||
+		   diag.device_live_count != 0 ||
+		   diag.surface_live_count != 0 ||
+		   diag.swapchain_live_count != 0) {
 			SetExitCode(1);
 			return;
 		}

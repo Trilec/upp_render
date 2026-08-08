@@ -22,7 +22,9 @@ public:
 };
 ```
 
-`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the embedded surface-level session is open and ready. `GetGpuError()` returns the last API or session error without clearing a healthy ready state.
+`IsNativeHostReady()` is an advanced diagnostic. `IsGpuReady()` means the
+embedded backend session is open and ready. `GetGpuError()` reports API, startup,
+or presentation failures without exposing backend-specific public types.
 
 The control now defaults to Vulkan so ordinary code can just embed it.
 
@@ -34,6 +36,8 @@ TopWindow
   -> private DHCtrl child host
   -> Win32 native-handle helper
   -> VulkanSurfaceSession
+  -> private swapchain reconciliation
+  -> S14 clear-frame presentation
   -> RenderVulkan surface/session code
 
 VulkanSurfaceProbe
@@ -80,7 +84,10 @@ Destruction order:
 Repeated `Layout()` calls are safe.
 Repeated `OPEN`/`CLOSE`/`SHOW`/`ENABLE` notifications are treated as idempotent state updates.
 
-Ordinary resize and visibility changes update the embedded host; they do not create or destroy a swapchain yet.
+Ordinary resize and visibility changes update the embedded host. A genuine size
+change invalidates one paint; the private Vulkan backend destroys/recreates its
+swapchain on that paint if the requested size changed. No resize timer or polling
+loop is used.
 
 ## Error Handling
 
@@ -94,11 +101,18 @@ API errors describe rejected configuration changes. Session errors describe back
 
 In the current implementation it is intentionally boring: if the native host is ready, it requests a repaint; otherwise it does nothing.
 
-## Future Swapchain Ownership
+## Swapchain And Presentation Ownership
 
-Swapchain ownership is intentionally not part of the current control boundary.
+Swapchain ownership remains private to the backend session and is not exposed by
+the `GpuCtrl` header. The current Vulkan backend presents the fixed S14 clear
+colour from the child HWND's `WM_PAINT` path.
 
-Future backend objects should live behind the host lifecycle, after the native child window is stable and before any actual frame presentation begins.
+Initial session readiness requests one paint. Size changes, show notifications,
+and `RequestGpuRefresh()` request later paints. A successful presentation never
+invalidates itself, so there is no implicit busy render loop.
+
+If presentation fails, the native child is filled by the ordinary GDI fallback.
+The backend session stays available for a later event-driven recovery attempt.
 
 ## Future `GpuPainter`
 
@@ -145,9 +159,10 @@ surface, logical device and queues. Default sessions, including current
 control context is deferred until a later design task.
 
 Surface/device readiness and private swapchain readiness are separate states.
-Explicit `VulkanSurfaceSession` instances now provide manual frame acquisition and
-presentation, but current `GpuCtrl` instances do not invoke that path automatically.
-Visible rendering is not implemented yet.
+Explicit `VulkanSurfaceSession` instances provide manual frame acquisition,
+presentation and clear rendering. `GpuCtrl` now invokes that private Vulkan path
+automatically from normal paint invalidation while keeping its public surface
+backend-neutral. General UI rendering is not implemented yet.
 
 ## OpenGL Integration Findings
 

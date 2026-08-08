@@ -79,9 +79,14 @@ This keeps repeated layout or visibility notifications from redoing expensive st
 
 `GpuCtrl` handles host sizing and child-window lifecycle automatically.
 
-It currently keeps a valid GPU surface/session only. It does not present visible frames yet.
+The Vulkan backend now owns a private swapchain for the child window and presents
+the accepted S14 clear frame on ordinary paint invalidation. A real size change
+reconciles the swapchain on the next paint; zero-size states do not spin or poll.
 
-`RequestGpuRefresh()` is still a no-op style host repaint hook until the rendering callback exists.
+`RequestGpuRefresh()` requests one host repaint. It does not start a render loop.
+If presentation is unavailable, the child uses normal GDI fallback painting and
+keeps the presentation error available through `GetGpuError()`. A later resize,
+show or explicit refresh may recover without recreating the whole control.
 
 ## Planned Render Callback
 
@@ -101,4 +106,7 @@ Later work may share GPU device resources, but that is a backend optimization, n
 
 ## Current Limitation
 
-`GpuCtrl` currently creates a valid embedded GPU surface/session and reports readiness and errors, but it does not render or present visible frames.
+`GpuCtrl` currently presents only the fixed S14 clear colour. There is still no
+public painter callback, general 2D renderer, text/image pipeline, or shared GPU
+device context. Those remain later renderer milestones; the hosting and
+presentation lifecycle is now live.

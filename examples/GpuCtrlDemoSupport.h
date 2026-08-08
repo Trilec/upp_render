@@ -17,6 +17,7 @@ inline String GpuDiagText(const VulkanTestHooks::VulkanRuntimeDeviceDiagnostics&
 	     << " instance=" << diag.instance_create_count << "/" << diag.instance_live_count
 	     << " device=" << diag.device_create_count << "/" << diag.device_live_count
 	     << " surface=" << diag.surface_create_count << "/" << diag.surface_live_count
+	     << " swapchain=" << diag.swapchain_create_count << "/" << diag.swapchain_live_count
 	     << " discovery=" << diag.physical_device_discovery_count
 	     << " runtime-id=" << diag.runtime_id
 	     << " device-id=" << diag.device_id

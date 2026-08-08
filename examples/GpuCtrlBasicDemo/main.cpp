@@ -97,7 +97,14 @@ GUI_APP_MAIN
 	auto diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 	Cout() << "GpuCtrlBasicDemo diagnostics: " << GpuDiagText(diag) << EOL;
 	if(auto_close) {
-		if(!opened || !ready || !error.IsEmpty() || diag.runtime_live_count != 0 || diag.instance_live_count != 0 || diag.device_live_count != 0 || diag.surface_live_count != 0) {
+		if(!opened || !ready || !error.IsEmpty() ||
+		   diag.swapchain_create_count < 1 ||
+		   diag.runtime_live_count != 0 ||
+		   diag.instance_live_count != 0 ||
+		   diag.debug_messenger_live_count != 0 ||
+		   diag.device_live_count != 0 ||
+		   diag.surface_live_count != 0 ||
+		   diag.swapchain_live_count != 0) {
 			SetExitCode(1);
 			return;
 		}
