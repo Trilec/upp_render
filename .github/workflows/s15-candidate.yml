@@ -25,8 +25,8 @@ jobs:
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$BASE"
           git checkout --detach "$BASE"
-          git apply --check /tmp/s15.patch
-          git apply /tmp/s15.patch
+          git apply --check --recount /tmp/s15.patch
+          git apply --recount /tmp/s15.patch
           git diff --check
           git add render/GpuCtrl/GpuCtrl.cpp examples/GpuCtrlDemoSupport.h examples/GpuCtrlBasicDemo/main.cpp examples/GpuCtrlMultiViewDemo/main.cpp tests/GpuCtrlPresentationTest README.md docs/PROJECT_PLAN.md docs/GPU_CTRL_USAGE.md docs/GPU_CTRL_INTEGRATION.md
           git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S15: integrate Vulkan presentation into GpuCtrl" -m "Drive the accepted Vulkan clear-frame path from GpuCtrl paint invalidation with private swapchain resize recovery and GDI fallback." -m "Keep the public control API backend-neutral, avoid self-sustaining repaint loops, and preserve per-control Vulkan isolation." -m "Add focused multi-control presentation coverage and strengthen the existing GpuCtrl demo diagnostics."
