@@ -1,0 +1,33 @@
+name: Build S15 candidate
+
+on:
+  push:
+    branches:
+      - chatgpt/s15-gpuctrl-presentation
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact S15 patch to accepted S14
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=2851559ac6fe4dc05476c5cddaf3eaff607880d8
+          cp .github/s15.patch /tmp/s15.patch
+          sed -i 's/^ diff --git/diff --git/' /tmp/s15.patch
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          git apply --check /tmp/s15.patch
+          git apply /tmp/s15.patch
+          git diff --check
+          git add render/GpuCtrl/GpuCtrl.cpp examples/GpuCtrlDemoSupport.h examples/GpuCtrlBasicDemo/main.cpp examples/GpuCtrlMultiViewDemo/main.cpp tests/GpuCtrlPresentationTest README.md docs/PROJECT_PLAN.md docs/GPU_CTRL_USAGE.md docs/GPU_CTRL_INTEGRATION.md
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S15: integrate Vulkan presentation into GpuCtrl" -m "Drive the accepted Vulkan clear-frame path from GpuCtrl paint invalidation with private swapchain resize recovery and GDI fallback." -m "Keep the public control API backend-neutral, avoid self-sustaining repaint loops, and preserve per-control Vulkan isolation." -m "Add focused multi-control presentation coverage and strengthen the existing GpuCtrl demo diagnostics."
+          git push origin HEAD:refs/heads/chatgpt/s15-candidate --force
