@@ -1,0 +1,32 @@
+name: Run guarded S16A builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16a-builder
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build candidate from accepted S15
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=ce0827970e77db54259757d38cd832adb5dd00c8
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          git apply --check "${GITHUB_WORKSPACE}/.github/s16a.patch"
+          git apply "${GITHUB_WORKSPACE}/.github/s16a.patch"
+          git diff --check
+          git diff --stat
+          git add render/RenderVulkan/RenderVulkanSurfaceSession.h render/RenderVulkan/RenderVulkanClearFrame.cpp render/GpuCtrl/GpuCtrl.cpp tests/RenderVulkanClearFrameTest/main.cpp
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16A: draw first Vulkan rectangle in GpuCtrl" -m "Add one backend-private vkCmdClearAttachments rectangle over the accepted clear frame and drive it from GpuCtrl without changing the public control API." -m "Keep shaders, pipelines, display-list replay and general 2D rendering deferred; extend the focused clear-frame test for rectangle-path isolation."
+          git push origin HEAD:refs/heads/chatgpt/s16a-candidate --force
