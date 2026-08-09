@@ -1,0 +1,56 @@
+name: Build S15-R1 candidate
+
+on:
+  push:
+    branches:
+      - chatgpt/s15-r1-resize-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded S15-R1 resize correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=4f9f7c3446107bd78b3b6875cd08522f8c69734c
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('render/GpuCtrl/GpuCtrl.cpp')
+          s = p.read_text()
+
+          old = '''\tbool OnHostPaint()\n\t{\n\t\tif(!IsGpuReady() || !backend)\n\t\t\treturn false;\n\t\tSize requested_size = host.GetSize();\n\t\tString error;\n'''
+          new = '''\tSize GetNativeHostSize() const\n\t{\n\t\tHWND hwnd = const_cast<Host&>(host).GetHWND();\n\t\tRECT rect{};\n\t\tif(!hwnd || !GetClientRect(hwnd, &rect))\n\t\t\treturn Size(0, 0);\n\t\treturn Size(max(0, rect.right - rect.left), max(0, rect.bottom - rect.top));\n\t}\n\n\tbool OnHostPaint()\n\t{\n\t\tif(!IsGpuReady() || !backend)\n\t\t\treturn false;\n\t\t// The Vulkan surface is backed by the child HWND, so its current client\n\t\t// extent is authoritative during resize rather than the owner's logical\n\t\t// layout size, which can lead the native window by one message turn.\n\t\tSize requested_size = GetNativeHostSize();\n\t\tString error;\n'''
+          assert s.count(old) == 1, 'OnHostPaint anchor mismatch'
+          s = s.replace(old, new, 1)
+
+          old = '''\t\t\tif(reason == SHOW && IsGpuReady())\n\t\t\t\thost.Refresh();\n'''
+          new = '''\t\t\tif(reason == SHOW && IsGpuReady()) {\n\t\t\t\t// SHOW is a fresh presentation opportunity; do not carry a prior\n\t\t\t\t// resize-time presentation error into the new visible state.\n\t\t\t\tpresentation_error.Clear();\n\t\t\t\thost.Refresh();\n\t\t\t}\n'''
+          assert s.count(old) == 1, 'SHOW refresh anchor mismatch'
+          s = s.replace(old, new, 1)
+
+          old = '''\t\tSize sz = owner->GetSize();\n\t\tbool size_changed = sz != last_host_size;\n\t\tlast_host_size = sz;\n\t\thost.SetRect(0, 0, sz.cx, sz.cy);\n'''
+          new = '''\t\tSize sz = owner->GetSize();\n\t\tbool size_changed = sz != last_host_size;\n\t\tif(size_changed)\n\t\t\tpresentation_error.Clear();\n\t\tlast_host_size = sz;\n\t\thost.SetRect(0, 0, sz.cx, sz.cy);\n'''
+          assert s.count(old) == 1, 'SyncHostBounds anchor mismatch'
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff -- render/GpuCtrl/GpuCtrl.cpp
+          git add render/GpuCtrl/GpuCtrl.cpp
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit \
+            -m "S15-R1 stabilize GpuCtrl resize presentation" \
+            -m "Use the native child client extent as the swapchain request during paint so Win32 resize state and Vulkan surface sizing stay aligned." \
+            -m "Clear only stale presentation errors when a new size or show event creates a fresh recovery opportunity; keep the focused acceptance test unchanged."
+          git push origin HEAD:refs/heads/chatgpt/s15-r1-candidate --force
