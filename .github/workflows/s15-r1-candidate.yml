@@ -1,1 +1,11 @@
-# Temporary S15 candidate workflow disabled after candidate creation.
+name: Disabled S15 candidate workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo disabled
