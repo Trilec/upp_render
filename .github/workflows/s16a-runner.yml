@@ -1,0 +1,42 @@
+name: Run S16A candidate builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16a-vulkan-rect
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate reviewed S16A source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=ce0827970e77db54259757d38cd832adb5dd00c8
+          PAYLOAD_COMMIT=9f99177dbfe1fed5b1f5151c6669b7d50cf51d3d
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          git show "$PAYLOAD_COMMIT:.github/workflows/s16a-candidate.yml" > /tmp/s16a-payload.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          text = Path('/tmp/s16a-payload.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = text.index(marker) + len(marker)
+          end = text.index("\n          PY\n", start)
+          code = textwrap.dedent(text[start:end])
+          exec(compile(code, 's16a_payload', 'exec'))
+          PY
+          git diff --check
+          git diff --stat
+          git add render/RenderVulkan/RenderVulkanSurfaceSession.h render/RenderVulkan/RenderVulkanClearFrame.cpp render/GpuCtrl/GpuCtrl.cpp tests/RenderVulkanRectFrameTest docs/PROJECT_PLAN.md
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "S16A add first GpuCtrl Vulkan rectangle primitive" -m "Draw one deterministic inset rectangle with vkCmdClearAttachments inside the accepted dynamic-rendering frame and drive it from the real GpuCtrl paint lifecycle." -m "Keep shaders, pipelines, display-list replay and the public GpuCtrl API out of this small acceptance slice."
+          git push origin HEAD:refs/heads/chatgpt/s16a-candidate --force
