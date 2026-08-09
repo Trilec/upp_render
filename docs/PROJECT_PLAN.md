@@ -143,7 +143,11 @@ additional backends beyond the first ones already planned.
   the accepted S13 present-only implementation unchanged
 - S15 drives private swapchain recreation and S14 clear presentation from native
   paint invalidation without adding a timer/render loop or Vulkan public API
-- general 2D rendering, shaders, painter callbacks, and shared control device
-  ownership remain deferred
+- S16A adds the first backend-private filled rectangle through the real GpuCtrl
+  presentation lifecycle; S16B moves its background/rectangle description into
+  backend-neutral private frame intent so the Vulkan backend no longer invents
+  control content or geometry
+- general 2D rendering, display-list replay, shaders, painter callbacks, and
+  shared control device ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only

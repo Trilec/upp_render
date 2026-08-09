@@ -6,6 +6,41 @@ namespace Upp {
 
 namespace {
 
+struct GpuCtrlFrameColor {
+	float red = 0.0f;
+	float green = 0.0f;
+	float blue = 0.0f;
+	float alpha = 1.0f;
+};
+
+struct GpuCtrlFrameIntent {
+	GpuCtrlFrameColor background;
+	bool has_fill_rect = false;
+	Rect fill_rect = Rect(0, 0, 0, 0);
+	GpuCtrlFrameColor fill_color;
+};
+
+static GpuCtrlFrameIntent BuildDefaultFrameIntent(Size size)
+{
+	GpuCtrlFrameIntent frame;
+	frame.background = { 0.08f, 0.24f, 0.58f, 1.0f };
+	if(size.cx <= 0 || size.cy <= 0)
+		return frame;
+
+	int rect_width = size.cx / 2;
+	int rect_height = size.cy / 2;
+	if(rect_width < 1)
+		rect_width = 1;
+	if(rect_height < 1)
+		rect_height = 1;
+	int rect_left = (size.cx - rect_width) / 2;
+	int rect_top = (size.cy - rect_height) / 2;
+	frame.has_fill_rect = true;
+	frame.fill_rect = RectC(rect_left, rect_top, rect_width, rect_height);
+	frame.fill_color = { 0.90f, 0.32f, 0.08f, 1.0f };
+	return frame;
+}
+
 class GpuCtrlBackendSession {
 public:
 	virtual ~GpuCtrlBackendSession() {}
@@ -14,7 +49,7 @@ public:
 	virtual void Close() = 0;
 	virtual bool IsReady() const = 0;
 	virtual const String& GetError() const = 0;
-	virtual bool Present(Size requested_size, String& error) = 0;
+	virtual bool Present(Size requested_size, const GpuCtrlFrameIntent& frame, String& error) = 0;
 };
 
 class VulkanGpuCtrlBackendSession : public GpuCtrlBackendSession {
@@ -45,7 +80,7 @@ public:
 		return session.GetError();
 	}
 
-	bool Present(Size requested_size, String& error) override
+	bool Present(Size requested_size, const GpuCtrlFrameIntent& frame, String& error) override
 	{
 		error.Clear();
 		if(requested_size.cx <= 0 || requested_size.cy <= 0)
@@ -56,14 +91,7 @@ public:
 		}
 		if(!EnsureSwapchain(requested_size, error))
 			return false;
-		int rect_width = requested_size.cx / 2;
-		int rect_height = requested_size.cy / 2;
-		if(rect_width < 1) rect_width = 1;
-		if(rect_height < 1) rect_height = 1;
-		int rect_left = (requested_size.cx - rect_width) / 2;
-		int rect_top = (requested_size.cy - rect_height) / 2;
-		Rect rect = RectC(rect_left, rect_top, rect_width, rect_height);
-		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f))
+		if(PresentIntent(frame))
 			return true;
 
 		error = session.GetFrameReport().error;
@@ -80,7 +108,7 @@ public:
 		swapchain_request_size = Size(0, 0);
 		if(!EnsureSwapchain(requested_size, error))
 			return false;
-		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f)) {
+		if(PresentIntent(frame)) {
 			error.Clear();
 			return true;
 		}
@@ -89,6 +117,16 @@ public:
 	}
 
 private:
+	bool PresentIntent(const GpuCtrlFrameIntent& frame)
+	{
+		const GpuCtrlFrameColor& bg = frame.background;
+		if(!frame.has_fill_rect)
+			return session.PresentClearFrame(bg.red, bg.green, bg.blue, bg.alpha);
+		const GpuCtrlFrameColor& fill = frame.fill_color;
+		return session.PresentRectFrame(bg.red, bg.green, bg.blue, bg.alpha, frame.fill_rect,
+		                                fill.red, fill.green, fill.blue, fill.alpha);
+	}
+
 	bool EnsureSwapchain(Size requested_size, String& error)
 	{
 		if(session.HasSwapchain() && requested_size != swapchain_request_size) {
@@ -231,8 +269,9 @@ struct GpuCtrl::Impl {
 		// extent is authoritative during resize rather than the owner's logical
 		// layout size, which can lead the native window by one message turn.
 		Size requested_size = GetNativeHostSize();
+		GpuCtrlFrameIntent frame = BuildDefaultFrameIntent(requested_size);
 		String error;
-		if(backend->Present(requested_size, error)) {
+		if(backend->Present(requested_size, frame, error)) {
 			presentation_error.Clear();
 			return true;
 		}
