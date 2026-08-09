@@ -59,6 +59,12 @@ CONSOLE_APP_MAIN
 		ok &= Check(first.state_cleared && !session.HasAcquiredFrame(), "clear frame should leave no acquired private frame state");
 	}
 
+	if(ok) {
+		ok &= Check(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, Rect(24, 16, 72, 48), 0.90f, 0.32f, 0.08f, 1.0f), "rectangle frame should present");
+		ok &= Check(session.GetFrameReport().clear_count == 2 && session.GetFrameReport().present_count == 2, "rectangle frame should share the clear/present lifecycle");
+		ok &= Check(session.GetFrameReport().state_cleared && !session.HasAcquiredFrame(), "rectangle frame should leave no acquired private frame state");
+	}
+
 	const float colors[][4] = {
 		{ 0.65f, 0.10f, 0.12f, 1.0f },
 		{ 0.08f, 0.55f, 0.22f, 1.0f },
@@ -69,7 +75,7 @@ CONSOLE_APP_MAIN
 		if(ok)
 			ok &= Check(session.PresentClearFrame(c[0], c[1], c[2], c[3]), "repeated clear-colour frame should present");
 	if(ok)
-		ok &= Check(session.GetFrameReport().clear_count == 5 && session.GetFrameReport().present_count == 5, "repeated clear/present counters should remain exact");
+		ok &= Check(session.GetFrameReport().clear_count == 6 && session.GetFrameReport().present_count == 6, "repeated clear/present counters should remain exact");
 
 	const char *missing[] = { "vkCreateImageView", "vkDestroyImageView", "vkCmdBeginRendering", "vkCmdEndRendering" };
 	for(const char *name : missing) {
@@ -81,6 +87,15 @@ CONSOLE_APP_MAIN
 		ok &= Check(!session.HasAcquiredFrame(), "missing clear procedure should not acquire an image");
 		g_missing_proc = nullptr;
 		ok &= Check(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f), "same session should recover after missing clear procedure");
+	}
+	g_missing_proc = nullptr;
+	if(ok) {
+		g_missing_proc = "vkCmdClearAttachments";
+		ok &= Check(!session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, Rect(24, 16, 72, 48), 0.90f, 0.32f, 0.08f, 1.0f), "missing rectangle procedure should refuse only the rectangle path");
+		ok &= Check(session.GetFrameReport().error == "vkCmdClearAttachments", "missing rectangle procedure should report its exact name");
+		ok &= Check(!session.HasAcquiredFrame(), "missing rectangle procedure should fail before image acquisition");
+		g_missing_proc = nullptr;
+		ok &= Check(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f), "clear-only path should remain independent of rectangle procedure");
 	}
 	g_missing_proc = nullptr;
 

@@ -76,6 +76,8 @@ public:
 	bool AcquireFrame();
 	bool PresentFrame();
 	bool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);
+	bool PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
+	                      const Rect& rect, float red, float green, float blue, float alpha = 1.0f);
 	bool HasAcquiredFrame() const;
 	const VulkanFrameReport& GetFrameReport() const;
 
@@ -98,6 +100,8 @@ private:
 	uint64_t clear_swapchain_id = 0;
 	Vector<uint8_t> clear_image_initialized;
 
+	bool PresentClearFrameImpl(float red, float green, float blue, float alpha,
+	                           const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha);
 	bool GetFrameInterop(FrameInterop& out) const;
 	bool WaitFrameIdle(String& error);
 	void SyncFrameValidation();

@@ -54,6 +54,18 @@ struct VulkanClearResources {
 
 bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)
 {
+	return PresentClearFrameImpl(red, green, blue, alpha, nullptr, 0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+bool VulkanSurfaceSession::PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
+                                            const Rect& rect, float red, float green, float blue, float alpha)
+{
+	return PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rect, red, green, blue, alpha);
+}
+
+bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float blue, float alpha,
+                                                 const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha)
+{
 	FrameInterop interop;
 	if(!GetFrameInterop(interop) || interop.device == VK_NULL_HANDLE || interop.swapchain == VK_NULL_HANDLE || interop.images.IsEmpty()) {
 		frame_report.error = "Vulkan swapchain is not ready for clear presentation";
@@ -75,6 +87,7 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
 	PFN_vkCmdPipelineBarrier2 cmd_pipeline_barrier_2 = nullptr;
 	PFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;
 	PFN_vkCmdEndRendering cmd_end_rendering = nullptr;
+	PFN_vkCmdClearAttachments cmd_clear_attachments = nullptr;
 	PFN_vkQueueSubmit2 queue_submit_2 = nullptr;
 	PFN_vkQueuePresentKHR queue_present = nullptr;
 	String error;
@@ -97,6 +110,19 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
 	   !ResolveClearProc(queue_present, interop, "vkQueuePresentKHR", error)) {
 		frame_report.error = error;
 		return false;
+	}
+	if(rect && !ResolveClearProc(cmd_clear_attachments, interop, "vkCmdClearAttachments", error)) {
+		frame_report.error = error;
+		return false;
+	}
+
+	Rect draw_rect;
+	if(rect) {
+		draw_rect = *rect & Rect(0, 0, GetReport().swapchain_extent.cx, GetReport().swapchain_extent.cy);
+		if(draw_rect.IsEmpty()) {
+			frame_report.error = "Vulkan rectangle is outside the swapchain extent";
+			return false;
+		}
 	}
 
 	VulkanClearResources resources;
@@ -235,6 +261,23 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
 		rendering.colorAttachmentCount = 1;
 		rendering.pColorAttachments = &attachment;
 		cmd_begin_rendering(resources.command_buffer, &rendering);
+		if(rect) {
+			VkClearAttachment rect_attachment{};
+			rect_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			rect_attachment.colorAttachment = 0;
+			rect_attachment.clearValue.color.float32[0] = rect_red;
+			rect_attachment.clearValue.color.float32[1] = rect_green;
+			rect_attachment.clearValue.color.float32[2] = rect_blue;
+			rect_attachment.clearValue.color.float32[3] = rect_alpha;
+			VkClearRect clear_rect{};
+			clear_rect.rect.offset.x = draw_rect.left;
+			clear_rect.rect.offset.y = draw_rect.top;
+			clear_rect.rect.extent.width = (uint32_t)draw_rect.Width();
+			clear_rect.rect.extent.height = (uint32_t)draw_rect.Height();
+			clear_rect.baseArrayLayer = 0;
+			clear_rect.layerCount = 1;
+			cmd_clear_attachments(resources.command_buffer, 1, &rect_attachment, 1, &clear_rect);
+		}
 		cmd_end_rendering(resources.command_buffer);
 
 		VkImageMemoryBarrier2 to_present{};

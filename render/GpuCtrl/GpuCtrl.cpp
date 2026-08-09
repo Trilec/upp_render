@@ -56,7 +56,14 @@ public:
 		}
 		if(!EnsureSwapchain(requested_size, error))
 			return false;
-		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f))
+		int rect_width = requested_size.cx / 2;
+		int rect_height = requested_size.cy / 2;
+		if(rect_width < 1) rect_width = 1;
+		if(rect_height < 1) rect_height = 1;
+		int rect_left = (requested_size.cx - rect_width) / 2;
+		int rect_top = (requested_size.cy - rect_height) / 2;
+		Rect rect = RectC(rect_left, rect_top, rect_width, rect_height);
+		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f))
 			return true;
 
 		error = session.GetFrameReport().error;
@@ -73,7 +80,7 @@ public:
 		swapchain_request_size = Size(0, 0);
 		if(!EnsureSwapchain(requested_size, error))
 			return false;
-		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) {
+		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f)) {
 			error.Clear();
 			return true;
 		}
