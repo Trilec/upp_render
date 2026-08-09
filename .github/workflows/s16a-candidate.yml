@@ -1,0 +1,194 @@
+name: Build S16A candidate
+
+on:
+  push:
+    branches:
+      - chatgpt/s16a-vulkan-rect
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build guarded S16A rectangle candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=ce0827970e77db54259757d38cd832adb5dd00c8
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout --detach "$BASE"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1. Extend private Vulkan frame evidence and add the narrow rectangle entry point.
+          p = Path('render/RenderVulkan/RenderVulkanSurfaceSession.h')
+          s = p.read_text()
+          old = '''\tbool clear_requested = false;\n\tbool cleared = false;\n\tuint64_t clear_count = 0;\n\tfloat clear_red = 0.0f;\n\tfloat clear_green = 0.0f;\n\tfloat clear_blue = 0.0f;\n\tfloat clear_alpha = 1.0f;\n'''
+          new = '''\tbool clear_requested = false;\n\tbool cleared = false;\n\tuint64_t clear_count = 0;\n\tfloat clear_red = 0.0f;\n\tfloat clear_green = 0.0f;\n\tfloat clear_blue = 0.0f;\n\tfloat clear_alpha = 1.0f;\n\tbool rect_requested = false;\n\tbool rect_drawn = false;\n\tuint64_t rect_count = 0;\n\tRect rect = Rect(0, 0, 0, 0);\n\tfloat rect_red = 0.0f;\n\tfloat rect_green = 0.0f;\n\tfloat rect_blue = 0.0f;\n\tfloat rect_alpha = 1.0f;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+          old = '''\tbool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);\n'''
+          new = '''\tbool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);\n\tbool PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,\n\t                      const Rect& rect, float red, float green, float blue, float alpha = 1.0f);\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+          old = '''\tbool GetFrameInterop(FrameInterop& out) const;\n'''
+          new = '''\tbool PresentClearFrameImpl(float background_red, float background_green, float background_blue, float background_alpha,\n\t                           const Rect *rect, float red, float green, float blue, float alpha);\n\tbool GetFrameInterop(FrameInterop& out) const;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 2. Reuse the accepted S14 dynamic-rendering path and add one vkCmdClearAttachments rectangle.
+          p = Path('render/RenderVulkan/RenderVulkanClearFrame.cpp')
+          s = p.read_text()
+          old = '''bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)\n{\n\tFrameInterop interop;\n'''
+          new = '''bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)\n{\n\treturn PresentClearFrameImpl(red, green, blue, alpha, nullptr, 0.0f, 0.0f, 0.0f, 1.0f);\n}\n\nbool VulkanSurfaceSession::PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,\n                                            const Rect& rect, float red, float green, float blue, float alpha)\n{\n\treturn PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rect, red, green, blue, alpha);\n}\n\nbool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float blue, float alpha,\n                                                 const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha)\n{\n\tFrameInterop interop;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+
+          old = '''\tPFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;\n\tPFN_vkCmdEndRendering cmd_end_rendering = nullptr;\n\tPFN_vkQueueSubmit2 queue_submit_2 = nullptr;\n'''
+          new = '''\tPFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;\n\tPFN_vkCmdEndRendering cmd_end_rendering = nullptr;\n\tPFN_vkCmdClearAttachments cmd_clear_attachments = nullptr;\n\tPFN_vkQueueSubmit2 queue_submit_2 = nullptr;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+
+          old = '''\t   !ResolveClearProc(queue_submit_2, interop, "vkQueueSubmit2", error) ||\n\t   !ResolveClearProc(queue_present, interop, "vkQueuePresentKHR", error)) {\n\t\tframe_report.error = error;\n\t\treturn false;\n\t}\n\n\tVulkanClearResources resources;\n'''
+          new = '''\t   !ResolveClearProc(queue_submit_2, interop, "vkQueueSubmit2", error) ||\n\t   !ResolveClearProc(queue_present, interop, "vkQueuePresentKHR", error)) {\n\t\tframe_report.error = error;\n\t\treturn false;\n\t}\n\tif(rect && !ResolveClearProc(cmd_clear_attachments, interop, "vkCmdClearAttachments", error)) {\n\t\tframe_report.error = error;\n\t\treturn false;\n\t}\n\n\tRect draw_rect;\n\tif(rect) {\n\t\tdraw_rect = *rect & Rect(0, 0, GetReport().swapchain_extent.cx, GetReport().swapchain_extent.cy);\n\t\tif(draw_rect.IsEmpty()) {\n\t\t\tframe_report.error = "Vulkan rectangle is outside the swapchain extent";\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tVulkanClearResources resources;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+
+          old = '''\tframe_report.clear_red = red;\n\tframe_report.clear_green = green;\n\tframe_report.clear_blue = blue;\n\tframe_report.clear_alpha = alpha;\n\tframe_report.error.Clear();\n'''
+          new = '''\tframe_report.clear_red = red;\n\tframe_report.clear_green = green;\n\tframe_report.clear_blue = blue;\n\tframe_report.clear_alpha = alpha;\n\tframe_report.rect_requested = rect != nullptr;\n\tframe_report.rect_drawn = false;\n\tframe_report.rect = rect ? draw_rect : Rect(0, 0, 0, 0);\n\tframe_report.rect_red = rect_red;\n\tframe_report.rect_green = rect_green;\n\tframe_report.rect_blue = rect_blue;\n\tframe_report.rect_alpha = rect_alpha;\n\tframe_report.error.Clear();\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+
+          old = '''\t\tcmd_begin_rendering(resources.command_buffer, &rendering);\n\t\tcmd_end_rendering(resources.command_buffer);\n\n\t\tVkImageMemoryBarrier2 to_present{};\n'''
+          new = '''\t\tcmd_begin_rendering(resources.command_buffer, &rendering);\n\t\tif(rect) {\n\t\t\tVkClearAttachment clear_attachment{};\n\t\t\tclear_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;\n\t\t\tclear_attachment.colorAttachment = 0;\n\t\t\tclear_attachment.clearValue.color.float32[0] = rect_red;\n\t\t\tclear_attachment.clearValue.color.float32[1] = rect_green;\n\t\t\tclear_attachment.clearValue.color.float32[2] = rect_blue;\n\t\t\tclear_attachment.clearValue.color.float32[3] = rect_alpha;\n\t\t\tVkClearRect clear_rect{};\n\t\t\tclear_rect.rect.offset.x = draw_rect.left;\n\t\t\tclear_rect.rect.offset.y = draw_rect.top;\n\t\t\tclear_rect.rect.extent.width = (uint32_t)draw_rect.GetWidth();\n\t\t\tclear_rect.rect.extent.height = (uint32_t)draw_rect.GetHeight();\n\t\t\tclear_rect.baseArrayLayer = 0;\n\t\t\tclear_rect.layerCount = 1;\n\t\t\tcmd_clear_attachments(resources.command_buffer, 1, &clear_attachment, 1, &clear_rect);\n\t\t\tframe_report.rect_drawn = true;\n\t\t}\n\t\tcmd_end_rendering(resources.command_buffer);\n\n\t\tVkImageMemoryBarrier2 to_present{};\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+
+          old = '''\tif(vr == VK_SUCCESS || vr == VK_SUBOPTIMAL_KHR) {\n\t\tframe_report.presented = true;\n\t\tframe_report.present_count++;\n'''
+          new = '''\tif(vr == VK_SUCCESS || vr == VK_SUBOPTIMAL_KHR) {\n\t\tframe_report.presented = true;\n\t\tframe_report.present_count++;\n\t\tif(frame_report.rect_requested && frame_report.rect_drawn)\n\t\t\tframe_report.rect_count++;\n'''
+          assert s.count(old) == 1
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 3. Drive the primitive from real GpuCtrl paint lifecycle. The rectangle is the central half of the native client.
+          p = Path('render/GpuCtrl/GpuCtrl.cpp')
+          s = p.read_text()
+          old = '''\t\tif(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f))\n\t\t\treturn true;\n'''
+          new = '''\t\tRect rect(requested_size.cx / 4, requested_size.cy / 4,\n\t\t          requested_size.cx - requested_size.cx / 4, requested_size.cy - requested_size.cy / 4);\n\t\tif(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f))\n\t\t\treturn true;\n'''
+          assert s.count(old) == 2, s.count(old)
+          s = s.replace(old, new, 2)
+          p.write_text(s)
+
+          # 4. Add a focused backend test for the new primitive and its missing-procedure boundary.
+          test_dir = Path('tests/RenderVulkanRectFrameTest')
+          test_dir.mkdir(parents=True, exist_ok=True)
+          (test_dir / 'RenderVulkanRectFrameTest.upp').write_text('''uses\n\tCore,\n\tRenderVulkan;\n\nfile\n\tmain.cpp;\n\nmainconfig\n\t"" = "CONSOLE";\n''')
+          (test_dir / 'main.cpp').write_text(r'''#include <RenderVulkan/RenderVulkan.h>
+#include <RenderVulkan/RenderVulkanSurfaceSession.h>
+#include <RenderVulkan/RenderVulkanTestHooks.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+using namespace Upp;
+using namespace Upp::VulkanTestHooks;
+
+static const char *g_missing_proc = nullptr;
+
+static FARPROC WINAPI TestResolver(HMODULE module, LPCSTR name)
+{
+	(void)module;
+	if(g_missing_proc && String(name) == g_missing_proc)
+		return nullptr;
+	return reinterpret_cast<FARPROC>(1);
+}
+
+static bool Check(bool condition, const char *message)
+{
+	if(!condition)
+		Cout() << "FAIL: " << message << EOL;
+	return condition;
+}
+
+CONSOLE_APP_MAIN
+{
+	ClearVulkanRuntimeDeviceDiagnostics();
+	HWND hwnd = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 160, 100, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+	bool ok = Check(hwnd != nullptr, "hidden rectangle test window should be created");
+	if(!ok) { SetExitCode(1); return; }
+	struct WindowGuard { HWND hwnd; ~WindowGuard() { if(hwnd) DestroyWindow(hwnd); } } window{hwnd};
+
+	GpuNativeWindowDesc native_window;
+	native_window.kind = GpuNativeWindowKind::Win32;
+	native_window.handle = (uint64_t)(uintptr_t)hwnd;
+
+	VulkanSurfaceSession session;
+	ok &= Check(session.Open(true, native_window, &TestResolver), "rectangle session should open");
+	ok &= Check(session.IsReady(), "rectangle session should be ready");
+	ok &= Check(session.CreateSwapchain(Size(160, 100)), "rectangle swapchain should be created");
+
+	Rect rect(40, 25, 120, 75);
+	if(ok) {
+		ok &= Check(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f), "rectangle frame should present");
+		const VulkanFrameReport& report = session.GetFrameReport();
+		ok &= Check(report.clear_requested && report.cleared && report.presented, "rectangle frame should retain authoritative clear/present evidence");
+		ok &= Check(report.rect_requested && report.rect_drawn && report.rect_count == 1, "rectangle evidence should record one drawn primitive");
+		ok &= Check(report.rect == rect, "rectangle evidence should preserve the clipped requested geometry");
+		ok &= Check(report.rect_red == 0.90f && report.rect_green == 0.32f && report.rect_blue == 0.08f && report.rect_alpha == 1.0f, "rectangle colour evidence should be exact");
+		ok &= Check(report.state_cleared && !session.HasAcquiredFrame(), "rectangle frame should leave no acquired frame state");
+	}
+
+	if(ok) {
+		g_missing_proc = "vkCmdClearAttachments";
+		ok &= Check(!session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f), "missing rectangle command should refuse the rectangle path");
+		ok &= Check(session.GetFrameReport().error == "vkCmdClearAttachments", "missing rectangle command should be reported exactly");
+		ok &= Check(!session.HasAcquiredFrame(), "missing rectangle command should fail before frame acquisition");
+		ok &= Check(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f), "clear-only path should not depend on vkCmdClearAttachments");
+		g_missing_proc = nullptr;
+		ok &= Check(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f), "rectangle path should recover after procedure restoration");
+	}
+	g_missing_proc = nullptr;
+
+	if(ok) {
+		ok &= Check(session.GetReport().validation_warning_count == 0, "rectangle validation warnings should be zero");
+		ok &= Check(session.GetReport().validation_error_count == 0, "rectangle validation errors should be zero");
+	}
+
+	session.Close();
+	VulkanRuntimeDeviceDiagnostics diag = GetVulkanRuntimeDeviceDiagnostics();
+	ok &= Check(diag.runtime_live_count == 0 && diag.instance_live_count == 0 && diag.debug_messenger_live_count == 0 &&
+	            diag.surface_live_count == 0 && diag.device_live_count == 0 && diag.swapchain_live_count == 0,
+	            "rectangle test should finish with zero live Vulkan ownership diagnostics");
+
+	if(ok) {
+		Cout() << "RenderVulkanRectFrameTest passed" << EOL;
+		return;
+	}
+	SetExitCode(1);
+}
+''')
+
+          # 5. Keep project status honest and explicitly narrow.
+          p = Path('docs/PROJECT_PLAN.md')
+          s = p.read_text()
+          s = s.replace('- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is implemented and\n  awaiting Windows/runtime/visual acceptance\n', '- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is accepted through R3\n- TASK-008A1 S16A first backend-private Vulkan rectangle primitive is implemented and awaiting Windows/runtime/visual acceptance\n', 1)
+          s = s.replace('- general 2D rendering, shaders, painter callbacks, and shared control device\n  ownership remain deferred\n', '- S16A uses vkCmdClearAttachments inside the accepted dynamic-rendering frame to draw one inset rectangle without shaders or pipelines\n- general 2D rendering, shader/pipeline infrastructure, painter callbacks, display-list replay, and shared control device ownership remain deferred\n', 1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          git diff --stat
+          git diff -- render/RenderVulkan/RenderVulkanSurfaceSession.h render/RenderVulkan/RenderVulkanClearFrame.cpp render/GpuCtrl/GpuCtrl.cpp tests/RenderVulkanRectFrameTest docs/PROJECT_PLAN.md
+          git add render/RenderVulkan/RenderVulkanSurfaceSession.h render/RenderVulkan/RenderVulkanClearFrame.cpp render/GpuCtrl/GpuCtrl.cpp tests/RenderVulkanRectFrameTest docs/PROJECT_PLAN.md
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit \
+            -m "S16A add first GpuCtrl Vulkan rectangle primitive" \
+            -m "Draw one deterministic inset rectangle with vkCmdClearAttachments inside the accepted dynamic-rendering frame and drive it from the real GpuCtrl paint lifecycle." \
+            -m "Keep shaders, pipelines, display-list replay and the public GpuCtrl API out of this small acceptance slice."
+          git push origin HEAD:refs/heads/chatgpt/s16a-candidate --force
