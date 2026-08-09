@@ -1,45 +1,11 @@
-name: Build S15-R3 candidate
+name: Disabled temporary S15 candidate workflow
 
 on:
-  push:
-    branches:
-      - chatgpt/s15-r1-resize-recovery
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  candidate:
+  noop:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Apply guarded S15-R3 surface capability refresh
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE=bf3e0c1110c18ef883dd4e4409710c3169a452ba
-          git fetch origin main
-          test "$(git rev-parse origin/main)" = "$BASE"
-          git checkout --detach "$BASE"
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path('render/RenderVulkan/RenderVulkan.cpp')
-          s = p.read_text()
-          old = '''\timpl->report.swapchain_requested = true;\n\timpl->report.swapchain_error.Clear();\n\timpl->report.swapchain_state_cleared = true;\n\tif(requested_size.cx <= 0 || requested_size.cy <= 0) {\n\t\timpl->report.swapchain_error = "Vulkan swapchain size must be positive";\n\t\treturn false;\n\t}\n\tif(!impl->report.swapchain_enabled) {\n'''
-          new = '''\timpl->report.swapchain_requested = true;\n\timpl->report.swapchain_error.Clear();\n\timpl->report.swapchain_state_cleared = true;\n\tif(requested_size.cx <= 0 || requested_size.cy <= 0) {\n\t\timpl->report.swapchain_error = "Vulkan swapchain size must be positive";\n\t\treturn false;\n\t}\n\t// Surface capabilities are dynamic on Win32. Re-query immediately before\n\t// every swapchain creation so currentExtent, formats and present modes match\n\t// the native window after resize instead of reusing session-open snapshots.\n\tString surface_error;\n\tif(!impl->ctx.QuerySurfaceCapabilities(impl->device.physical_device, impl->report, surface_error)) {\n\t\timpl->report.swapchain_error = surface_error;\n\t\treturn false;\n\t}\n\tif(!impl->report.swapchain_enabled) {\n'''
-          assert s.count(old) == 1, 'CreateSwapchain refresh anchor mismatch'
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-          PY
-          git diff --check
-          git diff -- render/RenderVulkan/RenderVulkan.cpp
-          test "$(git diff --name-only | tr -d '\r')" = "render/RenderVulkan/RenderVulkan.cpp"
-          git add render/RenderVulkan/RenderVulkan.cpp
-          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit \
-            -m "S15-R3 refresh Vulkan surface state on resize" \
-            -m "Re-query Win32 surface capabilities, formats and present modes before each swapchain creation so recreated swapchains use the current native extent." \
-            -m "Keep the GpuCtrl resize logic and focused acceptance test unchanged."
-          git push origin HEAD:refs/heads/chatgpt/s15-r3-candidate --force
+      - run: echo disabled
