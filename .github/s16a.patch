@@ -1,0 +1,161 @@
+diff --git a/render/RenderVulkan/RenderVulkanSurfaceSession.h b/render/RenderVulkan/RenderVulkanSurfaceSession.h
+index c07d391..0000000 100644
+--- a/render/RenderVulkan/RenderVulkanSurfaceSession.h
++++ b/render/RenderVulkan/RenderVulkanSurfaceSession.h
+@@ -72,6 +72,8 @@ public:
+ 	bool AcquireFrame();
+ 	bool PresentFrame();
+ 	bool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);
++	bool PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
++	                      const Rect& rect, float red, float green, float blue, float alpha = 1.0f);
+ 	bool HasAcquiredFrame() const;
+ 	const VulkanFrameReport& GetFrameReport() const;
+ 
+@@ -98,6 +100,8 @@ private:
+ 	uint64_t clear_swapchain_id = 0;
+ 	Vector<uint8_t> clear_image_initialized;
+ 
++	bool PresentClearFrameImpl(float red, float green, float blue, float alpha,
++	                           const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha);
+ 	bool GetFrameInterop(FrameInterop& out) const;
+ 	bool WaitFrameIdle(String& error);
+ 	void SyncFrameValidation();
+diff --git a/render/RenderVulkan/RenderVulkanClearFrame.cpp b/render/RenderVulkan/RenderVulkanClearFrame.cpp
+index cf49eae..0000000 100644
+--- a/render/RenderVulkan/RenderVulkanClearFrame.cpp
++++ b/render/RenderVulkan/RenderVulkanClearFrame.cpp
+@@ -50,6 +50,18 @@ struct VulkanClearResources {
+ 
+ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)
+ {
++	return PresentClearFrameImpl(red, green, blue, alpha, nullptr, 0.0f, 0.0f, 0.0f, 1.0f);
++}
++
++bool VulkanSurfaceSession::PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
++	                                        const Rect& rect, float red, float green, float blue, float alpha)
++{
++	return PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rect, red, green, blue, alpha);
++}
++
++bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float blue, float alpha,
++	                                             const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha)
++{
+ 	FrameInterop interop;
+ 	if(!GetFrameInterop(interop) || interop.device == VK_NULL_HANDLE || interop.swapchain == VK_NULL_HANDLE || interop.images.IsEmpty()) {
+ 		frame_report.error = "Vulkan swapchain is not ready for clear presentation";
+@@ -72,6 +84,7 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
+ 	PFN_vkCmdPipelineBarrier2 cmd_pipeline_barrier_2 = nullptr;
+ 	PFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;
+ 	PFN_vkCmdEndRendering cmd_end_rendering = nullptr;
++	PFN_vkCmdClearAttachments cmd_clear_attachments = nullptr;
+ 	PFN_vkQueueSubmit2 queue_submit_2 = nullptr;
+ 	PFN_vkQueuePresentKHR queue_present = nullptr;
+ 	String error;
+@@ -95,10 +108,20 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
+ 		frame_report.error = error;
+ 		return false;
+ 	}
++	if(rect && !ResolveClearProc(cmd_clear_attachments, interop, "vkCmdClearAttachments", error)) {
++		frame_report.error = error;
++		return false;
++	}
++
++	Rect draw_rect;
++	if(rect) {
++		draw_rect = *rect & Rect(0, 0, GetReport().swapchain_extent.cx, GetReport().swapchain_extent.cy);
++		if(draw_rect.IsEmpty()) {
++			frame_report.error = "Vulkan rectangle is outside the swapchain extent";
++			return false;
++		}
++	}
+ 
+ 	VulkanClearResources resources;
+@@ -232,6 +255,25 @@ bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue,
+ 		rendering.colorAttachmentCount = 1;
+ 		rendering.pColorAttachments = &attachment;
+ 		cmd_begin_rendering(resources.command_buffer, &rendering);
++		if(rect) {
++			VkClearAttachment rect_attachment{};
++			rect_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++			rect_attachment.colorAttachment = 0;
++			rect_attachment.clearValue.color.float32[0] = rect_red;
++			rect_attachment.clearValue.color.float32[1] = rect_green;
++			rect_attachment.clearValue.color.float32[2] = rect_blue;
++			rect_attachment.clearValue.color.float32[3] = rect_alpha;
++			VkClearRect clear_rect{};
++			clear_rect.rect.offset.x = draw_rect.left;
++			clear_rect.rect.offset.y = draw_rect.top;
++			clear_rect.rect.extent.width = (uint32_t)draw_rect.Width();
++			clear_rect.rect.extent.height = (uint32_t)draw_rect.Height();
++			clear_rect.baseArrayLayer = 0;
++			clear_rect.layerCount = 1;
++			cmd_clear_attachments(resources.command_buffer, 1, &rect_attachment, 1, &clear_rect);
++		}
+ 		cmd_end_rendering(resources.command_buffer);
+ 
+ 		VkImageMemoryBarrier2 to_present{};
+diff --git a/render/GpuCtrl/GpuCtrl.cpp b/render/GpuCtrl/GpuCtrl.cpp
+index d616ee3..0000000 100644
+--- a/render/GpuCtrl/GpuCtrl.cpp
++++ b/render/GpuCtrl/GpuCtrl.cpp
+@@ -49,7 +49,13 @@ public:
+ 		if(!EnsureSwapchain(requested_size, error))
+ 			return false;
+-		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f))
++		int rect_width = requested_size.cx / 2;
++		int rect_height = requested_size.cy / 2;
++		if(rect_width < 1) rect_width = 1;
++		if(rect_height < 1) rect_height = 1;
++		Rect rect((requested_size.cx - rect_width) / 2, (requested_size.cy - rect_height) / 2,
++		          (requested_size.cx + rect_width) / 2, (requested_size.cy + rect_height) / 2);
++		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f))
+ 			return true;
+ 
+ 		error = session.GetFrameReport().error;
+@@ -72,7 +78,7 @@ public:
+ 		swapchain_request_size = Size(0, 0);
+ 		if(!EnsureSwapchain(requested_size, error))
+ 			return false;
+-		if(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f)) {
++		if(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, rect, 0.90f, 0.32f, 0.08f, 1.0f)) {
+ 			error.Clear();
+ 			return true;
+ 		}
+diff --git a/tests/RenderVulkanClearFrameTest/main.cpp b/tests/RenderVulkanClearFrameTest/main.cpp
+index 8968305..0000000 100644
+--- a/tests/RenderVulkanClearFrameTest/main.cpp
++++ b/tests/RenderVulkanClearFrameTest/main.cpp
+@@ -59,6 +59,12 @@ CONSOLE_APP_MAIN
+ 		ok &= Check(first.state_cleared && !session.HasAcquiredFrame(), "clear frame should leave no acquired private frame state");
+ 	}
+ 
++	if(ok) {
++		ok &= Check(session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, Rect(24, 16, 72, 48), 0.90f, 0.32f, 0.08f, 1.0f), "rectangle frame should present");
++		ok &= Check(session.GetFrameReport().clear_count == 2 && session.GetFrameReport().present_count == 2, "rectangle frame should share the clear/present lifecycle");
++		ok &= Check(session.GetFrameReport().state_cleared && !session.HasAcquiredFrame(), "rectangle frame should leave no acquired private frame state");
++	}
++
+ 	const float colors[][4] = {
+ 		{ 0.65f, 0.10f, 0.12f, 1.0f },
+ 		{ 0.08f, 0.55f, 0.22f, 1.0f },
+@@ -70,7 +76,7 @@ CONSOLE_APP_MAIN
+ 		if(ok)
+ 			ok &= Check(session.PresentClearFrame(c[0], c[1], c[2], c[3]), "repeated clear-colour frame should present");
+ 	if(ok)
+-		ok &= Check(session.GetFrameReport().clear_count == 5 && session.GetFrameReport().present_count == 5, "repeated clear/present counters should remain exact");
++		ok &= Check(session.GetFrameReport().clear_count == 6 && session.GetFrameReport().present_count == 6, "repeated clear/present counters should remain exact");
+@@ -89,6 +95,15 @@ CONSOLE_APP_MAIN
+ 	}
+ 	g_missing_proc = nullptr;
++	if(ok) {
++		g_missing_proc = "vkCmdClearAttachments";
++		ok &= Check(!session.PresentRectFrame(0.08f, 0.24f, 0.58f, 1.0f, Rect(24, 16, 72, 48), 0.90f, 0.32f, 0.08f, 1.0f), "missing rectangle procedure should refuse only the rectangle path");
++		ok &= Check(session.GetFrameReport().error == "vkCmdClearAttachments", "missing rectangle procedure should report its exact name");
++		ok &= Check(!session.HasAcquiredFrame(), "missing rectangle procedure should fail before image acquisition");
++		g_missing_proc = nullptr;
++		ok &= Check(session.PresentClearFrame(0.08f, 0.24f, 0.58f, 1.0f), "clear-only path should remain independent of rectangle procedure");
++	}
++	g_missing_proc = nullptr;
+ 
+ 	if(ok) {
+ 		ok &= Check(session.GetReport().validation_warning_count == 0, "clear-frame validation warnings should be zero");
