@@ -4097,6 +4097,14 @@ bool VulkanSurfaceSession::CreateSwapchain(Size requested_size)
 		impl->report.swapchain_error = "Vulkan swapchain size must be positive";
 		return false;
 	}
+	// Surface capabilities are dynamic on Win32. Re-query immediately before
+	// every swapchain creation so currentExtent, formats and present modes match
+	// the native window after resize instead of reusing session-open snapshots.
+	String surface_error;
+	if(!impl->ctx.QuerySurfaceCapabilities(impl->device.physical_device, impl->report, surface_error)) {
+		impl->report.swapchain_error = surface_error;
+		return false;
+	}
 	if(!impl->report.swapchain_enabled) {
 		impl->report.swapchain_error = "VK_KHR_swapchain is not enabled";
 		return false;
