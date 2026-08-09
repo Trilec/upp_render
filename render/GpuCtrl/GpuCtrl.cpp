@@ -205,11 +205,23 @@ struct GpuCtrl::Impl {
 		return presentation_error;
 	}
 
+	Size GetNativeHostSize() const
+	{
+		HWND hwnd = const_cast<Host&>(host).GetHWND();
+		RECT rect{};
+		if(!hwnd || !GetClientRect(hwnd, &rect))
+			return Size(0, 0);
+		return Size(max(0, rect.right - rect.left), max(0, rect.bottom - rect.top));
+	}
+
 	bool OnHostPaint()
 	{
 		if(!IsGpuReady() || !backend)
 			return false;
-		Size requested_size = host.GetSize();
+		// The Vulkan surface is backed by the child HWND, so its current client
+		// extent is authoritative during resize rather than the owner's logical
+		// layout size, which can lead the native window by one message turn.
+		Size requested_size = GetNativeHostSize();
 		String error;
 		if(backend->Present(requested_size, error)) {
 			presentation_error.Clear();
@@ -288,8 +300,12 @@ struct GpuCtrl::Impl {
 				StartGpuSession();
 			}
 			SyncHostBounds();
-			if(reason == SHOW && IsGpuReady())
+			if(reason == SHOW && IsGpuReady()) {
+				// SHOW is a fresh presentation opportunity; do not carry a prior
+				// resize-time presentation error into the new visible state.
+				presentation_error.Clear();
 				host.Refresh();
+			}
 			break;
 		case CLOSE:
 			StopGpuSession();
@@ -320,6 +336,8 @@ struct GpuCtrl::Impl {
 		// frame; the private backend reconciles its swapchain on that paint.
 		Size sz = owner->GetSize();
 		bool size_changed = sz != last_host_size;
+		if(size_changed)
+			presentation_error.Clear();
 		last_host_size = sz;
 		host.SetRect(0, 0, sz.cx, sz.cy);
 		if(IsNativeHostReady()) {
