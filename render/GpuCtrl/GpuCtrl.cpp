@@ -211,7 +211,9 @@ struct GpuCtrl::Impl {
 		RECT rect{};
 		if(!hwnd || !GetClientRect(hwnd, &rect))
 			return Size(0, 0);
-		return Size(max(0, rect.right - rect.left), max(0, rect.bottom - rect.top));
+		LONG width = rect.right - rect.left;
+		LONG height = rect.bottom - rect.top;
+		return Size(width > 0 ? (int)width : 0, height > 0 ? (int)height : 0);
 	}
 
 	bool OnHostPaint()
