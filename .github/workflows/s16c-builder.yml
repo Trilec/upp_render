@@ -1,0 +1,32 @@
+name: Run guarded S16C builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16c-builder
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build candidate from accepted S16B
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=c2d4444e9ee541a804c1a4ed4d92c8edf664098c
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git show origin/chatgpt/s16c-builder:.github/s16c_edit.py > /tmp/s16c_edit.py
+          git checkout --detach "$BASE"
+          python3 /tmp/s16c_edit.py
+          git diff --check
+          git diff --stat
+          git add render/GpuCtrl/GpuCtrl.cpp render/GpuCtrl/GpuCtrl.upp docs/PROJECT_PLAN.md
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16C: replay first UiDisplayList FillRect in GpuCtrl" -m "Record the accepted orange rectangle as one neutral UiDisplayList FillRect and replay that operation into the S16B private frame intent." -m "Add only the RenderCanvas dependency needed for this proof; keep broader display-list replay, renderer state, shaders, pipelines and public drawing APIs deferred."
+          git push origin HEAD:refs/heads/chatgpt/s16c-candidate --force
