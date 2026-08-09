@@ -1,5 +1,6 @@
 #include "GpuCtrl.h"
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
+#include <RenderCanvas/RenderCanvas.h>
 #include <RenderVulkan/RenderVulkanSurfaceSession.h>
 
 namespace Upp {
@@ -20,12 +21,47 @@ struct GpuCtrlFrameIntent {
 	GpuCtrlFrameColor fill_color;
 };
 
-static GpuCtrlFrameIntent BuildDefaultFrameIntent(Size size)
+static GpuCtrlFrameColor ToFrameColor(Rgba8 color)
 {
-	GpuCtrlFrameIntent frame;
+	const float scale = 1.0f / 255.0f;
+	return { color.r * scale, color.g * scale, color.b * scale, color.a * scale };
+}
+
+static bool ReplaySingleFillRect(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
+{
+	if(!list.IsValid()) {
+		error = list.GetError();
+		return false;
+	}
+	if(list.GetCount() != 1 || list[0].type != UiDisplayOpType::FillRect) {
+		error = "GpuCtrl S16C frame requires exactly one FillRect display operation";
+		return false;
+	}
+
+	const UiDisplayOp& op = list[0];
+	int left = (int)op.rect.left;
+	int top = (int)op.rect.top;
+	int right = (int)op.rect.right;
+	int bottom = (int)op.rect.bottom;
+	if(right <= left || bottom <= top) {
+		error = "GpuCtrl S16C FillRect display operation is empty";
+		return false;
+	}
+
+	frame.has_fill_rect = true;
+	frame.fill_rect = Rect(left, top, right, bottom);
+	frame.fill_color = ToFrameColor(op.color);
+	error.Clear();
+	return true;
+}
+
+static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String& error)
+{
+	frame = GpuCtrlFrameIntent();
 	frame.background = { 0.08f, 0.24f, 0.58f, 1.0f };
+	error.Clear();
 	if(size.cx <= 0 || size.cy <= 0)
-		return frame;
+		return true;
 
 	int rect_width = size.cx / 2;
 	int rect_height = size.cy / 2;
@@ -35,10 +71,16 @@ static GpuCtrlFrameIntent BuildDefaultFrameIntent(Size size)
 		rect_height = 1;
 	int rect_left = (size.cx - rect_width) / 2;
 	int rect_top = (size.cy - rect_height) / 2;
-	frame.has_fill_rect = true;
-	frame.fill_rect = RectC(rect_left, rect_top, rect_width, rect_height);
-	frame.fill_color = { 0.90f, 0.32f, 0.08f, 1.0f };
-	return frame;
+
+	UiDisplayListBuilder builder;
+	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
+	                 Rgba8(230, 82, 20, 255));
+	UiDisplayList list;
+	if(!builder.Finish(list)) {
+		error = builder.GetError();
+		return false;
+	}
+	return ReplaySingleFillRect(list, frame, error);
 }
 
 class GpuCtrlBackendSession {
@@ -269,8 +311,12 @@ struct GpuCtrl::Impl {
 		// extent is authoritative during resize rather than the owner's logical
 		// layout size, which can lead the native window by one message turn.
 		Size requested_size = GetNativeHostSize();
-		GpuCtrlFrameIntent frame = BuildDefaultFrameIntent(requested_size);
+		GpuCtrlFrameIntent frame;
 		String error;
+		if(!BuildDefaultFrameIntent(requested_size, frame, error)) {
+			presentation_error = error;
+			return false;
+		}
 		if(backend->Present(requested_size, frame, error)) {
 			presentation_error.Clear();
 			return true;

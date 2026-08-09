@@ -147,7 +147,10 @@ additional backends beyond the first ones already planned.
   presentation lifecycle; S16B moves its background/rectangle description into
   backend-neutral private frame intent so the Vulkan backend no longer invents
   control content or geometry
-- general 2D rendering, display-list replay, shaders, painter callbacks, and
-  shared control device ownership remain deferred
+- S16C records the orange rectangle as one existing UiDisplayList FillRect and
+  replays that neutral operation into the private frame intent; broader display-
+  list replay and renderer state remain deferred
+- general 2D rendering, shaders, painter callbacks, and shared control device
+  ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage
 - compute remains an architectural topic only
