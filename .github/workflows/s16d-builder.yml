@@ -23,6 +23,15 @@ jobs:
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$BASE"
           cp .github/s16d_edit.py /tmp/s16d_edit.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/s16d_edit.py')
+          s = p.read_text()
+          old = "\\t\\tdraw_rects = clone(*rects);\\n"
+          new = "\\t\\tdraw_rects.SetCount(rects->GetCount());\\n\\t\\tfor(int i = 0; i < rects->GetCount(); ++i)\\n\\t\\t\\tdraw_rects[i] = (*rects)[i];\\n"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new, 1))
+          PY
           git checkout --detach "$BASE"
           python /tmp/s16d_edit.py
           git diff --check
