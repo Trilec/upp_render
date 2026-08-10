@@ -14,11 +14,14 @@ struct GpuCtrlFrameColor {
 	float alpha = 1.0f;
 };
 
+struct GpuCtrlFillRectIntent : Moveable<GpuCtrlFillRectIntent> {
+	Rect rect = Rect(0, 0, 0, 0);
+	GpuCtrlFrameColor color;
+};
+
 struct GpuCtrlFrameIntent {
 	GpuCtrlFrameColor background;
-	bool has_fill_rect = false;
-	Rect fill_rect = Rect(0, 0, 0, 0);
-	GpuCtrlFrameColor fill_color;
+	Vector<GpuCtrlFillRectIntent> fill_rects;
 };
 
 static GpuCtrlFrameColor ToFrameColor(Rgba8 color)
@@ -27,30 +30,41 @@ static GpuCtrlFrameColor ToFrameColor(Rgba8 color)
 	return { color.r * scale, color.g * scale, color.b * scale, color.a * scale };
 }
 
-static bool ReplaySingleFillRect(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
+static bool ReplayFillRects(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
 {
 	if(!list.IsValid()) {
 		error = list.GetError();
 		return false;
 	}
-	if(list.GetCount() != 1 || list[0].type != UiDisplayOpType::FillRect) {
-		error = "GpuCtrl S16C frame requires exactly one FillRect display operation";
+	if(list.GetCount() <= 0) {
+		error = "GpuCtrl S16D frame requires at least one FillRect display operation";
 		return false;
 	}
 
-	const UiDisplayOp& op = list[0];
-	int left = (int)op.rect.left;
-	int top = (int)op.rect.top;
-	int right = (int)op.rect.right;
-	int bottom = (int)op.rect.bottom;
-	if(right <= left || bottom <= top) {
-		error = "GpuCtrl S16C FillRect display operation is empty";
-		return false;
-	}
+	frame.fill_rects.Clear();
+	frame.fill_rects.Reserve(list.GetCount());
+	for(int i = 0; i < list.GetCount(); ++i) {
+		const UiDisplayOp& op = list[i];
+		if(op.type != UiDisplayOpType::FillRect) {
+			error = "GpuCtrl S16D frame supports FillRect display operations only";
+			frame.fill_rects.Clear();
+			return false;
+		}
 
-	frame.has_fill_rect = true;
-	frame.fill_rect = Rect(left, top, right, bottom);
-	frame.fill_color = ToFrameColor(op.color);
+		int left = (int)op.rect.left;
+		int top = (int)op.rect.top;
+		int right = (int)op.rect.right;
+		int bottom = (int)op.rect.bottom;
+		if(right <= left || bottom <= top) {
+			error = "GpuCtrl S16D FillRect display operation is empty";
+			frame.fill_rects.Clear();
+			return false;
+		}
+
+		GpuCtrlFillRectIntent& fill = frame.fill_rects.Add();
+		fill.rect = Rect(left, top, right, bottom);
+		fill.color = ToFrameColor(op.color);
+	}
 	error.Clear();
 	return true;
 }
@@ -72,15 +86,26 @@ static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String
 	int rect_left = (size.cx - rect_width) / 2;
 	int rect_top = (size.cy - rect_height) / 2;
 
+	int inner_width = rect_width / 2;
+	int inner_height = rect_height / 2;
+	if(inner_width < 1)
+		inner_width = 1;
+	if(inner_height < 1)
+		inner_height = 1;
+	int inner_left = (size.cx - inner_width) / 2;
+	int inner_top = (size.cy - inner_height) / 2;
+
 	UiDisplayListBuilder builder;
 	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
 	                 Rgba8(230, 82, 20, 255));
+	builder.FillRect(Rectf(inner_left, inner_top, inner_left + inner_width, inner_top + inner_height),
+	                 Rgba8(36, 190, 110, 255));
 	UiDisplayList list;
 	if(!builder.Finish(list)) {
 		error = builder.GetError();
 		return false;
 	}
-	return ReplaySingleFillRect(list, frame, error);
+	return ReplayFillRects(list, frame, error);
 }
 
 class GpuCtrlBackendSession {
@@ -162,11 +187,20 @@ private:
 	bool PresentIntent(const GpuCtrlFrameIntent& frame)
 	{
 		const GpuCtrlFrameColor& bg = frame.background;
-		if(!frame.has_fill_rect)
+		if(frame.fill_rects.IsEmpty())
 			return session.PresentClearFrame(bg.red, bg.green, bg.blue, bg.alpha);
-		const GpuCtrlFrameColor& fill = frame.fill_color;
-		return session.PresentRectFrame(bg.red, bg.green, bg.blue, bg.alpha, frame.fill_rect,
-		                                fill.red, fill.green, fill.blue, fill.alpha);
+
+		Vector<VulkanFrameRect> rects;
+		rects.Reserve(frame.fill_rects.GetCount());
+		for(const GpuCtrlFillRectIntent& fill : frame.fill_rects) {
+			VulkanFrameRect& out = rects.Add();
+			out.rect = fill.rect;
+			out.red = fill.color.red;
+			out.green = fill.color.green;
+			out.blue = fill.color.blue;
+			out.alpha = fill.color.alpha;
+		}
+		return session.PresentRectsFrame(bg.red, bg.green, bg.blue, bg.alpha, rects);
 	}
 
 	bool EnsureSwapchain(Size requested_size, String& error)

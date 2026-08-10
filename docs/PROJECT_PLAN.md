@@ -148,8 +148,10 @@ additional backends beyond the first ones already planned.
   backend-neutral private frame intent so the Vulkan backend no longer invents
   control content or geometry
 - S16C records the orange rectangle as one existing UiDisplayList FillRect and
-  replays that neutral operation into the private frame intent; broader display-
-  list replay and renderer state remain deferred
+  replays that neutral operation into the private frame intent
+- S16D extends the FillRect-only replay proof to ordered operations and carries
+  two fills through one Vulkan dynamic-rendering frame; transforms, clipping and
+  general renderer state remain deferred
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage

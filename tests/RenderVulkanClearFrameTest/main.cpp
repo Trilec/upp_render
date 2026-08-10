@@ -65,6 +65,19 @@ CONSOLE_APP_MAIN
 		ok &= Check(session.GetFrameReport().state_cleared && !session.HasAcquiredFrame(), "rectangle frame should leave no acquired private frame state");
 	}
 
+	if(ok) {
+		Vector<VulkanFrameRect> rects;
+		VulkanFrameRect& outer = rects.Add();
+		outer.rect = Rect(24, 16, 72, 48);
+		outer.red = 0.90f; outer.green = 0.32f; outer.blue = 0.08f; outer.alpha = 1.0f;
+		VulkanFrameRect& inner = rects.Add();
+		inner.rect = Rect(36, 24, 60, 40);
+		inner.red = 0.14f; inner.green = 0.75f; inner.blue = 0.43f; inner.alpha = 1.0f;
+		ok &= Check(session.PresentRectsFrame(0.08f, 0.24f, 0.58f, 1.0f, rects), "ordered rectangle-list frame should present");
+		ok &= Check(session.GetFrameReport().clear_count == 3 && session.GetFrameReport().present_count == 3, "rectangle-list frame should remain one clear/present lifecycle");
+		ok &= Check(session.GetFrameReport().state_cleared && !session.HasAcquiredFrame(), "rectangle-list frame should leave no acquired private frame state");
+	}
+
 	const float colors[][4] = {
 		{ 0.65f, 0.10f, 0.12f, 1.0f },
 		{ 0.08f, 0.55f, 0.22f, 1.0f },
@@ -75,7 +88,7 @@ CONSOLE_APP_MAIN
 		if(ok)
 			ok &= Check(session.PresentClearFrame(c[0], c[1], c[2], c[3]), "repeated clear-colour frame should present");
 	if(ok)
-		ok &= Check(session.GetFrameReport().clear_count == 6 && session.GetFrameReport().present_count == 6, "repeated clear/present counters should remain exact");
+		ok &= Check(session.GetFrameReport().clear_count == 7 && session.GetFrameReport().present_count == 7, "repeated clear/present counters should remain exact");
 
 	const char *missing[] = { "vkCreateImageView", "vkDestroyImageView", "vkCmdBeginRendering", "vkCmdEndRendering" };
 	for(const char *name : missing) {

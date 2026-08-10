@@ -54,6 +54,14 @@ public:
 	friend bool VulkanTestHooks::TestVulkanGroupedSurfaceSessions(VulkanProcResolver, VulkanTestHooks::VulkanGroupedSurfaceSessionTestResult&);
 };
 
+struct VulkanFrameRect : Moveable<VulkanFrameRect> {
+	Rect rect = Rect(0, 0, 0, 0);
+	float red = 0.0f;
+	float green = 0.0f;
+	float blue = 0.0f;
+	float alpha = 1.0f;
+};
+
 class VulkanSurfaceSession {
 public:
 	struct Impl;
@@ -78,6 +86,8 @@ public:
 	bool PresentClearFrame(float red, float green, float blue, float alpha = 1.0f);
 	bool PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
 	                      const Rect& rect, float red, float green, float blue, float alpha = 1.0f);
+	bool PresentRectsFrame(float background_red, float background_green, float background_blue, float background_alpha,
+	                       const Vector<VulkanFrameRect>& rects);
 	bool HasAcquiredFrame() const;
 	const VulkanFrameReport& GetFrameReport() const;
 
@@ -101,7 +111,7 @@ private:
 	Vector<uint8_t> clear_image_initialized;
 
 	bool PresentClearFrameImpl(float red, float green, float blue, float alpha,
-	                           const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha);
+	                           const Vector<VulkanFrameRect> *rects);
 	bool GetFrameInterop(FrameInterop& out) const;
 	bool WaitFrameIdle(String& error);
 	void SyncFrameValidation();

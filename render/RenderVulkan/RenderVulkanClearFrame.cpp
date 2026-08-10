@@ -54,17 +54,30 @@ struct VulkanClearResources {
 
 bool VulkanSurfaceSession::PresentClearFrame(float red, float green, float blue, float alpha)
 {
-	return PresentClearFrameImpl(red, green, blue, alpha, nullptr, 0.0f, 0.0f, 0.0f, 1.0f);
+	return PresentClearFrameImpl(red, green, blue, alpha, nullptr);
 }
 
 bool VulkanSurfaceSession::PresentRectFrame(float background_red, float background_green, float background_blue, float background_alpha,
                                             const Rect& rect, float red, float green, float blue, float alpha)
 {
-	return PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rect, red, green, blue, alpha);
+	Vector<VulkanFrameRect> rects;
+	VulkanFrameRect& fill = rects.Add();
+	fill.rect = rect;
+	fill.red = red;
+	fill.green = green;
+	fill.blue = blue;
+	fill.alpha = alpha;
+	return PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rects);
+}
+
+bool VulkanSurfaceSession::PresentRectsFrame(float background_red, float background_green, float background_blue, float background_alpha,
+                                             const Vector<VulkanFrameRect>& rects)
+{
+	return PresentClearFrameImpl(background_red, background_green, background_blue, background_alpha, &rects);
 }
 
 bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float blue, float alpha,
-                                                 const Rect *rect, float rect_red, float rect_green, float rect_blue, float rect_alpha)
+                                                 const Vector<VulkanFrameRect> *rects)
 {
 	FrameInterop interop;
 	if(!GetFrameInterop(interop) || interop.device == VK_NULL_HANDLE || interop.swapchain == VK_NULL_HANDLE || interop.images.IsEmpty()) {
@@ -111,17 +124,23 @@ bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float b
 		frame_report.error = error;
 		return false;
 	}
-	if(rect && !ResolveClearProc(cmd_clear_attachments, interop, "vkCmdClearAttachments", error)) {
+	if(rects && !rects->IsEmpty() && !ResolveClearProc(cmd_clear_attachments, interop, "vkCmdClearAttachments", error)) {
 		frame_report.error = error;
 		return false;
 	}
 
-	Rect draw_rect;
-	if(rect) {
-		draw_rect = *rect & Rect(0, 0, GetReport().swapchain_extent.cx, GetReport().swapchain_extent.cy);
-		if(draw_rect.IsEmpty()) {
-			frame_report.error = "Vulkan rectangle is outside the swapchain extent";
-			return false;
+	Vector<VulkanFrameRect> draw_rects;
+	if(rects) {
+		draw_rects.SetCount(rects->GetCount());
+		for(int i = 0; i < rects->GetCount(); ++i)
+			draw_rects[i] = (*rects)[i];
+		Rect extent_rect(0, 0, GetReport().swapchain_extent.cx, GetReport().swapchain_extent.cy);
+		for(VulkanFrameRect& fill : draw_rects) {
+			fill.rect = fill.rect & extent_rect;
+			if(fill.rect.IsEmpty()) {
+				frame_report.error = "Vulkan rectangle is outside the swapchain extent";
+				return false;
+			}
 		}
 	}
 
@@ -261,19 +280,19 @@ bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float b
 		rendering.colorAttachmentCount = 1;
 		rendering.pColorAttachments = &attachment;
 		cmd_begin_rendering(resources.command_buffer, &rendering);
-		if(rect) {
+		for(const VulkanFrameRect& fill : draw_rects) {
 			VkClearAttachment rect_attachment{};
 			rect_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			rect_attachment.colorAttachment = 0;
-			rect_attachment.clearValue.color.float32[0] = rect_red;
-			rect_attachment.clearValue.color.float32[1] = rect_green;
-			rect_attachment.clearValue.color.float32[2] = rect_blue;
-			rect_attachment.clearValue.color.float32[3] = rect_alpha;
+			rect_attachment.clearValue.color.float32[0] = fill.red;
+			rect_attachment.clearValue.color.float32[1] = fill.green;
+			rect_attachment.clearValue.color.float32[2] = fill.blue;
+			rect_attachment.clearValue.color.float32[3] = fill.alpha;
 			VkClearRect clear_rect{};
-			clear_rect.rect.offset.x = draw_rect.left;
-			clear_rect.rect.offset.y = draw_rect.top;
-			clear_rect.rect.extent.width = (uint32_t)draw_rect.Width();
-			clear_rect.rect.extent.height = (uint32_t)draw_rect.Height();
+			clear_rect.rect.offset.x = fill.rect.left;
+			clear_rect.rect.offset.y = fill.rect.top;
+			clear_rect.rect.extent.width = (uint32_t)fill.rect.Width();
+			clear_rect.rect.extent.height = (uint32_t)fill.rect.Height();
 			clear_rect.baseArrayLayer = 0;
 			clear_rect.layerCount = 1;
 			cmd_clear_attachments(resources.command_buffer, 1, &rect_attachment, 1, &clear_rect);
