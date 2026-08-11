@@ -25,6 +25,7 @@ jobs:
           cp .github/s16f_edit.py /tmp/s16f_edit.py
           git checkout --detach "$BASE"
           python /tmp/s16f_edit.py
+          sed -i 's/unsupported operation should report the deterministic S16E error/unsupported operation should report the deterministic S16F error/' tests/GpuCtrlReplayTest/main.cpp
           git diff --check
           test "$(git diff --name-only | sort)" = "$(printf '%s\n' docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp | sort)"
           ! git diff --name-only | grep -q '^render/RenderVulkan/'
@@ -36,6 +37,7 @@ jobs:
           grep -q 'builder.Restore();' render/GpuCtrl/GpuCtrl.cpp
           grep -q 'Restore should remove a clip introduced after Save' tests/GpuCtrlReplayTest/main.cpp
           grep -q 'Restore should reinstate the earlier broader ClipRect' tests/GpuCtrlReplayTest/main.cpp
+          grep -q 'unsupported operation should report the deterministic S16F error' tests/GpuCtrlReplayTest/main.cpp
           git add docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp
           git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16F: scope ClipRect with Save and Restore" -m "Add Save/Restore handling to the private GpuCtrl display-list replay so scoped clips restore the previous neutral replay state before Vulkan translation." -m "Exercise the accepted default frame through balanced Save/Restore and add focused tests for restoring both no-clip and broader-clip states; keep transforms and Vulkan unchanged."
           git push origin HEAD:refs/heads/chatgpt/s16f-candidate --force
