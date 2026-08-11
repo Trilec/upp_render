@@ -1,0 +1,44 @@
+name: Run guarded S16G builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16g-builder
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build candidate from accepted S16F
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=5927776633dcefdeb6213d05e1e0fd62d407b74d
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          cp .github/s16g_edit.py /tmp/s16g_edit.py
+          git checkout --detach "$BASE"
+          python /tmp/s16g_edit.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp | sort)"
+          ! git diff --name-only | grep -q '^render/RenderVulkan/'
+          ! git diff --name-only | grep -q '^render/RenderCanvas/'
+          ! git diff --name-only | grep -q '^render/RenderCore/'
+          grep -q 'UiDisplayOpType::ConcatTransform' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'IsTranslationOnly' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'state.translation.x +=' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'ToTranslatedFrameRect' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'builder.ConcatTransform(Transform2D::Translation' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'ClipRect should remain in target coordinates while FillRect is translated' tests/GpuCtrlReplayTest/main.cpp
+          grep -q 'Restore should reinstate the earlier translation' tests/GpuCtrlReplayTest/main.cpp
+          grep -q 'translation-only ConcatTransform operations should compose additively' tests/GpuCtrlReplayTest/main.cpp
+          grep -q 'S16G replay should reject non-translation transforms' tests/GpuCtrlReplayTest/main.cpp
+          git add docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16G: replay translation transforms in GpuCtrl" -m "Add translation-only ConcatTransform handling to the private GpuCtrl display-list replay and scope translation state through the accepted Save/Restore stack." -m "Translate FillRect geometry while retaining target-space ClipRect semantics from RenderSoftware; reject scale/rotation/shear and leave Vulkan unchanged."
+          git push origin HEAD:refs/heads/chatgpt/s16g-candidate --force
