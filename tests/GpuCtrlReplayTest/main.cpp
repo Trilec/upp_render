@@ -73,14 +73,51 @@ CONSOLE_APP_MAIN
 	ok &= Check(ReplayDisplayList(clipped_out, clipped_out_result), "fully clipped FillRect should be a valid no-op");
 	ok &= Check(clipped_out_result.fill_rects.IsEmpty(), "fully clipped FillRect should emit no backend fill");
 
+	UiDisplayListBuilder restore_no_clip_builder;
+	restore_no_clip_builder.Save();
+	restore_no_clip_builder.ClipRect(Rectf(10, 10, 40, 40));
+	restore_no_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(70, 80, 90, 255));
+	restore_no_clip_builder.Restore();
+	restore_no_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(100, 110, 120, 255));
+	UiDisplayList restore_no_clip;
+	ok &= Check(restore_no_clip_builder.Finish(restore_no_clip), "Save/Restore no-clip display list should finish");
+	ReplayResult restore_no_clip_result;
+	ok &= Check(ReplayDisplayList(restore_no_clip, restore_no_clip_result), "Save/Restore should restore the previous no-clip state");
+	ok &= Check(restore_no_clip_result.fill_rects.GetCount() == 2, "Save/Restore no-clip replay should retain two visible fills");
+	if(restore_no_clip_result.fill_rects.GetCount() == 2) {
+		ok &= Check(SameRect(restore_no_clip_result.fill_rects[0].rect, Rect(10, 10, 40, 40)),
+		            "FillRect inside saved clip should be clipped");
+		ok &= Check(SameRect(restore_no_clip_result.fill_rects[1].rect, Rect(0, 0, 50, 50)),
+		            "Restore should remove a clip introduced after Save");
+	}
+
+	UiDisplayListBuilder restore_outer_clip_builder;
+	restore_outer_clip_builder.ClipRect(Rectf(5, 5, 45, 45));
+	restore_outer_clip_builder.Save();
+	restore_outer_clip_builder.ClipRect(Rectf(15, 10, 35, 30));
+	restore_outer_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(130, 140, 150, 255));
+	restore_outer_clip_builder.Restore();
+	restore_outer_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(160, 170, 180, 255));
+	UiDisplayList restore_outer_clip;
+	ok &= Check(restore_outer_clip_builder.Finish(restore_outer_clip), "nested clip Save/Restore display list should finish");
+	ReplayResult restore_outer_clip_result;
+	ok &= Check(ReplayDisplayList(restore_outer_clip, restore_outer_clip_result), "Restore should reinstate the previous broader clip");
+	ok &= Check(restore_outer_clip_result.fill_rects.GetCount() == 2, "nested clip Save/Restore should retain two visible fills");
+	if(restore_outer_clip_result.fill_rects.GetCount() == 2) {
+		ok &= Check(SameRect(restore_outer_clip_result.fill_rects[0].rect, Rect(15, 10, 35, 30)),
+		            "nested ClipRect should constrain FillRect inside saved state");
+		ok &= Check(SameRect(restore_outer_clip_result.fill_rects[1].rect, Rect(5, 5, 45, 45)),
+		            "Restore should reinstate the earlier broader ClipRect");
+	}
+
 	UiDisplayListBuilder unsupported_builder;
 	unsupported_builder.StrokeRect(Rectf(0, 0, 20, 20), 1.0, Rgba8(255, 255, 255, 255));
 	UiDisplayList unsupported;
 	ok &= Check(unsupported_builder.Finish(unsupported), "unsupported-op display list should still record normally");
 	ReplayResult unsupported_result;
 	ok &= Check(!ReplayDisplayList(unsupported, unsupported_result), "GpuCtrl replay should reject unsupported display operations");
-	ok &= Check(unsupported_result.error == "GpuCtrl S16E replay supports FillRect and ClipRect operations only",
-	            "unsupported operation should report the deterministic S16E error");
+	ok &= Check(unsupported_result.error == "GpuCtrl S16F replay supports Save, Restore, ClipRect and FillRect operations only",
+	            "unsupported operation should report the deterministic S16F error");
 
 	UiDisplayList empty;
 	ReplayResult empty_result;

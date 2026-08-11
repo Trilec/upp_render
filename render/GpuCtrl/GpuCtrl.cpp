@@ -36,7 +36,12 @@ static Rect ToFrameRect(const Rectf& rect)
 	return Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
 }
 
-static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
+struct GpuCtrlReplayState : Moveable<GpuCtrlReplayState> {
+	bool has_clip = false;
+	Rect clip_rect = Rect(0, 0, 0, 0);
+};
+
+static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
 {
 	if(list.GetCount() <= 0) {
 		error = "GpuCtrl S16E frame requires at least one display operation";
@@ -49,19 +54,37 @@ static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& fr
 
 	frame.fill_rects.Clear();
 	frame.fill_rects.Reserve(list.GetCount());
-	bool has_clip = false;
-	Rect clip_rect = Rect(0, 0, 0, 0);
+	GpuCtrlReplayState state;
+	Vector<GpuCtrlReplayState> state_stack;
 	for(int i = 0; i < list.GetCount(); ++i) {
 		const UiDisplayOp& op = list[i];
 		switch(op.type) {
+		case UiDisplayOpType::Save: {
+			GpuCtrlReplayState& saved = state_stack.Add();
+			saved.has_clip = state.has_clip;
+			saved.clip_rect = state.clip_rect;
+			break;
+		}
+		case UiDisplayOpType::Restore:
+			if(state_stack.IsEmpty()) {
+				error = "GpuCtrl S16F restore without matching save";
+				frame.fill_rects.Clear();
+				return false;
+			}
+			{
+				GpuCtrlReplayState saved = state_stack.Pop();
+				state.has_clip = saved.has_clip;
+				state.clip_rect = saved.clip_rect;
+			}
+			break;
 		case UiDisplayOpType::ClipRect: {
 			Rect next_clip = ToFrameRect(op.rect);
-			if(!has_clip) {
-				clip_rect = next_clip;
-				has_clip = true;
+			if(!state.has_clip) {
+				state.clip_rect = next_clip;
+				state.has_clip = true;
 			}
 			else
-				clip_rect = clip_rect & next_clip;
+				state.clip_rect = state.clip_rect & next_clip;
 			break;
 		}
 		case UiDisplayOpType::FillRect: {
@@ -71,8 +94,8 @@ static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& fr
 				frame.fill_rects.Clear();
 				return false;
 			}
-			if(has_clip)
-				draw_rect = draw_rect & clip_rect;
+			if(state.has_clip)
+				draw_rect = draw_rect & state.clip_rect;
 			if(draw_rect.IsEmpty())
 				break;
 
@@ -82,10 +105,15 @@ static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& fr
 			break;
 		}
 		default:
-			error = "GpuCtrl S16E replay supports FillRect and ClipRect operations only";
+			error = "GpuCtrl S16F replay supports Save, Restore, ClipRect and FillRect operations only";
 			frame.fill_rects.Clear();
 			return false;
 		}
+	}
+	if(!state_stack.IsEmpty()) {
+		error = "GpuCtrl S16F replay ended with unbalanced save state";
+		frame.fill_rects.Clear();
+		return false;
 	}
 	error.Clear();
 	return true;
@@ -120,16 +148,18 @@ static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String
 	UiDisplayListBuilder builder;
 	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
 	                 Rgba8(230, 82, 20, 255));
+	builder.Save();
 	int clip_left = inner_left + inner_width / 2;
 	builder.ClipRect(Rectf(clip_left, inner_top, inner_left + inner_width, inner_top + inner_height));
 	builder.FillRect(Rectf(inner_left, inner_top, inner_left + inner_width, inner_top + inner_height),
 	                 Rgba8(36, 190, 110, 255));
+	builder.Restore();
 	UiDisplayList list;
 	if(!builder.Finish(list)) {
 		error = builder.GetError();
 		return false;
 	}
-	return ReplayFillRectList(list, frame, error);
+	return ReplayFrameList(list, frame, error);
 }
 
 class GpuCtrlBackendSession {
@@ -285,7 +315,7 @@ bool ReplayDisplayList(const UiDisplayList& list, ReplayResult& out)
 {
 	GpuCtrlFrameIntent frame;
 	String error;
-	if(!ReplayFillRectList(list, frame, error)) {
+	if(!ReplayFrameList(list, frame, error)) {
 		out.fill_rects.Clear();
 		out.error = error;
 		return false;

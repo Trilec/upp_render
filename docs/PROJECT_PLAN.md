@@ -151,8 +151,9 @@ additional backends beyond the first ones already planned.
 - S16D extends the FillRect-only replay proof to ordered operations and carries
   two fills through one Vulkan dynamic-rendering frame
 - S16E adds persistent ClipRect replay above the Vulkan boundary: clips intersect
-  cumulatively and affect only later FillRects; Save/Restore, transforms and
-  general renderer state remain deferred
+  cumulatively and affect only later FillRects
+- S16F adds Save/Restore scoping for that private replay state so ClipRect state
+  can be restored deterministically; transforms and general renderer state remain deferred
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage
