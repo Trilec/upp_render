@@ -162,9 +162,10 @@ new = r'''	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, r
 '''
 assert s.count(old) == 1, "default frame block mismatch"
 s = s.replace(old, new)
-assert s.count("ReplayFillRectList(list, frame, error)") == 1
+assert s.count("ReplayFillRectList(list, frame, error)") == 2
 s = s.replace("ReplayFillRectList(list, frame, error)", "ReplayFrameList(list, frame, error)")
 assert s.count("ReplayFillRectList(list, frame, error)") == 0
+assert s.count("ReplayFrameList(list, frame, error)") == 2
 p.write_text(s)
 
 p = Path("tests/GpuCtrlReplayTest/main.cpp")
