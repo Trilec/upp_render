@@ -38,12 +38,12 @@ static Rect ToFrameRect(const Rectf& rect)
 
 static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
 {
-	if(!list.IsValid()) {
-		error = list.GetError();
-		return false;
-	}
 	if(list.GetCount() <= 0) {
 		error = "GpuCtrl S16E frame requires at least one display operation";
+		return false;
+	}
+	if(!list.IsValid()) {
+		error = list.GetError();
 		return false;
 	}
 

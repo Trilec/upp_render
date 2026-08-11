@@ -16,6 +16,19 @@ static bool SameRect(const Rect& a, const Rect& b)
 	return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
 }
 
+static bool NearFloat(float actual, float expected)
+{
+	return fabs(actual - expected) <= 0.000001f;
+}
+
+static bool SameColor(const ReplayColor& actual, Rgba8 expected)
+{
+	return NearFloat(actual.red, expected.r / 255.0f) &&
+	       NearFloat(actual.green, expected.g / 255.0f) &&
+	       NearFloat(actual.blue, expected.b / 255.0f) &&
+	       NearFloat(actual.alpha, expected.a / 255.0f);
+}
+
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
@@ -29,11 +42,9 @@ CONSOLE_APP_MAIN
 		            "outer FillRect should remain unaffected before ClipRect");
 		ok &= Check(SameRect(result.fill_rects[1].rect, Rect(100, 45, 125, 75)),
 		            "inner FillRect should be clipped to its right half");
-		ok &= Check(result.fill_rects[0].color.red == 230.0f / 255.0f &&
-		            result.fill_rects[0].color.green == 82.0f / 255.0f &&
-		            result.fill_rects[1].color.red == 36.0f / 255.0f &&
-		            result.fill_rects[1].color.green == 190.0f / 255.0f,
-		            "clipping should preserve FillRect colour payloads");
+		ok &= Check(SameColor(result.fill_rects[0].color, Rgba8(230, 82, 20, 255)) &&
+		            SameColor(result.fill_rects[1].color, Rgba8(36, 190, 110, 255)),
+		            "clipping should preserve all FillRect colour channels");
 	}
 
 	UiDisplayListBuilder cumulative_builder;
@@ -76,6 +87,15 @@ CONSOLE_APP_MAIN
 	ok &= Check(!ReplayDisplayList(empty, empty_result), "empty display list should be rejected by the focused replay path");
 	ok &= Check(empty_result.error == "GpuCtrl S16E frame requires at least one display operation",
 	            "empty list should report the deterministic S16E error");
+
+	UiDisplayListBuilder invalid_builder;
+	invalid_builder.Save();
+	UiDisplayList invalid;
+	ok &= Check(!invalid_builder.Finish(invalid), "unbalanced display list should finish invalid");
+	ReplayResult invalid_result;
+	ok &= Check(!ReplayDisplayList(invalid, invalid_result), "non-empty invalid display list should be rejected");
+	ok &= Check(invalid_result.error == "unbalanced save depth at finish",
+	            "non-empty invalid list should preserve its builder error");
 
 	if(ok) {
 		Cout() << "GpuCtrlReplayTest passed" << EOL;
