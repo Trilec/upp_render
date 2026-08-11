@@ -1,0 +1,10 @@
+uses
+	Core,
+	GpuCtrl,
+	RenderCanvas;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";

@@ -1,4 +1,5 @@
 #include "GpuCtrl.h"
+#include "GpuCtrlTestHooks.h"
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderVulkan/RenderVulkanSurfaceSession.h>
@@ -30,40 +31,61 @@ static GpuCtrlFrameColor ToFrameColor(Rgba8 color)
 	return { color.r * scale, color.g * scale, color.b * scale, color.a * scale };
 }
 
-static bool ReplayFillRects(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
+static Rect ToFrameRect(const Rectf& rect)
+{
+	return Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
+}
+
+static bool ReplayFillRectList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
 {
 	if(!list.IsValid()) {
 		error = list.GetError();
 		return false;
 	}
 	if(list.GetCount() <= 0) {
-		error = "GpuCtrl S16D frame requires at least one FillRect display operation";
+		error = "GpuCtrl S16E frame requires at least one display operation";
 		return false;
 	}
 
 	frame.fill_rects.Clear();
 	frame.fill_rects.Reserve(list.GetCount());
+	bool has_clip = false;
+	Rect clip_rect = Rect(0, 0, 0, 0);
 	for(int i = 0; i < list.GetCount(); ++i) {
 		const UiDisplayOp& op = list[i];
-		if(op.type != UiDisplayOpType::FillRect) {
-			error = "GpuCtrl S16D frame supports FillRect display operations only";
+		switch(op.type) {
+		case UiDisplayOpType::ClipRect: {
+			Rect next_clip = ToFrameRect(op.rect);
+			if(!has_clip) {
+				clip_rect = next_clip;
+				has_clip = true;
+			}
+			else
+				clip_rect = clip_rect & next_clip;
+			break;
+		}
+		case UiDisplayOpType::FillRect: {
+			Rect draw_rect = ToFrameRect(op.rect);
+			if(draw_rect.IsEmpty()) {
+				error = "GpuCtrl S16E FillRect display operation is empty";
+				frame.fill_rects.Clear();
+				return false;
+			}
+			if(has_clip)
+				draw_rect = draw_rect & clip_rect;
+			if(draw_rect.IsEmpty())
+				break;
+
+			GpuCtrlFillRectIntent& fill = frame.fill_rects.Add();
+			fill.rect = draw_rect;
+			fill.color = ToFrameColor(op.color);
+			break;
+		}
+		default:
+			error = "GpuCtrl S16E replay supports FillRect and ClipRect operations only";
 			frame.fill_rects.Clear();
 			return false;
 		}
-
-		int left = (int)op.rect.left;
-		int top = (int)op.rect.top;
-		int right = (int)op.rect.right;
-		int bottom = (int)op.rect.bottom;
-		if(right <= left || bottom <= top) {
-			error = "GpuCtrl S16D FillRect display operation is empty";
-			frame.fill_rects.Clear();
-			return false;
-		}
-
-		GpuCtrlFillRectIntent& fill = frame.fill_rects.Add();
-		fill.rect = Rect(left, top, right, bottom);
-		fill.color = ToFrameColor(op.color);
 	}
 	error.Clear();
 	return true;
@@ -98,6 +120,8 @@ static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String
 	UiDisplayListBuilder builder;
 	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
 	                 Rgba8(230, 82, 20, 255));
+	int clip_left = inner_left + inner_width / 2;
+	builder.ClipRect(Rectf(clip_left, inner_top, inner_left + inner_width, inner_top + inner_height));
 	builder.FillRect(Rectf(inner_left, inner_top, inner_left + inner_width, inner_top + inner_height),
 	                 Rgba8(36, 190, 110, 255));
 	UiDisplayList list;
@@ -105,7 +129,7 @@ static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String
 		error = builder.GetError();
 		return false;
 	}
-	return ReplayFillRects(list, frame, error);
+	return ReplayFillRectList(list, frame, error);
 }
 
 class GpuCtrlBackendSession {
@@ -236,6 +260,56 @@ static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
 }
 
 }
+
+namespace GpuCtrlTestHooks {
+
+static void CopyReplayResult(const GpuCtrlFrameIntent& frame, ReplayResult& out)
+{
+	out.background.red = frame.background.red;
+	out.background.green = frame.background.green;
+	out.background.blue = frame.background.blue;
+	out.background.alpha = frame.background.alpha;
+	out.fill_rects.Clear();
+	out.fill_rects.Reserve(frame.fill_rects.GetCount());
+	for(const GpuCtrlFillRectIntent& fill : frame.fill_rects) {
+		ReplayFillRect& dst = out.fill_rects.Add();
+		dst.rect = fill.rect;
+		dst.color.red = fill.color.red;
+		dst.color.green = fill.color.green;
+		dst.color.blue = fill.color.blue;
+		dst.color.alpha = fill.color.alpha;
+	}
+}
+
+bool ReplayDisplayList(const UiDisplayList& list, ReplayResult& out)
+{
+	GpuCtrlFrameIntent frame;
+	String error;
+	if(!ReplayFillRectList(list, frame, error)) {
+		out.fill_rects.Clear();
+		out.error = error;
+		return false;
+	}
+	CopyReplayResult(frame, out);
+	out.error.Clear();
+	return true;
+}
+
+bool BuildDefaultFrame(Size size, ReplayResult& out)
+{
+	GpuCtrlFrameIntent frame;
+	String error;
+	if(!BuildDefaultFrameIntent(size, frame, error)) {
+		out.fill_rects.Clear();
+		out.error = error;
+		return false;
+	}
+	CopyReplayResult(frame, out);
+	out.error.Clear();
+	return true;
+}
+
+} // namespace GpuCtrlTestHooks
 
 // The public control stays tiny; platform/session ownership lives behind this
 // private implementation so future backends do not leak into the ordinary API.

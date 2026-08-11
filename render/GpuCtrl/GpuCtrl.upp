@@ -8,4 +8,5 @@ uses
 
 file
 	GpuCtrl.h,
+	GpuCtrlTestHooks.h,
 	GpuCtrl.cpp;

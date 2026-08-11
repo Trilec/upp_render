@@ -134,8 +134,7 @@ additional backends beyond the first ones already planned.
 - TASK-008A1 S12 private Vulkan swapchain ownership is accepted
 - TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted
 - TASK-008A1 S14 first visible Vulkan clear-colour frame is accepted
-- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is implemented and
-  awaiting Windows/runtime/visual acceptance
+- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is accepted
 - grouped sessions share runtime and instance state while logical devices,
   queues, surfaces, swapchains, and frame state remain owned per session
 - ordinary GpuCtrl instances remain isolated through their default session groups
@@ -150,7 +149,9 @@ additional backends beyond the first ones already planned.
 - S16C records the orange rectangle as one existing UiDisplayList FillRect and
   replays that neutral operation into the private frame intent
 - S16D extends the FillRect-only replay proof to ordered operations and carries
-  two fills through one Vulkan dynamic-rendering frame; transforms, clipping and
+  two fills through one Vulkan dynamic-rendering frame
+- S16E adds persistent ClipRect replay above the Vulkan boundary: clips intersect
+  cumulatively and affect only later FillRects; Save/Restore, transforms and
   general renderer state remain deferred
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
