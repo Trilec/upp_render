@@ -40,8 +40,8 @@ CONSOLE_APP_MAIN
 	if(result.fill_rects.GetCount() == 2) {
 		ok &= Check(SameRect(result.fill_rects[0].rect, Rect(50, 30, 150, 90)),
 		            "outer FillRect should remain unaffected before ClipRect");
-		ok &= Check(SameRect(result.fill_rects[1].rect, Rect(100, 45, 125, 75)),
-		            "inner FillRect should be clipped to its right half");
+		ok &= Check(SameRect(result.fill_rects[1].rect, Rect(112, 45, 137, 75)),
+		            "translated inner FillRect should keep its shifted right half");
 		ok &= Check(SameColor(result.fill_rects[0].color, Rgba8(230, 82, 20, 255)) &&
 		            SameColor(result.fill_rects[1].color, Rgba8(36, 190, 110, 255)),
 		            "clipping should preserve all FillRect colour channels");
@@ -110,14 +110,81 @@ CONSOLE_APP_MAIN
 		            "Restore should reinstate the earlier broader ClipRect");
 	}
 
+	UiDisplayListBuilder translation_builder;
+	translation_builder.ConcatTransform(Transform2D::Translation(7, -3));
+	translation_builder.FillRect(Rectf(10, 10, 20, 20), Rgba8(10, 20, 30, 255));
+	UiDisplayList translation;
+	ok &= Check(translation_builder.Finish(translation), "translation display list should finish");
+	ReplayResult translation_result;
+	ok &= Check(ReplayDisplayList(translation, translation_result), "translation replay should succeed");
+	ok &= Check(translation_result.fill_rects.GetCount() == 1, "translation replay should retain one fill");
+	if(translation_result.fill_rects.GetCount() == 1)
+		ok &= Check(SameRect(translation_result.fill_rects[0].rect, Rect(17, 7, 27, 17)),
+		            "translation should offset subsequent FillRect geometry");
+
+	UiDisplayListBuilder composed_translation_builder;
+	composed_translation_builder.ConcatTransform(Transform2D::Translation(5, 7));
+	composed_translation_builder.ConcatTransform(Transform2D::Translation(-2, 3));
+	composed_translation_builder.FillRect(Rectf(1, 2, 11, 12), Rgba8(40, 50, 60, 255));
+	UiDisplayList composed_translation;
+	ok &= Check(composed_translation_builder.Finish(composed_translation), "composed translation display list should finish");
+	ReplayResult composed_translation_result;
+	ok &= Check(ReplayDisplayList(composed_translation, composed_translation_result), "composed translations should replay");
+	ok &= Check(composed_translation_result.fill_rects.GetCount() == 1, "composed translations should retain one fill");
+	if(composed_translation_result.fill_rects.GetCount() == 1)
+		ok &= Check(SameRect(composed_translation_result.fill_rects[0].rect, Rect(4, 12, 14, 22)),
+		            "translation-only ConcatTransform operations should compose additively");
+
+	UiDisplayListBuilder restore_translation_builder;
+	restore_translation_builder.ConcatTransform(Transform2D::Translation(4, 5));
+	restore_translation_builder.Save();
+	restore_translation_builder.ConcatTransform(Transform2D::Translation(10, -2));
+	restore_translation_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(70, 80, 90, 255));
+	restore_translation_builder.Restore();
+	restore_translation_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(100, 110, 120, 255));
+	UiDisplayList restore_translation;
+	ok &= Check(restore_translation_builder.Finish(restore_translation), "translation Save/Restore display list should finish");
+	ReplayResult restore_translation_result;
+	ok &= Check(ReplayDisplayList(restore_translation, restore_translation_result), "Save/Restore should scope translation state");
+	ok &= Check(restore_translation_result.fill_rects.GetCount() == 2, "translation Save/Restore should retain two fills");
+	if(restore_translation_result.fill_rects.GetCount() == 2) {
+		ok &= Check(SameRect(restore_translation_result.fill_rects[0].rect, Rect(14, 3, 24, 13)),
+		            "FillRect inside saved translation should use the nested translation");
+		ok &= Check(SameRect(restore_translation_result.fill_rects[1].rect, Rect(4, 5, 14, 15)),
+		            "Restore should reinstate the earlier translation");
+	}
+
+	UiDisplayListBuilder translated_clip_builder;
+	translated_clip_builder.ConcatTransform(Transform2D::Translation(10, 0));
+	translated_clip_builder.ClipRect(Rectf(0, 0, 20, 20));
+	translated_clip_builder.FillRect(Rectf(0, 0, 20, 20), Rgba8(130, 140, 150, 255));
+	UiDisplayList translated_clip;
+	ok &= Check(translated_clip_builder.Finish(translated_clip), "translated clip display list should finish");
+	ReplayResult translated_clip_result;
+	ok &= Check(ReplayDisplayList(translated_clip, translated_clip_result), "translation with ClipRect should replay");
+	ok &= Check(translated_clip_result.fill_rects.GetCount() == 1, "translated clip replay should retain one visible fill");
+	if(translated_clip_result.fill_rects.GetCount() == 1)
+		ok &= Check(SameRect(translated_clip_result.fill_rects[0].rect, Rect(10, 0, 20, 20)),
+		            "ClipRect should remain in target coordinates while FillRect is translated");
+
+	UiDisplayListBuilder scale_builder;
+	scale_builder.ConcatTransform(Transform2D::Scale(2.0));
+	scale_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(160, 170, 180, 255));
+	UiDisplayList scale;
+	ok &= Check(scale_builder.Finish(scale), "scale display list should record normally");
+	ReplayResult scale_result;
+	ok &= Check(!ReplayDisplayList(scale, scale_result), "S16G replay should reject non-translation transforms");
+	ok &= Check(scale_result.error == "GpuCtrl S16G supports translation-only ConcatTransform operations",
+	            "non-translation transform should report the deterministic S16G error");
+
 	UiDisplayListBuilder unsupported_builder;
 	unsupported_builder.StrokeRect(Rectf(0, 0, 20, 20), 1.0, Rgba8(255, 255, 255, 255));
 	UiDisplayList unsupported;
 	ok &= Check(unsupported_builder.Finish(unsupported), "unsupported-op display list should still record normally");
 	ReplayResult unsupported_result;
 	ok &= Check(!ReplayDisplayList(unsupported, unsupported_result), "GpuCtrl replay should reject unsupported display operations");
-	ok &= Check(unsupported_result.error == "GpuCtrl S16F replay supports Save, Restore, ClipRect and FillRect operations only",
-	            "unsupported operation should report the deterministic S16F error");
+	ok &= Check(unsupported_result.error == "GpuCtrl S16G replay supports Save, Restore, ClipRect, ConcatTransform and FillRect operations only",
+	            "unsupported operation should report the deterministic S16G error");
 
 	UiDisplayList empty;
 	ReplayResult empty_result;

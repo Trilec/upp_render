@@ -153,7 +153,9 @@ additional backends beyond the first ones already planned.
 - S16E adds persistent ClipRect replay above the Vulkan boundary: clips intersect
   cumulatively and affect only later FillRects
 - S16F adds Save/Restore scoping for that private replay state so ClipRect state
-  can be restored deterministically; transforms and general renderer state remain deferred
+  can be restored deterministically
+- S16G adds translation-only ConcatTransform replay for FillRect geometry, scoped by
+  Save/Restore; scale, rotation, shear and general renderer state remain deferred
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage

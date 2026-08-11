@@ -36,9 +36,22 @@ static Rect ToFrameRect(const Rectf& rect)
 	return Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
 }
 
+static Rect ToTranslatedFrameRect(const Rectf& rect, const Pointf& translation)
+{
+	return Rect((int)(rect.left + translation.x), (int)(rect.top + translation.y),
+	            (int)(rect.right + translation.x), (int)(rect.bottom + translation.y));
+}
+
+static bool IsTranslationOnly(const Transform2D& transform)
+{
+	return transform.x.x == 1.0 && transform.x.y == 0.0 &&
+	       transform.y.x == 0.0 && transform.y.y == 1.0;
+}
+
 struct GpuCtrlReplayState : Moveable<GpuCtrlReplayState> {
 	bool has_clip = false;
 	Rect clip_rect = Rect(0, 0, 0, 0);
+	Pointf translation = Pointf(0, 0);
 };
 
 static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
@@ -63,6 +76,7 @@ static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame
 			GpuCtrlReplayState& saved = state_stack.Add();
 			saved.has_clip = state.has_clip;
 			saved.clip_rect = state.clip_rect;
+			saved.translation = state.translation;
 			break;
 		}
 		case UiDisplayOpType::Restore:
@@ -75,9 +89,12 @@ static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame
 				GpuCtrlReplayState saved = state_stack.Pop();
 				state.has_clip = saved.has_clip;
 				state.clip_rect = saved.clip_rect;
+				state.translation = saved.translation;
 			}
 			break;
 		case UiDisplayOpType::ClipRect: {
+			// Match RenderSoftware: ClipRect is target/device-space state, while
+			// ConcatTransform affects subsequent drawable geometry.
 			Rect next_clip = ToFrameRect(op.rect);
 			if(!state.has_clip) {
 				state.clip_rect = next_clip;
@@ -87,8 +104,17 @@ static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame
 				state.clip_rect = state.clip_rect & next_clip;
 			break;
 		}
+		case UiDisplayOpType::ConcatTransform:
+			if(!IsTranslationOnly(op.transform)) {
+				error = "GpuCtrl S16G supports translation-only ConcatTransform operations";
+				frame.fill_rects.Clear();
+				return false;
+			}
+			state.translation.x += op.transform.t.x;
+			state.translation.y += op.transform.t.y;
+			break;
 		case UiDisplayOpType::FillRect: {
-			Rect draw_rect = ToFrameRect(op.rect);
+			Rect draw_rect = ToTranslatedFrameRect(op.rect, state.translation);
 			if(draw_rect.IsEmpty()) {
 				error = "GpuCtrl S16E FillRect display operation is empty";
 				frame.fill_rects.Clear();
@@ -105,7 +131,7 @@ static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame
 			break;
 		}
 		default:
-			error = "GpuCtrl S16F replay supports Save, Restore, ClipRect and FillRect operations only";
+			error = "GpuCtrl S16G replay supports Save, Restore, ClipRect, ConcatTransform and FillRect operations only";
 			frame.fill_rects.Clear();
 			return false;
 		}
@@ -149,8 +175,12 @@ static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String
 	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
 	                 Rgba8(230, 82, 20, 255));
 	builder.Save();
-	int clip_left = inner_left + inner_width / 2;
-	builder.ClipRect(Rectf(clip_left, inner_top, inner_left + inner_width, inner_top + inner_height));
+	int translation_x = inner_width / 4;
+	builder.ConcatTransform(Transform2D::Translation(translation_x, 0));
+	int translated_inner_left = inner_left + translation_x;
+	int clip_left = translated_inner_left + inner_width / 2;
+	builder.ClipRect(Rectf(clip_left, inner_top,
+	                       translated_inner_left + inner_width, inner_top + inner_height));
 	builder.FillRect(Rectf(inner_left, inner_top, inner_left + inner_width, inner_top + inner_height),
 	                 Rgba8(36, 190, 110, 255));
 	builder.Restore();
