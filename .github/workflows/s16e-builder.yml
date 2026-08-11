@@ -25,6 +25,7 @@ jobs:
           cp .github/s16e_edit.py /tmp/s16e_edit.py
           git checkout --detach "$BASE"
           python /tmp/s16e_edit.py
+          git add -N render/GpuCtrl/GpuCtrlTestHooks.h tests/GpuCtrlReplayTest/GpuCtrlReplayTest.upp tests/GpuCtrlReplayTest/main.cpp
           git diff --check
           test "$(git diff --name-only | sort)" = "$(printf '%s\n' docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp render/GpuCtrl/GpuCtrl.upp render/GpuCtrl/GpuCtrlTestHooks.h tests/GpuCtrlReplayTest/GpuCtrlReplayTest.upp tests/GpuCtrlReplayTest/main.cpp | sort)"
           ! git diff --name-only | grep -q '^render/RenderVulkan/'
