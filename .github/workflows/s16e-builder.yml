@@ -1,0 +1,37 @@
+name: Run guarded S16E builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16e-builder
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build candidate from accepted S16D
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=9059c493c57054703d92b7f4c273569a19b3bdf3
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          cp .github/s16e_edit.py /tmp/s16e_edit.py
+          git checkout --detach "$BASE"
+          python /tmp/s16e_edit.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp render/GpuCtrl/GpuCtrl.upp render/GpuCtrl/GpuCtrlTestHooks.h tests/GpuCtrlReplayTest/GpuCtrlReplayTest.upp tests/GpuCtrlReplayTest/main.cpp | sort)"
+          ! git diff --name-only | grep -q '^render/RenderVulkan/'
+          grep -q 'UiDisplayOpType::ClipRect' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'clip_rect = clip_rect & next_clip' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'GpuCtrlReplayTest passed' tests/GpuCtrlReplayTest/main.cpp
+          ! grep -Eq 'Vulkan|Vk' render/GpuCtrl/GpuCtrlTestHooks.h
+          git add docs/PROJECT_PLAN.md render/GpuCtrl/GpuCtrl.cpp render/GpuCtrl/GpuCtrl.upp render/GpuCtrl/GpuCtrlTestHooks.h tests/GpuCtrlReplayTest/GpuCtrlReplayTest.upp tests/GpuCtrlReplayTest/main.cpp
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16E: replay ClipRect in GpuCtrl" -m "Add persistent ClipRect handling to the private FillRect display-list replay so cumulative clips constrain only later fills before they cross the Vulkan boundary." -m "Add a focused neutral replay test; keep Vulkan drawing code, Save/Restore, transforms, strokes, rounded rectangles, shaders and pipelines unchanged."
+          git push origin HEAD:refs/heads/chatgpt/s16e-candidate --force
