@@ -1,0 +1,38 @@
+name: Run guarded S16E-R1 builder
+
+on:
+  push:
+    branches:
+      - chatgpt/s16e-r1-builder
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build candidate from failed S16E
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=c21ffbf338d9e1f37c7dfc466fa43bb1f2476cbb
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          cp .github/s16e_r1_edit.py /tmp/s16e_r1_edit.py
+          git checkout --detach "$BASE"
+          python /tmp/s16e_r1_edit.py
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp | sort)"
+          ! git diff --name-only | grep -q '^render/RenderVulkan/'
+          grep -n -A8 'static bool ReplayFillRectList' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'if(list.GetCount() <= 0)' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'if(!list.IsValid())' render/GpuCtrl/GpuCtrl.cpp
+          grep -q 'SameColor(result.fill_rects\[0\].color' tests/GpuCtrlReplayTest/main.cpp
+          grep -q 'non-empty invalid list should preserve its builder error' tests/GpuCtrlReplayTest/main.cpp
+          git add render/GpuCtrl/GpuCtrl.cpp tests/GpuCtrlReplayTest/main.cpp
+          git -c user.name=ChatGPT -c user.email=chatgpt@users.noreply.github.com commit -m "TASK-008A1-S16E-R1: fix replay edge-case assertions" -m "Make zero-operation replay rejection deterministic before invalid-list propagation, while preserving source errors for non-empty invalid lists." -m "Replace fragile exact float equality with full-RGBA epsilon checks and add focused coverage for invalid non-empty replay input."
+          git push origin HEAD:refs/heads/chatgpt/s16e-r1-candidate --force
