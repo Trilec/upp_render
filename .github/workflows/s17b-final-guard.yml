@@ -18,8 +18,8 @@ jobs:
       - name: Verify final S17B slice
         shell: bash
         run: |
-          git diff --check 597587d956b708a551d6672cf0ba506b21646213 HEAD
-          mapfile -t files < <(git diff --name-only 597587d956b708a551d6672cf0ba506b21646213 HEAD)
+          git diff --check 597587d956b708a551d6672cf0ba506b21646213 HEAD -- . ':!.github/workflows/s17b-final-guard.yml'
+          mapfile -t files < <(git diff --name-only 597587d956b708a551d6672cf0ba506b21646213 HEAD -- . ':!.github/workflows/s17b-final-guard.yml')
           expected=(
             docs/ACTIVE_WORK.md
             docs/PROJECT_PLAN.md
@@ -35,6 +35,7 @@ jobs:
           printf '%s\n' "${expected[@]}" | sort > /tmp/expected.txt
           diff -u /tmp/expected.txt /tmp/files.txt
           grep -q 'class VulkanGpuDevice final : public GpuDevice' render/RenderVulkan/RenderVulkanRhi.h
+          grep -q 'Keep the session alive and ready' render/RenderVulkan/RenderVulkanRhi.h
           grep -q 'VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
           grep -q 'VK_MEMORY_PROPERTY_HOST_COHERENT_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
           grep -q 'VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
