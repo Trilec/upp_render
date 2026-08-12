@@ -1,8 +1,8 @@
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
 #include <RenderVulkan/RenderVulkanRhi.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 using namespace Upp;
 using Upp::VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics;
