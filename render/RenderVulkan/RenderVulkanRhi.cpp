@@ -103,6 +103,7 @@ struct VulkanGpuDevice::Impl {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		VkDeviceSize allocation_size = 0;
+		VkMemoryPropertyFlags memory_flags = 0;
 	};
 
 	struct BufferState : Moveable<BufferState> {
@@ -118,9 +119,12 @@ struct VulkanGpuDevice::Impl {
 	};
 
 	VulkanSurfaceSession *session = nullptr;
+	VkInstance instance = VK_NULL_HANDLE;
+	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
 	VkQueue graphics_queue = VK_NULL_HANDLE;
 	uint32_t graphics_queue_family_index = 0;
+	PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
 	PFN_vkGetDeviceProcAddr get_device_proc_addr = nullptr;
 	VulkanProcResolver proc_filter = nullptr;
 	bool ready = false;
@@ -131,6 +135,9 @@ struct VulkanGpuDevice::Impl {
 	int next_texture_id = 1;
 	VectorMap<int, BufferState> buffers;
 	VectorMap<int, TextureState> textures;
+
+	PFN_vkGetPhysicalDeviceMemoryProperties get_physical_device_memory_properties = nullptr;
+	VkPhysicalDeviceMemoryProperties memory_properties {};
 
 	PFN_vkCreateBuffer create_buffer = nullptr;
 	PFN_vkDestroyBuffer destroy_buffer = nullptr;
@@ -156,6 +163,21 @@ struct VulkanGpuDevice::Impl {
 	PFN_vkQueueWaitIdle queue_wait_idle = nullptr;
 
 	template <class T>
+	bool ResolveInstance(T& out, const char *name)
+	{
+		if(proc_filter && !proc_filter(nullptr, name)) {
+			error = String("missing Vulkan procedure: ") + name;
+			return false;
+		}
+		out = reinterpret_cast<T>(get_instance_proc_addr(instance, name));
+		if(!out) {
+			error = String("missing Vulkan procedure: ") + name;
+			return false;
+		}
+		return true;
+	}
+
+	template <class T>
 	bool Resolve(T& out, const char *name)
 	{
 		if(proc_filter && !proc_filter(nullptr, name)) {
@@ -172,6 +194,9 @@ struct VulkanGpuDevice::Impl {
 
 	bool ResolveResourceDispatch()
 	{
+		if(!ResolveInstance(get_physical_device_memory_properties, "vkGetPhysicalDeviceMemoryProperties"))
+			return false;
+		get_physical_device_memory_properties(physical_device, &memory_properties);
 		return Resolve(create_buffer, "vkCreateBuffer") &&
 		       Resolve(destroy_buffer, "vkDestroyBuffer") &&
 		       Resolve(get_buffer_memory_requirements, "vkGetBufferMemoryRequirements") &&
@@ -212,6 +237,27 @@ struct VulkanGpuDevice::Impl {
 		return GpuResult::Unsupported;
 	}
 
+	int FindMemoryType(uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags *out_flags = nullptr) const
+	{
+		auto find = [&](VkMemoryPropertyFlags wanted) -> int {
+			for(uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
+				if((bits & (1u << i)) == 0)
+					continue;
+				const VkMemoryPropertyFlags flags = memory_properties.memoryTypes[i].propertyFlags;
+				if((flags & wanted) == wanted) {
+					if(out_flags)
+						*out_flags = flags;
+					return (int)i;
+				}
+			}
+			return -1;
+		};
+		int index = find(required | preferred);
+		if(index < 0)
+			index = find(required);
+		return index;
+	}
+
 	bool CreateRawBuffer(VkDeviceSize size, VkBufferUsageFlags usage, RawBuffer& out)
 	{
 		out = RawBuffer();
@@ -228,34 +274,37 @@ struct VulkanGpuDevice::Impl {
 
 		VkMemoryRequirements requirements {};
 		get_buffer_memory_requirements(device, out.buffer, &requirements);
-		for(uint32_t memory_type = 0; memory_type < 32; ++memory_type) {
-			if((requirements.memoryTypeBits & (1u << memory_type)) == 0)
-				continue;
-			VkMemoryAllocateInfo mai {};
-			mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			mai.allocationSize = requirements.size;
-			mai.memoryTypeIndex = memory_type;
-			VkDeviceMemory memory = VK_NULL_HANDLE;
-			vr = allocate_memory(device, &mai, nullptr, &memory);
-			if(vr != VK_SUCCESS)
-				continue;
-			void *mapped = nullptr;
-			VkResult map_result = map_memory(device, memory, 0, VK_WHOLE_SIZE, 0, &mapped);
-			if(map_result == VK_SUCCESS && mapped) {
-				unmap_memory(device, memory);
-				vr = bind_buffer_memory(device, out.buffer, memory, 0);
-				if(vr == VK_SUCCESS) {
-					out.memory = memory;
-					out.allocation_size = requirements.size;
-					return true;
-				}
-			}
-			free_memory(device, memory, nullptr);
+		VkMemoryPropertyFlags memory_flags = 0;
+		const int memory_type = FindMemoryType(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memory_flags);
+		if(memory_type < 0) {
+			destroy_buffer(device, out.buffer, nullptr);
+			out.buffer = VK_NULL_HANDLE;
+			error = "no compatible host-visible Vulkan memory type for buffer";
+			return false;
 		}
-		destroy_buffer(device, out.buffer, nullptr);
-		out.buffer = VK_NULL_HANDLE;
-		error = "no compatible host-visible Vulkan memory type for buffer";
-		return false;
+		VkMemoryAllocateInfo mai {};
+		mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		mai.allocationSize = requirements.size;
+		mai.memoryTypeIndex = (uint32_t)memory_type;
+		vr = allocate_memory(device, &mai, nullptr, &out.memory);
+		if(vr != VK_SUCCESS) {
+			destroy_buffer(device, out.buffer, nullptr);
+			out.buffer = VK_NULL_HANDLE;
+			error = VkFailure("vkAllocateMemory", vr);
+			return false;
+		}
+		vr = bind_buffer_memory(device, out.buffer, out.memory, 0);
+		if(vr != VK_SUCCESS) {
+			free_memory(device, out.memory, nullptr);
+			destroy_buffer(device, out.buffer, nullptr);
+			out = RawBuffer();
+			error = VkFailure("vkBindBufferMemory", vr);
+			return false;
+		}
+		out.allocation_size = requirements.size;
+		out.memory_flags = memory_flags;
+		return true;
 	}
 
 	void DestroyRawBuffer(RawBuffer& raw)
@@ -276,17 +325,20 @@ struct VulkanGpuDevice::Impl {
 			return false;
 		}
 		std::memcpy(static_cast<byte *>(mapped) + offset, data, (size_t)size);
-		VkMappedMemoryRange range {};
-		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		range.memory = raw.memory;
-		range.offset = 0;
-		range.size = VK_WHOLE_SIZE;
-		vr = flush_mapped_memory_ranges(device, 1, &range);
-		unmap_memory(device, raw.memory);
-		if(vr != VK_SUCCESS) {
-			error = VkFailure("vkFlushMappedMemoryRanges", vr);
-			return false;
+		if((raw.memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+			VkMappedMemoryRange range {};
+			range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			range.memory = raw.memory;
+			range.offset = 0;
+			range.size = VK_WHOLE_SIZE;
+			vr = flush_mapped_memory_ranges(device, 1, &range);
+			if(vr != VK_SUCCESS) {
+				unmap_memory(device, raw.memory);
+				error = VkFailure("vkFlushMappedMemoryRanges", vr);
+				return false;
+			}
 		}
+		unmap_memory(device, raw.memory);
 		return true;
 	}
 
@@ -295,26 +347,28 @@ struct VulkanGpuDevice::Impl {
 		out_memory = VK_NULL_HANDLE;
 		VkMemoryRequirements requirements {};
 		get_image_memory_requirements(device, image, &requirements);
-		for(uint32_t memory_type = 0; memory_type < 32; ++memory_type) {
-			if((requirements.memoryTypeBits & (1u << memory_type)) == 0)
-				continue;
-			VkMemoryAllocateInfo mai {};
-			mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			mai.allocationSize = requirements.size;
-			mai.memoryTypeIndex = memory_type;
-			VkDeviceMemory memory = VK_NULL_HANDLE;
-			VkResult vr = allocate_memory(device, &mai, nullptr, &memory);
-			if(vr != VK_SUCCESS)
-				continue;
-			vr = bind_image_memory(device, image, memory, 0);
-			if(vr == VK_SUCCESS) {
-				out_memory = memory;
-				return true;
-			}
-			free_memory(device, memory, nullptr);
+		const int memory_type = FindMemoryType(requirements.memoryTypeBits, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		if(memory_type < 0) {
+			error = "no compatible Vulkan memory type for texture";
+			return false;
 		}
-		error = "no compatible Vulkan memory type for texture";
-		return false;
+		VkMemoryAllocateInfo mai {};
+		mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		mai.allocationSize = requirements.size;
+		mai.memoryTypeIndex = (uint32_t)memory_type;
+		VkResult vr = allocate_memory(device, &mai, nullptr, &out_memory);
+		if(vr != VK_SUCCESS) {
+			error = VkFailure("vkAllocateMemory", vr);
+			return false;
+		}
+		vr = bind_image_memory(device, image, out_memory, 0);
+		if(vr != VK_SUCCESS) {
+			free_memory(device, out_memory, nullptr);
+			out_memory = VK_NULL_HANDLE;
+			error = VkFailure("vkBindImageMemory", vr);
+			return false;
+		}
+		return true;
 	}
 
 	bool UploadTexture(TextureState& texture, const GpuTextureWriteDesc& desc, const void *data, int64 data_size)
@@ -513,12 +567,16 @@ VulkanGpuDevice::VulkanGpuDevice(VulkanSurfaceSession& session)
 		impl->error = "VulkanGpuDevice could not acquire session device interop";
 		return;
 	}
+	impl->instance = interop.instance;
+	impl->physical_device = interop.physical_device;
 	impl->device = interop.device;
 	impl->graphics_queue = interop.graphics_queue;
 	impl->graphics_queue_family_index = interop.graphics_queue_family_index;
+	impl->get_instance_proc_addr = interop.get_instance_proc_addr;
 	impl->get_device_proc_addr = interop.get_device_proc_addr;
 	impl->proc_filter = interop.proc_filter;
-	if(!impl->device || !impl->graphics_queue || !impl->get_device_proc_addr) {
+	if(!impl->instance || !impl->physical_device || !impl->device || !impl->graphics_queue ||
+	   !impl->get_instance_proc_addr || !impl->get_device_proc_addr) {
 		impl->error = "VulkanGpuDevice session interop is incomplete";
 		return;
 	}
@@ -571,8 +629,10 @@ GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& 
 	out = GpuBufferId();
 	if(!impl->CheckReady())
 		return GpuResult::InvalidState;
-	if(desc.size <= 0)
-		return impl->error = "CreateBuffer requires positive size", GpuResult::InvalidArgument;
+	if(desc.size <= 0) {
+		impl->error = "CreateBuffer requires positive size";
+		return GpuResult::InvalidArgument;
+	}
 	Impl::RawBuffer raw;
 	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw))
 		return GpuResult::InvalidState;

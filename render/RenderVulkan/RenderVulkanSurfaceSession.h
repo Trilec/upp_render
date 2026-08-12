@@ -95,6 +95,8 @@ public:
 
 private:
 	struct FrameInterop {
+		VkInstance instance = VK_NULL_HANDLE;
+		VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
 		VkQueue graphics_queue = VK_NULL_HANDLE;
 		VkQueue present_queue = VK_NULL_HANDLE;
@@ -102,6 +104,7 @@ private:
 		Vector<VkImage> images;
 		uint32_t graphics_queue_family_index = 0;
 		uint64_t swapchain_id = 0;
+		PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
 		PFN_vkGetDeviceProcAddr get_device_proc_addr = nullptr;
 		VulkanProcResolver proc_filter = nullptr;
 	};
