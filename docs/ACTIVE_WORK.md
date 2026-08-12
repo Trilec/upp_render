@@ -8,10 +8,10 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 - Branch: `main`
 - Accepted through: `TASK-008A1-S17A`
 - Accepted implementation SHA: `5d7e5e2537a7fd70bd9d344c9cb885a04014c041`
-- Current published recovery SHA before S17B: `597587d956b708a551d6672cf0ba506b21646213`
-- Windows result: clean PASS
-- Validation: S17A neutral contract/regressions pass; accepted Vulkan regressions remain clean
-- Final Vulkan ownership: all tracked ownership counts zero
+- S17B implementation SHA now published: `07e7870ae91316305f84a9fdc32b7488fd37eb3a`
+- Windows result: S17A clean PASS; S17B platform validation pending
+- Validation: S17A neutral contract/regressions pass; S17B guarded source review passes
+- Final accepted Vulkan ownership: all tracked ownership counts zero
 
 ## Current Objective
 
@@ -36,19 +36,19 @@ Already accepted:
 - embedded `GpuCtrl` lifecycle, multi-control isolation and clean shutdown
 - neutral `GpuDevice::WriteBuffer` / `WriteTexture` upload contract and Null validation authority
 
-Current S17B slice:
+Published in S17B, Windows acceptance pending:
 
 - production `VulkanGpuDevice` adapter borrowing the accepted live `VulkanSurfaceSession` device/queue ownership
 - real Vulkan buffer creation, host-visible/coherent-preferred allocation, writes and destruction
 - real optimal-image texture allocation with device-local-preferred memory
 - row-pitch-aware texture upload through tight staging buffers and one-time graphics submissions
 - tracked resource ownership with explicit and destructor cleanup
-- focused validation-enabled Windows resource acceptance
+- focused validation-enabled Vulkan resource test
 
 Still required before declaring Stage 3 complete:
 
 - command-list / render-pass / pipeline / draw / submit through `VulkanGpuDevice`
-- neutral surface / swapchain / frame methods bridged to the accepted session implementation
+- reconcile neutral surface / swapchain / frame methods with the accepted per-session Vulkan device ownership model
 - destruction/lifetime handling for resources referenced by submitted command work
 - focused Windows acceptance of the complete Vulkan `GpuDevice` contract with zero final ownership
 
@@ -69,10 +69,10 @@ Do not add text/vector work until the Stage 4 primitive renderer is coherent.
 BASE: `597587d956b708a551d6672cf0ba506b21646213`
 TASK: `TASK-008A1-S17B` production Vulkan resource allocation/upload/destruction
 TOUCHED: `render/RenderVulkan/RenderVulkan.cpp`, `render/RenderVulkan/RenderVulkanSurfaceSession.h`, `render/RenderVulkan/RenderVulkanRhi.h`, `render/RenderVulkan/RenderVulkanRhi.cpp`, `render/RenderVulkan/RenderVulkan.upp`, `tests/RenderVulkanResourceTest/RenderVulkanResourceTest.upp`, `tests/RenderVulkanResourceTest/main.cpp`, `docs/PROJECT_PLAN.md`, `docs/ACTIVE_WORK.md`
-STATUS: real Vulkan buffer/texture resource path implemented on isolated candidate; validation-sensitive memory selection corrected; final source/diff review in progress
-PUBLISHED: S17B candidate not yet published to `main`
-VALIDATION: Windows S17B resource validation pending
+STATUS: real Vulkan buffer/texture resource path implemented, guarded, squashed and published
+PUBLISHED: `07e7870ae91316305f84a9fdc32b7488fd37eb3a`
+VALIDATION: final source guard passed; Windows S17B resource validation pending
 
 ## Next Action
 
-Finish final nine-file diff review, squash S17B into one coherent commit, publish by fast-forwarding current `main`, and update this checkpoint with the exact implementation SHA. Gary then validates the focused real Vulkan resource path. On a clean PASS, implement S17C as the remaining Vulkan `GpuDevice` convergence slice: command lists, render pass, pipeline/draw/submit plus neutral surface/swapchain/frame bridging, with submitted-resource lifetime rules.
+Gary validates S17B from current published `main`. On a clean PASS, implement S17C as the remaining Vulkan `GpuDevice` convergence slice: command lists, render pass, pipeline/draw/submit plus resolution of the neutral surface/swapchain/frame ownership model, with submitted-resource lifetime rules. Keep S17C as a coherent published checkpoint and do not declare Stage 3 complete until that contract is genuinely satisfied and Windows-validated.
