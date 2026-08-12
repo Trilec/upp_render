@@ -62,7 +62,8 @@ by `%VULKAN_SDK%\Include`.
 
 Surface/platform bring-up, grouped ownership, private swapchain lifecycle,
 explicit frame acquisition/presentation, and the first visible clear frame are
-accepted. The active milestone is embedded `GpuCtrl` Vulkan presentation.
+accepted. The active closure work is converging those accepted paths behind the
+neutral `GpuDevice` contract rather than adding more bootstrap-only APIs.
 
 TASK-007 completed the surface and platform bridge layer, with a Win32
 native-window contract, bridge test coverage, a live Vulkan surface probe, and
@@ -72,6 +73,14 @@ TASK-007A3 restored the backend-neutral `GpuCtrl` public boundary.
 TASK-007A4 completed the control/session foundation, removing duplicate
 surface bring-up code, documenting the usage and future UI rendering shape, and
 adding practical embedded-control demos.
+
+S17A added explicit neutral buffer/texture upload operations and made
+`RenderNull` authoritative for upload-range and texture-layout validation.
+S17B adds the first production `VulkanGpuDevice` slice by borrowing the accepted
+live `VulkanSurfaceSession` device/queue ownership and providing real Vulkan
+buffer allocation/writes plus optimal-image texture allocation and staging
+uploads. Command/pipeline/draw and neutral surface/swapchain/frame bridging
+remain the final Stage 3 convergence work.
 
 Successful local build command:
 
@@ -158,6 +167,10 @@ additional backends beyond the first ones already planned.
   Save/Restore; scale, rotation, shear and general renderer state remain deferred
 - S17A aligns the neutral GpuDevice contract with explicit buffer and texture upload
   operations and makes RenderNull the validation authority for upload range/layout rules
+- S17B adds a production VulkanGpuDevice resource slice using the accepted surface-session
+  device ownership: real buffer allocation/write/destruction and optimal-image texture
+  allocation/staging upload/destruction, while command/pipeline/surface RHI methods remain
+  explicitly Unsupported until the next convergence slice
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage

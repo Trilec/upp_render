@@ -4019,6 +4019,8 @@ const String& VulkanSurfaceSession::GetError() const
 
 bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 {
+	out.instance = VK_NULL_HANDLE;
+	out.physical_device = VK_NULL_HANDLE;
 	out.device = VK_NULL_HANDLE;
 	out.graphics_queue = VK_NULL_HANDLE;
 	out.present_queue = VK_NULL_HANDLE;
@@ -4026,6 +4028,7 @@ bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 	out.images.Clear();
 	out.graphics_queue_family_index = 0;
 	out.swapchain_id = 0;
+	out.get_instance_proc_addr = nullptr;
 	out.get_device_proc_addr = nullptr;
 	out.proc_filter = nullptr;
 	if(!impl || !impl->lease.IsAcquired() || !impl->device.device)
@@ -4033,6 +4036,8 @@ bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 	VulkanInstanceOwner *owner = impl->lease.GetOwner();
 	if(!owner || !owner->instance.get_device_proc_addr)
 		return false;
+	out.instance = owner->instance.instance;
+	out.physical_device = impl->device.physical_device;
 	out.device = impl->device.device;
 	out.graphics_queue = impl->device.graphics_queue;
 	out.present_queue = impl->device.present_queue;
@@ -4041,6 +4046,7 @@ bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 		out.images.Add(image);
 	out.graphics_queue_family_index = impl->report.graphics_queue_family_index >= 0 ? (uint32_t)impl->report.graphics_queue_family_index : 0;
 	out.swapchain_id = impl->swapchain.diagnostic_id;
+	out.get_instance_proc_addr = owner->dispatch.get_instance_proc_addr;
 	out.get_device_proc_addr = owner->instance.get_device_proc_addr;
 	out.proc_filter = owner->dispatch.proc_filter;
 	return out.graphics_queue != VK_NULL_HANDLE && out.present_queue != VK_NULL_HANDLE;

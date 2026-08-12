@@ -5,7 +5,9 @@ uses
 file
 	RenderVulkan.h,
 	RenderVulkanSurfaceSession.h,
+	RenderVulkanRhi.h,
 	RenderVulkanTestHooks.h,
 	RenderVulkan.cpp,
 	RenderVulkanFrame.cpp,
-	RenderVulkanClearFrame.cpp;
+	RenderVulkanClearFrame.cpp,
+	RenderVulkanRhi.cpp;
