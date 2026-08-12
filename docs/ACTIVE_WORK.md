@@ -60,10 +60,10 @@ Do not add text/vector work until the Stage 4 primitive renderer is coherent.
 BASE: `2218e19299987149a47aa7a688cc36ef5e989037`
 TASK: `TASK-008A1-S17A` neutral resource-upload contract
 TOUCHED: `render/RenderRhi/RenderRhi.h`, `render/RenderNull/RenderNull.h`, `render/RenderNull/RenderNull.cpp`, `tests/RenderRhiTest/main.cpp`, `docs/PROJECT_PLAN.md`, `docs/ACTIVE_WORK.md`
-STATUS: buffer/texture upload contract and Null validation authority implemented
-PUBLISHED: candidate pending guarded publication
-VALIDATION: source guards pending; Windows RenderRhiTest validation pending
+STATUS: buffer/texture upload contract and Null validation authority implemented and published
+PUBLISHED: `5d7e5e2537a7fd70bd9d344c9cb885a04014c041`
+VALIDATION: guarded source review passed; Windows RenderRhiTest validation pending
 
 ## Next Action
 
-After S17A Windows acceptance, implement S17B as the first production Vulkan resource slice: Vulkan GpuDevice ownership plus real buffer allocation/write/destruction and texture allocation/write/destruction, reusing accepted instance/device/session ownership rather than duplicating it. Publish that coherent slice before the command/pipeline/draw integration slice.
+Gary validates S17A from published main. On a clean PASS, implement S17B as the first production Vulkan resource slice: Vulkan GpuDevice ownership plus real buffer allocation/write/destruction and texture allocation/write/destruction, reusing accepted instance/device/session ownership rather than duplicating it. Publish that coherent slice before the command/pipeline/draw integration slice.
