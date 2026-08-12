@@ -1,0 +1,55 @@
+name: Stage3 upload candidate builder
+
+on:
+  push:
+    branches:
+      - chatgpt/stage3-upload-builder
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build guarded clean candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=2218e19299987149a47aa7a688cc36ef5e989037
+          CANDIDATE=chatgpt/stage3-upload-contract
+          cp .github/stage3_upload_edit.py /tmp/stage3_upload_edit.py
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git checkout --detach "$BASE"
+          python /tmp/stage3_upload_edit.py
+          git diff --check
+
+          actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            docs/ACTIVE_WORK.md \
+            docs/PROJECT_PLAN.md \
+            render/RenderNull/RenderNull.cpp \
+            render/RenderNull/RenderNull.h \
+            render/RenderRhi/RenderRhi.h \
+            tests/RenderRhiTest/main.cpp | sort)"
+          test "$actual" = "$expected"
+
+          grep -q 'virtual GpuResult WriteBuffer' render/RenderRhi/RenderRhi.h
+          grep -q 'virtual GpuResult WriteTexture' render/RenderRhi/RenderRhi.h
+          grep -q 'NullGpuDevice::WriteBuffer' render/RenderNull/RenderNull.cpp
+          grep -q 'NullGpuDevice::WriteTexture' render/RenderNull/RenderNull.cpp
+          grep -q 'TestResourceUploads' tests/RenderRhiTest/main.cpp
+          grep -q 'swapchain backbuffer upload should fail' tests/RenderRhiTest/main.cpp
+
+          git add docs/ACTIVE_WORK.md docs/PROJECT_PLAN.md \
+            render/RenderRhi/RenderRhi.h render/RenderNull/RenderNull.h \
+            render/RenderNull/RenderNull.cpp tests/RenderRhiTest/main.cpp
+          git commit -m 'TASK-008A1-S17A: add neutral resource upload contract' \
+            -m 'Add explicit buffer and texture write operations to GpuDevice, implement deterministic upload validation in RenderNull, and extend the authoritative RHI tests.' \
+            -m 'Record the accelerated Stage 3 recovery checkpoint; production Vulkan resource allocation/upload follows in S17B.'
+          git push origin HEAD:"refs/heads/$CANDIDATE" --force-with-lease="refs/heads/$CANDIDATE:$BASE"
