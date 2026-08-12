@@ -12,6 +12,21 @@ static bool IsValidTopology(GpuPrimitiveTopology topology)
 	return false;
 }
 
+static int BytesPerPixel(GpuFormat format)
+{
+	switch(format) {
+	case GpuFormat::RGBA8:
+	case GpuFormat::BGRA8:
+	case GpuFormat::D24S8:
+		return 4;
+	case GpuFormat::R16F:
+		return 2;
+	case GpuFormat::Unknown:
+		return 0;
+	}
+	return 0;
+}
+
 static bool ValidateNativeWindowDesc(const GpuSurfaceDesc& desc, String& reason)
 {
 	switch(desc.native_window.kind) {
@@ -196,6 +211,26 @@ GpuResult NullGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& ou
 	return GpuResult::Ok;
 }
 
+GpuResult NullGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size)
+{
+	int index = buffers.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("WriteBuffer id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	if(offset < 0 || size <= 0 || data == nullptr) {
+		Fail("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size) + " reason=invalid_write");
+		return GpuResult::InvalidArgument;
+	}
+	const int64 buffer_size = buffers[index].desc.size;
+	if(offset > buffer_size || size > buffer_size - offset) {
+		Fail("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size) + " reason=out_of_range");
+		return GpuResult::InvalidArgument;
+	}
+	AppendLog("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size));
+	return GpuResult::Ok;
+}
+
 GpuResult NullGpuDevice::DestroyBuffer(GpuBufferId id)
 {
 	int index = buffers.Find(id.value);
@@ -227,6 +262,51 @@ GpuResult NullGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureId&
 	state.alive = true;
 	out = id;
 	AppendLog("CreateTexture id=" + id.Dump() + " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " format=" + DumpGpuFormat(desc.format) + " usage=" + DumpGpuTextureUsage(desc.usage));
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size)
+{
+	int index = textures.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	const TextureState& state = textures[index];
+	if(state.swapchain_backbuffer) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=swapchain_backbuffer");
+		return GpuResult::InvalidState;
+	}
+	if(data == nullptr || data_size <= 0 || desc.origin.x < 0 || desc.origin.y < 0 ||
+	   desc.size.cx <= 0 || desc.size.cy <= 0 || desc.row_pitch <= 0) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=invalid_write");
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.origin.x > state.desc.size.cx - desc.size.cx || desc.origin.y > state.desc.size.cy - desc.size.cy) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=out_of_range");
+		return GpuResult::InvalidArgument;
+	}
+	const int bytes_per_pixel = BytesPerPixel(state.desc.format);
+	if(bytes_per_pixel <= 0) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=unsupported_format");
+		return GpuResult::Unsupported;
+	}
+	const int64 tight_row = (int64)desc.size.cx * bytes_per_pixel;
+	if(desc.row_pitch < tight_row) {
+		Fail("WriteTexture id=" + id.Dump() + " row_pitch=" + AsString(desc.row_pitch) + " reason=row_pitch_too_small");
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.size.cy > 1 && desc.row_pitch > (INT64_MAX - tight_row) / (desc.size.cy - 1)) {
+		Fail("WriteTexture id=" + id.Dump() + " reason=layout_overflow");
+		return GpuResult::InvalidArgument;
+	}
+	const int64 required_size = desc.row_pitch * (desc.size.cy - 1) + tight_row;
+	if(data_size < required_size) {
+		Fail("WriteTexture id=" + id.Dump() + " data_size=" + AsString(data_size) + " required=" + AsString(required_size) + " reason=data_too_small");
+		return GpuResult::InvalidArgument;
+	}
+	AppendLog("WriteTexture id=" + id.Dump() + " origin=" + AsString(desc.origin.x) + "," + AsString(desc.origin.y) +
+	          " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " row_pitch=" + AsString(desc.row_pitch));
 	return GpuResult::Ok;
 }
 

@@ -156,6 +156,8 @@ additional backends beyond the first ones already planned.
   can be restored deterministically
 - S16G adds translation-only ConcatTransform replay for FillRect geometry, scoped by
   Save/Restore; scale, rotation, shear and general renderer state remain deferred
+- S17A aligns the neutral GpuDevice contract with explicit buffer and texture upload
+  operations and makes RenderNull the validation authority for upload range/layout rules
 - general 2D rendering, shaders, painter callbacks, and shared control device
   ownership remain deferred
 - GPU-backed U++ and upp_Ui rendering is a future stage

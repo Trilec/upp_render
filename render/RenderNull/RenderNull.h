@@ -14,9 +14,11 @@ public:
 	GpuAdapterInfo GetAdapterInfo() const override;
 
 	GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) override;
+	GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) override;
 	GpuResult DestroyBuffer(GpuBufferId id) override;
 
 	GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) override;
+	GpuResult WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size) override;
 	GpuResult DestroyTexture(GpuTextureId id) override;
 
 	GpuResult CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out) override;

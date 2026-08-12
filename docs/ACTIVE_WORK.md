@@ -57,13 +57,13 @@ Do not add text/vector work until the Stage 4 primitive renderer is coherent.
 
 ## Recovery Log
 
-BASE: `eab3e59ac40be25d6c974224492c7d27c6850cb8`
-TASK: Stage 3 closure analysis / accelerated Vulkan RHI implementation
-TOUCHED: `docs/ACTIVE_WORK.md` only at this checkpoint
-STATUS: S16G accepted; Stage 3 closure slice being defined
-PUBLISHED: this status checkpoint
-VALIDATION: implementation validation pending for next code slice
+BASE: `2218e19299987149a47aa7a688cc36ef5e989037`
+TASK: `TASK-008A1-S17A` neutral resource-upload contract
+TOUCHED: `render/RenderRhi/RenderRhi.h`, `render/RenderNull/RenderNull.h`, `render/RenderNull/RenderNull.cpp`, `tests/RenderRhiTest/main.cpp`, `docs/PROJECT_PLAN.md`, `docs/ACTIVE_WORK.md`
+STATUS: buffer/texture upload contract and Null validation authority implemented
+PUBLISHED: candidate pending guarded publication
+VALIDATION: source guards pending; Windows RenderRhiTest validation pending
 
 ## Next Action
 
-Inspect the existing RenderNull implementation and current RenderVulkan ownership/session code against every `GpuDevice` method in `RenderRhi.h`. Define the smallest set of larger vertical implementation slices that can close Stage 3 without duplicating the accepted surface/session path, then implement and publish the first slice before Windows validation.
+After S17A Windows acceptance, implement S17B as the first production Vulkan resource slice: Vulkan GpuDevice ownership plus real buffer allocation/write/destruction and texture allocation/write/destruction, reusing accepted instance/device/session ownership rather than duplicating it. Publish that coherent slice before the command/pipeline/draw integration slice.

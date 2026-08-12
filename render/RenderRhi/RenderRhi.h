@@ -135,6 +135,12 @@ struct GpuTextureDesc : Moveable<GpuTextureDesc> {
 	String label;
 };
 
+struct GpuTextureWriteDesc : Moveable<GpuTextureWriteDesc> {
+	Point origin = Point(0, 0);
+	Size size = Size(0, 0);
+	int64 row_pitch = 0;
+};
+
 struct GpuRenderPassDesc : Moveable<GpuRenderPassDesc> {
 	GpuTextureId color_target;
 	GpuFormat color_format = GpuFormat::Unknown;
@@ -187,9 +193,11 @@ public:
 	virtual GpuAdapterInfo GetAdapterInfo() const = 0;
 
 	virtual GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) = 0;
+	virtual GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) = 0;
 	virtual GpuResult DestroyBuffer(GpuBufferId id) = 0;
 
 	virtual GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) = 0;
+	virtual GpuResult WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size) = 0;
 	virtual GpuResult DestroyTexture(GpuTextureId id) = 0;
 
 	virtual GpuResult CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out) = 0;

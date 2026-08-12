@@ -223,6 +223,69 @@ static bool TestFrameLifecycle(NullGpuDevice& device)
 	return true;
 }
 
+static bool TestResourceUploads(NullGpuDevice& device)
+{
+	byte buffer_data[16] = {};
+	GpuBufferId buffer;
+	if(!Check(device.CreateBuffer(MakeVertexBufferDesc(16), buffer) == GpuResult::Ok, "upload buffer should create")) return false;
+	if(!Check(device.WriteBuffer(buffer, 4, buffer_data, 8) == GpuResult::Ok, "in-range buffer write should succeed")) return false;
+	if(!Check(device.WriteBuffer(buffer, 0, nullptr, 4) == GpuResult::InvalidArgument, "null buffer write should fail")) return false;
+	if(!Check(device.WriteBuffer(buffer, -1, buffer_data, 4) == GpuResult::InvalidArgument, "negative buffer offset should fail")) return false;
+	if(!Check(device.WriteBuffer(buffer, 0, buffer_data, 0) == GpuResult::InvalidArgument, "zero buffer write should fail")) return false;
+	if(!Check(device.WriteBuffer(buffer, 12, buffer_data, 8) == GpuResult::InvalidArgument, "out-of-range buffer write should fail")) return false;
+	GpuBufferId unknown_buffer;
+	unknown_buffer.value = 999;
+	if(!Check(device.WriteBuffer(unknown_buffer, 0, buffer_data, 4) == GpuResult::InvalidHandle, "unknown buffer write should fail")) return false;
+	if(!Check(device.DestroyBuffer(buffer) == GpuResult::Ok, "upload buffer should destroy")) return false;
+	if(!Check(device.WriteBuffer(buffer, 0, buffer_data, 4) == GpuResult::InvalidHandle, "destroyed buffer write should fail")) return false;
+
+	GpuTextureDesc texture_desc = MakeTextureDesc(Size(4, 3));
+	texture_desc.usage = GpuTextureUsage_Sampled;
+	GpuTextureId texture;
+	if(!Check(device.CreateTexture(texture_desc, texture) == GpuResult::Ok, "upload texture should create")) return false;
+	byte texture_data[64] = {};
+	GpuTextureWriteDesc whole;
+	whole.size = Size(4, 3);
+	whole.row_pitch = 16;
+	if(!Check(device.WriteTexture(texture, whole, texture_data, 48) == GpuResult::Ok, "tight texture upload should succeed")) return false;
+	GpuTextureWriteDesc partial;
+	partial.origin = Point(1, 1);
+	partial.size = Size(2, 2);
+	partial.row_pitch = 12;
+	if(!Check(device.WriteTexture(texture, partial, texture_data, 20) == GpuResult::Ok, "padded partial texture upload should succeed")) return false;
+	GpuTextureWriteDesc short_pitch = partial;
+	short_pitch.row_pitch = 7;
+	if(!Check(device.WriteTexture(texture, short_pitch, texture_data, 20) == GpuResult::InvalidArgument, "short texture row pitch should fail")) return false;
+	if(!Check(device.WriteTexture(texture, partial, texture_data, 19) == GpuResult::InvalidArgument, "short texture data should fail")) return false;
+	GpuTextureWriteDesc outside = partial;
+	outside.origin = Point(3, 2);
+	if(!Check(device.WriteTexture(texture, outside, texture_data, 20) == GpuResult::InvalidArgument, "out-of-range texture upload should fail")) return false;
+	GpuTextureWriteDesc negative = partial;
+	negative.origin = Point(-1, 0);
+	if(!Check(device.WriteTexture(texture, negative, texture_data, 20) == GpuResult::InvalidArgument, "negative texture origin should fail")) return false;
+	if(!Check(device.WriteTexture(texture, partial, nullptr, 20) == GpuResult::InvalidArgument, "null texture upload should fail")) return false;
+	GpuTextureId unknown_texture;
+	unknown_texture.value = 999;
+	if(!Check(device.WriteTexture(unknown_texture, partial, texture_data, 20) == GpuResult::InvalidHandle, "unknown texture upload should fail")) return false;
+	if(!Check(device.DestroyTexture(texture) == GpuResult::Ok, "upload texture should destroy")) return false;
+	if(!Check(device.WriteTexture(texture, partial, texture_data, 20) == GpuResult::InvalidHandle, "destroyed texture upload should fail")) return false;
+
+	GpuSurfaceId surface;
+	GpuSwapchainId swapchain;
+	if(!Check(device.CreateSurface(MakeSurfaceDesc(Size(32, 32)), surface) == GpuResult::Ok, "upload guard surface should create")) return false;
+	if(!Check(device.CreateSwapchain(MakeSwapchainDesc(surface, Size(32, 32)), swapchain) == GpuResult::Ok, "upload guard swapchain should create")) return false;
+	GpuFrameInfo frame;
+	if(!Check(device.BeginFrame(swapchain, frame) == GpuResult::Ok, "upload guard frame should begin")) return false;
+	GpuTextureWriteDesc backbuffer_write;
+	backbuffer_write.size = Size(1, 1);
+	backbuffer_write.row_pitch = 4;
+	if(!Check(device.WriteTexture(frame.color_target, backbuffer_write, texture_data, 4) == GpuResult::InvalidState, "swapchain backbuffer upload should fail")) return false;
+	if(!Check(device.Present(frame.frame) == GpuResult::Ok, "upload guard frame should present")) return false;
+	if(!Check(device.DestroySwapchain(swapchain) == GpuResult::Ok, "upload guard swapchain should destroy")) return false;
+	if(!Check(device.DestroySurface(surface) == GpuResult::Ok, "upload guard surface should destroy")) return false;
+	return true;
+}
+
 static bool TestPipelineLifecycle(NullGpuDevice& device)
 {
 	GpuPipelineId pipeline;
@@ -363,6 +426,7 @@ CONSOLE_APP_MAIN
 	ok &= TestSurfaceLifecycle(device);
 	ok &= TestSwapchainLifecycle(device);
 	ok &= TestFrameLifecycle(device);
+	ok &= TestResourceUploads(device);
 	ok &= TestPipelineLifecycle(device);
 	ok &= TestCommandStateValidation(device);
 	ok &= TestRecordingGuards(device);
