@@ -5,6 +5,8 @@
 
 namespace Upp {
 
+// S17B borrows Vulkan ownership from an already-open surface session.
+// Keep the session alive and ready until this adapter and its resources are destroyed.
 class VulkanGpuDevice final : public GpuDevice {
 public:
 	explicit VulkanGpuDevice(VulkanSurfaceSession& session);
