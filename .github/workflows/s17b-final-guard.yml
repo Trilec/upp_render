@@ -1,0 +1,49 @@
+name: S17B final source guard
+
+on:
+  push:
+    branches:
+      - chatgpt/s17b-final-guard
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify final S17B slice
+        shell: bash
+        run: |
+          git diff --check 597587d956b708a551d6672cf0ba506b21646213 HEAD
+          mapfile -t files < <(git diff --name-only 597587d956b708a551d6672cf0ba506b21646213 HEAD)
+          expected=(
+            docs/ACTIVE_WORK.md
+            docs/PROJECT_PLAN.md
+            render/RenderVulkan/RenderVulkan.cpp
+            render/RenderVulkan/RenderVulkan.upp
+            render/RenderVulkan/RenderVulkanRhi.cpp
+            render/RenderVulkan/RenderVulkanRhi.h
+            render/RenderVulkan/RenderVulkanSurfaceSession.h
+            tests/RenderVulkanResourceTest/RenderVulkanResourceTest.upp
+            tests/RenderVulkanResourceTest/main.cpp
+          )
+          printf '%s\n' "${files[@]}" | sort > /tmp/files.txt
+          printf '%s\n' "${expected[@]}" | sort > /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/files.txt
+          grep -q 'class VulkanGpuDevice final : public GpuDevice' render/RenderVulkan/RenderVulkanRhi.h
+          grep -q 'VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'VK_MEMORY_PROPERTY_HOST_COHERENT_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'vkGetPhysicalDeviceMemoryProperties' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'vkCmdCopyBufferToImage' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'GpuCapability_Buffers | GpuCapability_Textures' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'deferred beyond TASK-008A1-S17B' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'RenderVulkanRhi.cpp' render/RenderVulkan/RenderVulkan.upp
+          grep -q 'RenderVulkanResourceTest passed' tests/RenderVulkanResourceTest/main.cpp
+          grep -q 'render/RenderVulkan/RenderVulkan.cpp' docs/ACTIVE_WORK.md
+          ! grep -q 'map_result = map_memory' render/RenderVulkan/RenderVulkanRhi.cpp
+          test "$(git diff --name-only 597587d956b708a551d6672cf0ba506b21646213 HEAD -- render/RenderVulkan/RenderVulkanFrame.cpp render/RenderVulkan/RenderVulkanClearFrame.cpp render/RenderRhi render/RenderNull render/GpuCtrl render/RenderCanvas render/RenderCore | wc -l)" -eq 0
