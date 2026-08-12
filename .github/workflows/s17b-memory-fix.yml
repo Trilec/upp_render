@@ -1,0 +1,45 @@
+name: S17B memory-property correction
+
+on:
+  push:
+    branches:
+      - chatgpt/s17b-memory-fix-builder
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded correction to candidate base
+        shell: bash
+        run: |
+          cp .github/s17b_memory_fix.py /tmp/s17b_memory_fix.py
+          git reset --hard c880e2e9ae25c6968c962b9c121dc572b5984f77
+          python /tmp/s17b_memory_fix.py
+          git diff --check
+          mapfile -t files < <(git diff --name-only)
+          expected=(
+            render/RenderVulkan/RenderVulkan.cpp
+            render/RenderVulkan/RenderVulkanRhi.cpp
+            render/RenderVulkan/RenderVulkanSurfaceSession.h
+          )
+          printf '%s\n' "${files[@]}" | sort > /tmp/files.txt
+          printf '%s\n' "${expected[@]}" | sort > /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/files.txt
+          grep -q 'vkGetPhysicalDeviceMemoryProperties' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
+          grep -q 'VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT' render/RenderVulkan/RenderVulkanRhi.cpp
+          ! grep -q 'map_result = map_memory' render/RenderVulkan/RenderVulkanRhi.cpp
+      - name: Commit and advance candidate
+        shell: bash
+        run: |
+          git config user.name "ChatGPT"
+          git config user.email "chatgpt@users.noreply.github.com"
+          git add render/RenderVulkan/RenderVulkan.cpp render/RenderVulkan/RenderVulkanRhi.cpp render/RenderVulkan/RenderVulkanSurfaceSession.h
+          git commit -m "S17B select Vulkan resource memory by properties" -m "Expose physical-device memory properties through the existing private session interop and select host-visible/coherent buffer memory plus device-local-preferred image memory without invalid map probing."
+          git push origin HEAD:refs/heads/chatgpt/s17b-vulkan-resources
