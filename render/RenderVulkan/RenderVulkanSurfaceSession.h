@@ -5,6 +5,8 @@
 
 namespace Upp {
 
+class VulkanGpuDevice;
+
 namespace VulkanTestHooks {
 struct VulkanGroupedSurfaceSessionTestResult;
 struct VulkanFrameTestResult;
@@ -117,6 +119,7 @@ private:
 	void SyncFrameValidation();
 	bool DestroyFrameState();
 
+	friend class VulkanGpuDevice;
 	friend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);
 };
 
