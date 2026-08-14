@@ -21,7 +21,7 @@ Accelerate completion of:
 1. Stage 3 - Vulkan Bootstrap to 100% against the published `GpuRhi` contract.
 2. Stage 4 - GPU 2D Renderer through larger coherent vertical slices instead of one display operation per milestone.
 
-Active implementation task: `TASK-008A1-S17C` — complete the remaining Vulkan `GpuDevice` convergence as one coherent Stage-3 closure slice.
+Active implementation task: `TASK-008A1-S17C-B` — implement the real Vulkan side of the completed neutral graphics contract and close Stage 3.
 
 ## Stage 3 Closure Gate
 
@@ -45,14 +45,26 @@ Accepted:
 - tracked resource ownership with explicit and destructor cleanup
 - S17B-R1 Windows acceptance: resource Debug 4/4, Release 2/2, `RenderRhiTest` Debug/Release, `RenderVulkanFrameTest`, `RenderVulkanClearFrameTest`, and `GpuCtrlPresentationTest` all pass; validation 0/0 and final ownership zero
 
+Published in S17C-A, platform validation pending:
+
+- explicit neutral vertex/fragment shader lifecycle with capability-gated optional `GpuDevice` methods
+- neutral SPIR-V shader payload descriptor and shader-stage identity
+- minimal `Position2Color4F` vertex-layout contract for the first real graphics pipeline
+- explicit render-pass clear colour
+- pipeline descriptors now bind vertex/fragment shaders and vertex layout
+- `RenderNull` is the validation authority for shader handles/stages, pipeline layout, render-pass load/store/clear state, vertex-buffer usage and draw preconditions
+- `RenderRhiTest` covers the new neutral contract and deterministic logging
+- S17C-A implementation SHA: `28c303d4859b7b6fdce3380e23fcab68aa84c731`
+- Vulkan capability flags remain buffers/textures only until S17C-B implements the new operations for real
+
 Still required before declaring Stage 3 complete:
 
-- command-list lifecycle through `VulkanGpuDevice`
-- render-pass state and real Vulkan recording
-- pipeline creation/destruction and draw submission
-- vertex-buffer binding and draw validation
+- real Vulkan shader-module creation/destruction
+- real Vulkan graphics-pipeline creation/destruction for the S17C-A neutral contract
+- command-list lifecycle and dynamic-rendering command recording through `VulkanGpuDevice`
+- vertex-buffer binding and real draw submission
 - reconcile neutral surface / swapchain / frame methods with the accepted per-session `VulkanSurfaceSession` ownership model without duplicating Vulkan ownership
-- destruction/lifetime handling for resources referenced by submitted command work
+- explicit submitted-resource lifetime rule and cleanup/error rollback
 - focused Windows acceptance of the complete Vulkan `GpuDevice` contract with zero final ownership
 
 ## Stage 4 Acceleration Direction
@@ -69,13 +81,13 @@ Do not add text/vector work until the Stage 4 primitive renderer is coherent.
 
 ## Recovery Log
 
-BASE: `dbd76e60ef090ca440461b8d3e7a1ab0f2a96e39`
-TASK: `TASK-008A1-S17C` Vulkan `GpuDevice` Stage-3 convergence/closure
-TOUCHED: status checkpoint only: `docs/ACTIVE_WORK.md`; S17C production files not yet changed
-STATUS: S17B-R1 accepted on Windows; S17C inspection/implementation is next
-PUBLISHED: S17B `07e7870ae91316305f84a9fdc32b7488fd37eb3a`; R1 `6d36c102dcc30b79bf61156a1aec2d77bd598ecc`
-VALIDATION: S17B-R1 PASS — Debug 4/4, Release 2/2, named regressions pass, Vulkan validation 0/0, final ownership zero
+BASE: `3eb5fbdca12b06bd04258f116ede95b1bafbaffd`
+TASK: `TASK-008A1-S17C-A` neutral graphics contract completion; continuing with `TASK-008A1-S17C-B`
+TOUCHED: `render/RenderRhi/RenderRhi.h`, `render/RenderRhi/RenderRhi.cpp`, `render/RenderNull/RenderNull.h`, `render/RenderNull/RenderNull.cpp`, `tests/RenderRhiTest/main.cpp`, then status-only `docs/ACTIVE_WORK.md`
+STATUS: S17C-A published and source-reviewed; S17C-B Vulkan implementation active
+PUBLISHED: S17C-A `28c303d4859b7b6fdce3380e23fcab68aa84c731`
+VALIDATION: source review complete; Windows/platform validation pending and will be included in the meaningful S17C acceptance checkpoint
 
 ## Next Action
 
-Refresh current `main`, inspect the complete neutral `GpuDevice`/`RenderNull` contract plus accepted Vulkan surface/swapchain/frame/session implementation, then implement S17C in larger coherent publishable checkpoints. Preserve `VulkanSurfaceSession` as the Vulkan ownership authority; `VulkanGpuDevice` must borrow and converge with it rather than create duplicate runtime/device/swapchain state. Do not declare Stage 3 complete until the full neutral contract is implemented coherently and Windows-validated.
+Implement S17C-B against current `main`: preserve `VulkanSurfaceSession` as the Vulkan surface/swapchain/frame ownership authority, add real shader/pipeline/command/draw support to `VulkanGpuDevice`, converge neutral surface/swapchain/frame handles onto the borrowed session rather than creating duplicate Vulkan state, use a correctness-first submitted-resource lifetime rule, add focused full-contract Vulkan coverage, then hand the complete S17C checkpoint to Gary for Windows acceptance. Do not declare Stage 3 complete until that validation passes.
