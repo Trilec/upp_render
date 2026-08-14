@@ -31,6 +31,9 @@ public:
 	GpuResult BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out) override;
 	GpuResult Present(GpuFrameId frame) override;
 
+	GpuResult CreateShader(const GpuShaderDesc& desc, GpuShaderId& out) override;
+	GpuResult DestroyShader(GpuShaderId id) override;
+
 	GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) override;
 	GpuResult DestroyPipeline(GpuPipelineId id) override;
 
@@ -80,6 +83,11 @@ private:
 		bool presented = false;
 	};
 
+	struct ShaderState : Moveable<ShaderState> {
+		GpuShaderDesc desc;
+		bool alive = true;
+	};
+
 	struct CommandState : Moveable<CommandState> {
 		bool begun = false;
 		bool render_pass_active = false;
@@ -104,6 +112,7 @@ private:
 	int next_surface_id = 1;
 	int next_swapchain_id = 1;
 	int next_frame_id = 1;
+	int next_shader_id = 1;
 	int next_pipeline_id = 1;
 	int next_command_list_id = 1;
 	VectorMap<int, SurfaceState> surfaces;
@@ -111,6 +120,7 @@ private:
 	VectorMap<int, FrameState> frames;
 	VectorMap<int, BufferState> buffers;
 	VectorMap<int, TextureState> textures;
+	VectorMap<int, ShaderState> shaders;
 	VectorMap<int, PipelineState> pipelines;
 	VectorMap<int, CommandState> command_lists;
 	Vector<String> log;
@@ -123,6 +133,7 @@ private:
 	bool CheckFrameExists(GpuFrameId id) const;
 	bool CheckBufferExists(GpuBufferId id) const;
 	bool CheckTextureExists(GpuTextureId id) const;
+	bool CheckShaderExists(GpuShaderId id) const;
 	bool CheckPipelineExists(GpuPipelineId id) const;
 	TextureState *FindTextureState(GpuTextureId id);
 	const TextureState *FindTextureState(GpuTextureId id) const;
@@ -130,6 +141,8 @@ private:
 	const SwapchainState *FindSwapchainState(GpuSwapchainId id) const;
 	FrameState *FindFrameState(GpuFrameId id);
 	const FrameState *FindFrameState(GpuFrameId id) const;
+	ShaderState *FindShaderState(GpuShaderId id);
+	const ShaderState *FindShaderState(GpuShaderId id) const;
 	CommandState *FindCommandState(GpuCommandListId id);
 	const CommandState *FindCommandState(GpuCommandListId id) const;
 	bool CanUseCommandList(GpuCommandListId id, const CommandState*& out_state, String& reason) const;

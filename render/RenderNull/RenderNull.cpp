@@ -1,5 +1,7 @@
 #include "RenderNull.h"
 
+#include <cmath>
+
 namespace Upp {
 
 static bool IsValidTopology(GpuPrimitiveTopology topology)
@@ -10,6 +12,67 @@ static bool IsValidTopology(GpuPrimitiveTopology topology)
 		return true;
 	}
 	return false;
+}
+
+static bool IsValidShaderStage(GpuShaderStage stage)
+{
+	switch(stage) {
+	case GpuShaderStage::Vertex:
+	case GpuShaderStage::Fragment:
+		return true;
+	case GpuShaderStage::Unknown:
+		return false;
+	}
+	return false;
+}
+
+static bool IsValidShaderFormat(GpuShaderFormat format)
+{
+	return format == GpuShaderFormat::SpirV;
+}
+
+static bool IsValidVertexLayout(GpuVertexLayout layout)
+{
+	return layout == GpuVertexLayout::Position2Color4F;
+}
+
+static bool IsValidLoadOp(GpuLoadOp op)
+{
+	switch(op) {
+	case GpuLoadOp::Load:
+	case GpuLoadOp::Clear:
+	case GpuLoadOp::DontCare:
+		return true;
+	}
+	return false;
+}
+
+static bool IsValidStoreOp(GpuStoreOp op)
+{
+	switch(op) {
+	case GpuStoreOp::Store:
+	case GpuStoreOp::DontCare:
+		return true;
+	}
+	return false;
+}
+
+static bool IsFiniteClearColor(const GpuClearColor& color)
+{
+	return std::isfinite(color.red) && std::isfinite(color.green) &&
+	       std::isfinite(color.blue) && std::isfinite(color.alpha);
+}
+
+static bool HasSpirVMagic(const String& code)
+{
+	if(code.GetCount() < 4 || (code.GetCount() & 3) != 0)
+		return false;
+	const byte *p = reinterpret_cast<const byte *>(code.Begin());
+	const uint32 magic = (uint32)p[0] |
+	                     ((uint32)p[1] << 8) |
+	                     ((uint32)p[2] << 16) |
+	                     ((uint32)p[3] << 24);
+	return magic == 0x07230203u;
 }
 
 static int BytesPerPixel(GpuFormat format)
@@ -60,7 +123,8 @@ NullGpuDevice::NullGpuDevice(const GpuDeviceDesc& desc)
 	adapter_info.device_id = device_id;
 	adapter_info.backend_kind = GpuBackendKind::Null;
 	adapter_info.name = desc.label.IsEmpty() ? "NullGpuDevice" : desc.label;
-	adapter_info.capability_flags = GpuCapability_Buffers | GpuCapability_Textures | GpuCapability_RenderPass | GpuCapability_Pipelines;
+	adapter_info.capability_flags = GpuCapability_Buffers | GpuCapability_Textures | GpuCapability_RenderPass |
+	                                GpuCapability_Pipelines | GpuCapability_Shaders;
 	AppendLog("CreateDevice id=" + device_id.Dump() + " backend=" + DumpGpuBackendKind(GetBackendKind()));
 }
 
@@ -99,6 +163,11 @@ bool NullGpuDevice::CheckFrameExists(GpuFrameId id) const
 	return id.IsValid() && frames.Find(id.value) >= 0;
 }
 
+bool NullGpuDevice::CheckShaderExists(GpuShaderId id) const
+{
+	return id.IsValid() && shaders.Find(id.value) >= 0;
+}
+
 NullGpuDevice::TextureState *NullGpuDevice::FindTextureState(GpuTextureId id)
 {
 	int index = textures.Find(id.value);
@@ -133,6 +202,18 @@ const NullGpuDevice::FrameState *NullGpuDevice::FindFrameState(GpuFrameId id) co
 {
 	int index = frames.Find(id.value);
 	return index >= 0 ? &frames[index] : nullptr;
+}
+
+NullGpuDevice::ShaderState *NullGpuDevice::FindShaderState(GpuShaderId id)
+{
+	int index = shaders.Find(id.value);
+	return index >= 0 ? &shaders[index] : nullptr;
+}
+
+const NullGpuDevice::ShaderState *NullGpuDevice::FindShaderState(GpuShaderId id) const
+{
+	int index = shaders.Find(id.value);
+	return index >= 0 ? &shaders[index] : nullptr;
 }
 
 bool NullGpuDevice::CheckPipelineExists(GpuPipelineId id) const
@@ -531,16 +612,72 @@ GpuResult NullGpuDevice::Present(GpuFrameId frame)
 	return GpuResult::Ok;
 }
 
+GpuResult NullGpuDevice::CreateShader(const GpuShaderDesc& desc, GpuShaderId& out)
+{
+	out = GpuShaderId();
+	if(!IsValidShaderStage(desc.stage)) {
+		Fail("CreateShader stage=" + DumpGpuShaderStage(desc.stage) + " reason=invalid_stage");
+		return GpuResult::InvalidArgument;
+	}
+	if(!IsValidShaderFormat(desc.format)) {
+		Fail("CreateShader format=" + DumpGpuShaderFormat(desc.format) + " reason=invalid_format");
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.entry_point.IsEmpty()) {
+		Fail("CreateShader stage=" + DumpGpuShaderStage(desc.stage) + " reason=empty_entry_point");
+		return GpuResult::InvalidArgument;
+	}
+	if(!HasSpirVMagic(desc.code)) {
+		Fail("CreateShader stage=" + DumpGpuShaderStage(desc.stage) + " format=" + DumpGpuShaderFormat(desc.format) + " reason=invalid_spirv");
+		return GpuResult::InvalidArgument;
+	}
+	GpuShaderId id;
+	id.value = next_shader_id++;
+	ShaderState& state = shaders.Add(id.value, ShaderState());
+	state.desc = desc;
+	state.alive = true;
+	out = id;
+	AppendLog("CreateShader id=" + id.Dump() + " stage=" + DumpGpuShaderStage(desc.stage) +
+	          " format=" + DumpGpuShaderFormat(desc.format) + " bytes=" + AsString(desc.code.GetCount()) +
+	          " entry=" + desc.entry_point);
+	return GpuResult::Ok;
+}
+
+GpuResult NullGpuDevice::DestroyShader(GpuShaderId id)
+{
+	int index = shaders.Find(id.value);
+	if(!id.IsValid() || index < 0) {
+		Fail("DestroyShader id=" + id.Dump() + " reason=unknown");
+		return GpuResult::InvalidHandle;
+	}
+	shaders.Remove(index);
+	AppendLog("DestroyShader id=" + id.Dump());
+	return GpuResult::Ok;
+}
+
 GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out)
 {
+	out = GpuPipelineId();
 	if(desc.color_format == GpuFormat::Unknown) {
 		Fail("CreatePipeline format=Unknown reason=invalid_format");
-		out = GpuPipelineId();
 		return GpuResult::InvalidArgument;
 	}
 	if(!IsValidTopology(desc.topology)) {
-		Fail("CreatePipeline topology=Invalid reason=invalid_topology");
-		out = GpuPipelineId();
+		Fail("CreatePipeline topology=" + DumpGpuPrimitiveTopology(desc.topology) + " reason=invalid_topology");
+		return GpuResult::InvalidArgument;
+	}
+	if(!IsValidVertexLayout(desc.vertex_layout)) {
+		Fail("CreatePipeline layout=" + DumpGpuVertexLayout(desc.vertex_layout) + " reason=invalid_vertex_layout");
+		return GpuResult::InvalidArgument;
+	}
+	if(!CheckShaderExists(desc.vertex_shader) || !CheckShaderExists(desc.fragment_shader)) {
+		Fail("CreatePipeline vertex=" + desc.vertex_shader.Dump() + " fragment=" + desc.fragment_shader.Dump() + " reason=unknown_shader");
+		return GpuResult::InvalidHandle;
+	}
+	const ShaderState *vertex = FindShaderState(desc.vertex_shader);
+	const ShaderState *fragment = FindShaderState(desc.fragment_shader);
+	if(!vertex || vertex->desc.stage != GpuShaderStage::Vertex || !fragment || fragment->desc.stage != GpuShaderStage::Fragment) {
+		Fail("CreatePipeline vertex=" + desc.vertex_shader.Dump() + " fragment=" + desc.fragment_shader.Dump() + " reason=shader_stage_mismatch");
 		return GpuResult::InvalidArgument;
 	}
 	GpuPipelineId id;
@@ -549,7 +686,9 @@ GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeline
 	state.desc = desc;
 	state.alive = true;
 	out = id;
-	AppendLog("CreatePipeline id=" + id.Dump() + " topology=" + DumpGpuPrimitiveTopology(desc.topology) + " format=" + DumpGpuFormat(desc.color_format));
+	AppendLog("CreatePipeline id=" + id.Dump() + " topology=" + DumpGpuPrimitiveTopology(desc.topology) +
+	          " format=" + DumpGpuFormat(desc.color_format) + " vertex=" + desc.vertex_shader.Dump() +
+	          " fragment=" + desc.fragment_shader.Dump() + " layout=" + DumpGpuVertexLayout(desc.vertex_layout));
 	return GpuResult::Ok;
 }
 
@@ -605,6 +744,15 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 		Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " reason=unknown_texture");
 		return GpuResult::InvalidHandle;
 	}
+	if(!IsValidLoadOp(desc.color_load) || !IsValidStoreOp(desc.color_store)) {
+		Fail("BeginRenderPass list=" + list.Dump() + " load=" + DumpGpuLoadOp(desc.color_load) +
+		     " store=" + DumpGpuStoreOp(desc.color_store) + " reason=invalid_load_store");
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.color_load == GpuLoadOp::Clear && !IsFiniteClearColor(desc.clear_color)) {
+		Fail("BeginRenderPass list=" + list.Dump() + " reason=non_finite_clear_color");
+		return GpuResult::InvalidArgument;
+	}
 	const TextureState *texture = FindTextureState(desc.color_target);
 	if(texture && texture->swapchain_backbuffer) {
 		SwapchainState *swapchain = FindSwapchainState(texture->owner_swapchain);
@@ -613,6 +761,10 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 			Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " reason=backbuffer_not_active");
 			return GpuResult::InvalidState;
 		}
+	}
+	if(!texture || (texture->desc.usage & GpuTextureUsage_ColorAttachment) == 0) {
+		Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " reason=not_color_attachment");
+		return GpuResult::InvalidArgument;
 	}
 	if(desc.color_format == GpuFormat::Unknown || desc.color_format != texture->desc.format) {
 		Fail("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " format=" + DumpGpuFormat(desc.color_format) + " reason=format_mismatch");
@@ -623,7 +775,8 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 	mutable_state.pipeline = GpuPipelineId();
 	mutable_state.vertex_buffer = GpuBufferId();
 	mutable_state.draw_count = 0;
-	AppendLog("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " color_format=" + DumpGpuFormat(desc.color_format) + " load=" + DumpGpuLoadOp(desc.color_load) + " store=" + DumpGpuStoreOp(desc.color_store));
+	AppendLog("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " color_format=" + DumpGpuFormat(desc.color_format) +
+	          " load=" + DumpGpuLoadOp(desc.color_load) + " store=" + DumpGpuStoreOp(desc.color_store));
 	return GpuResult::Ok;
 }
 
@@ -671,6 +824,11 @@ GpuResult NullGpuDevice::SetVertexBuffer(GpuCommandListId list, GpuBufferId buff
 		Fail("SetVertexBuffer list=" + list.Dump() + " buffer=" + buffer.Dump() + " reason=unknown_buffer");
 		return GpuResult::InvalidHandle;
 	}
+	const BufferState& buffer_state = buffers[buffers.Find(buffer.value)];
+	if((buffer_state.desc.usage & GpuBufferUsage_Vertex) == 0) {
+		Fail("SetVertexBuffer list=" + list.Dump() + " buffer=" + buffer.Dump() + " reason=missing_vertex_usage");
+		return GpuResult::InvalidArgument;
+	}
 	mutable_state.vertex_buffer = buffer;
 	AppendLog("SetVertexBuffer list=" + list.Dump() + " buffer=" + buffer.Dump());
 	return GpuResult::Ok;
@@ -693,11 +851,19 @@ GpuResult NullGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first
 		Fail("Draw list=" + list.Dump() + " reason=pipeline_required");
 		return GpuResult::InvalidState;
 	}
-	if(vertex_count <= 0) {
-		Fail("Draw list=" + list.Dump() + " reason=invalid_vertex_count");
+	if(!CheckPipelineExists(mutable_state.pipeline)) {
+		Fail("Draw list=" + list.Dump() + " pipeline=" + mutable_state.pipeline.Dump() + " reason=unknown_pipeline");
+		return GpuResult::InvalidHandle;
+	}
+	if(vertex_count <= 0 || first_vertex < 0) {
+		Fail("Draw list=" + list.Dump() + " vertices=" + AsString(vertex_count) + " first=" + AsString(first_vertex) + " reason=invalid_vertex_range");
 		return GpuResult::InvalidArgument;
 	}
-	if(mutable_state.vertex_buffer.IsValid() && !CheckBufferExists(mutable_state.vertex_buffer)) {
+	if(!mutable_state.vertex_buffer.IsValid()) {
+		Fail("Draw list=" + list.Dump() + " reason=vertex_buffer_required");
+		return GpuResult::InvalidState;
+	}
+	if(!CheckBufferExists(mutable_state.vertex_buffer)) {
 		Fail("Draw list=" + list.Dump() + " buffer=" + mutable_state.vertex_buffer.Dump() + " reason=unknown_vertex_buffer");
 		return GpuResult::InvalidHandle;
 	}

@@ -1,6 +1,8 @@
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderNull/RenderNull.h>
 
+#include <limits>
+
 using namespace Upp;
 
 static bool Check(bool cond, const char *msg)
@@ -63,17 +65,60 @@ static GpuRenderPassDesc MakeRenderPassDesc(GpuTextureId color_target, GpuLoadOp
 	desc.color_format = GpuFormat::RGBA8;
 	desc.color_load = load;
 	desc.color_store = GpuStoreOp::Store;
+	desc.clear_color.red = 0.1f;
+	desc.clear_color.green = 0.2f;
+	desc.clear_color.blue = 0.3f;
+	desc.clear_color.alpha = 1.0f;
 	desc.label = label;
 	return desc;
 }
 
-static GpuPipelineDesc MakePipelineDesc()
+static String MakeSpirVStub()
+{
+	static const byte data[] = {
+		0x03, 0x02, 0x23, 0x07,
+		0x00, 0x00, 0x01, 0x00,
+	};
+	String out;
+	out.Cat(reinterpret_cast<const char *>(data), (int)sizeof(data));
+	return out;
+}
+
+static GpuShaderDesc MakeShaderDesc(GpuShaderStage stage)
+{
+	GpuShaderDesc desc;
+	desc.stage = stage;
+	desc.format = GpuShaderFormat::SpirV;
+	desc.code = MakeSpirVStub();
+	desc.entry_point = "main";
+	desc.label = stage == GpuShaderStage::Vertex ? "vertex" : "fragment";
+	return desc;
+}
+
+static GpuPipelineDesc MakePipelineDesc(GpuShaderId vertex_shader, GpuShaderId fragment_shader)
 {
 	GpuPipelineDesc desc;
 	desc.topology = GpuPrimitiveTopology::TriangleList;
 	desc.color_format = GpuFormat::RGBA8;
+	desc.vertex_shader = vertex_shader;
+	desc.fragment_shader = fragment_shader;
+	desc.vertex_layout = GpuVertexLayout::Position2Color4F;
 	desc.label = "basic";
 	return desc;
+}
+
+static bool CreateBasicShaders(NullGpuDevice& device, GpuShaderId& vertex_shader, GpuShaderId& fragment_shader)
+{
+	return device.CreateShader(MakeShaderDesc(GpuShaderStage::Vertex), vertex_shader) == GpuResult::Ok &&
+	       device.CreateShader(MakeShaderDesc(GpuShaderStage::Fragment), fragment_shader) == GpuResult::Ok;
+}
+
+static bool CreateBasicPipeline(NullGpuDevice& device, GpuPipelineId& pipeline)
+{
+	GpuShaderId vertex_shader, fragment_shader;
+	if(!CreateBasicShaders(device, vertex_shader, fragment_shader))
+		return false;
+	return device.CreatePipeline(MakePipelineDesc(vertex_shader, fragment_shader), pipeline) == GpuResult::Ok;
 }
 
 static bool TestHandles()
@@ -106,6 +151,9 @@ static bool TestHandles()
 	       Check(win32_window.IsValid(), "win32 native window should be valid") &&
 	       Check(DumpGpuNativeWindowDesc(none_window).Find("handle=unset") >= 0, "native window dump should redact handle") &&
 	       Check(DumpGpuNativeWindowDesc(win32_window).Find("handle=set") >= 0, "win32 native window dump should redact handle") &&
+	       Check(DumpGpuShaderStage(GpuShaderStage::Vertex) == "Vertex", "shader stage dump deterministic") &&
+	       Check(DumpGpuShaderFormat(GpuShaderFormat::SpirV) == "SpirV", "shader format dump deterministic") &&
+	       Check(DumpGpuVertexLayout(GpuVertexLayout::Position2Color4F) == "Position2Color4F", "vertex layout dump deterministic") &&
 	       Check(buffer.Dump() == "Buffer#0", "buffer dump deterministic");
 }
 
@@ -190,7 +238,7 @@ static bool TestFrameLifecycle(NullGpuDevice& device)
 
 	GpuPipelineId pipeline;
 	GpuBufferId buffer;
-	if(!Check(device.CreatePipeline(MakePipelineDesc(), pipeline) == GpuResult::Ok, "frame pipeline should create")) return false;
+	if(!Check(CreateBasicPipeline(device, pipeline), "frame pipeline should create")) return false;
 	if(!Check(device.CreateBuffer(MakeVertexBufferDesc(64), buffer) == GpuResult::Ok, "frame buffer should create")) return false;
 
 	GpuCommandListId list;
@@ -286,21 +334,76 @@ static bool TestResourceUploads(NullGpuDevice& device)
 	return true;
 }
 
+static bool TestShaderLifecycle(NullGpuDevice& device)
+{
+	GpuShaderId vertex, fragment;
+	if(!Check(device.CreateShader(MakeShaderDesc(GpuShaderStage::Vertex), vertex) == GpuResult::Ok, "vertex shader create should succeed")) return false;
+	if(!Check(device.CreateShader(MakeShaderDesc(GpuShaderStage::Fragment), fragment) == GpuResult::Ok, "fragment shader create should succeed")) return false;
+	if(!Check(vertex.IsValid() && fragment.IsValid(), "shader handles should be valid")) return false;
+
+	GpuShaderDesc bad_stage = MakeShaderDesc(GpuShaderStage::Vertex);
+	bad_stage.stage = GpuShaderStage::Unknown;
+	GpuShaderId tmp;
+	if(!Check(device.CreateShader(bad_stage, tmp) == GpuResult::InvalidArgument, "unknown shader stage should fail")) return false;
+
+	GpuShaderDesc bad_format = MakeShaderDesc(GpuShaderStage::Vertex);
+	bad_format.format = GpuShaderFormat::Unknown;
+	if(!Check(device.CreateShader(bad_format, tmp) == GpuResult::InvalidArgument, "unknown shader format should fail")) return false;
+
+	GpuShaderDesc bad_entry = MakeShaderDesc(GpuShaderStage::Vertex);
+	bad_entry.entry_point.Clear();
+	if(!Check(device.CreateShader(bad_entry, tmp) == GpuResult::InvalidArgument, "empty shader entry point should fail")) return false;
+
+	GpuShaderDesc bad_magic = MakeShaderDesc(GpuShaderStage::Vertex);
+	bad_magic.code = "bad!";
+	if(!Check(device.CreateShader(bad_magic, tmp) == GpuResult::InvalidArgument, "invalid SPIR-V magic should fail")) return false;
+
+	GpuShaderDesc bad_size = MakeShaderDesc(GpuShaderStage::Vertex);
+	bad_size.code = "abc";
+	if(!Check(device.CreateShader(bad_size, tmp) == GpuResult::InvalidArgument, "misaligned SPIR-V size should fail")) return false;
+
+	if(!Check(device.DestroyShader(vertex) == GpuResult::Ok, "shader destroy should succeed")) return false;
+	if(!Check(device.DestroyShader(vertex) == GpuResult::InvalidHandle, "double shader destroy should fail")) return false;
+	GpuShaderId unknown;
+	unknown.value = 999;
+	if(!Check(device.DestroyShader(unknown) == GpuResult::InvalidHandle, "unknown shader destroy should fail")) return false;
+	if(!Check(device.DestroyShader(fragment) == GpuResult::Ok, "fragment shader destroy should succeed")) return false;
+	return true;
+}
+
 static bool TestPipelineLifecycle(NullGpuDevice& device)
 {
+	GpuShaderId vertex, fragment;
+	if(!Check(CreateBasicShaders(device, vertex, fragment), "pipeline shaders should create")) return false;
+	GpuPipelineDesc valid = MakePipelineDesc(vertex, fragment);
 	GpuPipelineId pipeline;
-	if(!Check(device.CreatePipeline(MakePipelineDesc(), pipeline) == GpuResult::Ok, "pipeline create should succeed")) return false;
+	if(!Check(device.CreatePipeline(valid, pipeline) == GpuResult::Ok, "pipeline create should succeed")) return false;
 	if(!Check(pipeline.IsValid(), "created pipeline valid")) return false;
 
-	GpuPipelineDesc bad_format = MakePipelineDesc();
+	GpuPipelineDesc bad_format = valid;
 	bad_format.color_format = GpuFormat::Unknown;
 	GpuPipelineId tmp;
 	if(!Check(device.CreatePipeline(bad_format, tmp) == GpuResult::InvalidArgument, "unknown format pipeline should fail")) return false;
 
-	GpuPipelineDesc bad_topology = MakePipelineDesc();
+	GpuPipelineDesc bad_topology = valid;
 	bad_topology.topology = static_cast<GpuPrimitiveTopology>(99);
 	if(!Check(device.CreatePipeline(bad_topology, tmp) == GpuResult::InvalidArgument, "invalid topology pipeline should fail")) return false;
 
+	GpuPipelineDesc bad_layout = valid;
+	bad_layout.vertex_layout = GpuVertexLayout::Unknown;
+	if(!Check(device.CreatePipeline(bad_layout, tmp) == GpuResult::InvalidArgument, "unknown vertex layout should fail")) return false;
+
+	GpuPipelineDesc missing_shader = valid;
+	missing_shader.vertex_shader = GpuShaderId();
+	if(!Check(device.CreatePipeline(missing_shader, tmp) == GpuResult::InvalidHandle, "missing pipeline shader should fail")) return false;
+
+	GpuPipelineDesc swapped_stages = valid;
+	swapped_stages.vertex_shader = fragment;
+	swapped_stages.fragment_shader = vertex;
+	if(!Check(device.CreatePipeline(swapped_stages, tmp) == GpuResult::InvalidArgument, "shader stage mismatch should fail")) return false;
+
+	if(!Check(device.DestroyShader(vertex) == GpuResult::Ok, "pipeline source vertex shader may be destroyed after pipeline creation")) return false;
+	if(!Check(device.DestroyShader(fragment) == GpuResult::Ok, "pipeline source fragment shader may be destroyed after pipeline creation")) return false;
 	if(!Check(device.DestroyPipeline(pipeline) == GpuResult::Ok, "pipeline destroy should succeed")) return false;
 	if(!Check(device.DestroyPipeline(pipeline) == GpuResult::InvalidHandle, "double pipeline destroy should fail")) return false;
 	GpuPipelineId unknown_pipeline;
@@ -315,7 +418,7 @@ static bool TestCommandStateValidation(NullGpuDevice& device)
 	GpuPipelineId pipeline;
 	GpuBufferId buffer;
 	if(!Check(device.CreateTexture(MakeTextureDesc(Size(16, 16)), texture) == GpuResult::Ok, "setup texture should create")) return false;
-	if(!Check(device.CreatePipeline(MakePipelineDesc(), pipeline) == GpuResult::Ok, "setup pipeline should create")) return false;
+	if(!Check(CreateBasicPipeline(device, pipeline), "setup pipeline should create")) return false;
 	if(!Check(device.CreateBuffer(MakeVertexBufferDesc(64), buffer) == GpuResult::Ok, "setup buffer should create")) return false;
 
 	GpuCommandListId list;
@@ -345,18 +448,40 @@ static bool TestRecordingGuards(NullGpuDevice& device)
 {
 	GpuTextureId texture;
 	GpuPipelineId pipeline;
+	GpuBufferId vertex_buffer;
 	if(!Check(device.CreateTexture(MakeTextureDesc(Size(8, 8)), texture) == GpuResult::Ok, "guard texture should create")) return false;
-	if(!Check(device.CreatePipeline(MakePipelineDesc(), pipeline) == GpuResult::Ok, "guard pipeline should create")) return false;
+	if(!Check(CreateBasicPipeline(device, pipeline), "guard pipeline should create")) return false;
+	if(!Check(device.CreateBuffer(MakeVertexBufferDesc(64), vertex_buffer) == GpuResult::Ok, "guard vertex buffer should create")) return false;
+
+	GpuBufferDesc non_vertex_desc;
+	non_vertex_desc.size = 64;
+	non_vertex_desc.usage = GpuBufferUsage_Uniform;
+	GpuBufferId non_vertex;
+	if(!Check(device.CreateBuffer(non_vertex_desc, non_vertex) == GpuResult::Ok, "non-vertex buffer should create")) return false;
 
 	GpuCommandListId list;
 	if(!Check(device.BeginCommands(list) == GpuResult::Ok, "guard begin commands should succeed")) return false;
 	if(!Check(device.SetPipeline(list, pipeline) == GpuResult::InvalidState, "set pipeline outside render pass fails")) return false;
 	if(!Check(device.Draw(list, 3, 0) == GpuResult::InvalidState, "draw outside render pass fails")) return false;
 
+	GpuRenderPassDesc bad_load = MakeRenderPassDesc(texture, GpuLoadOp::Load, "bad-load");
+	bad_load.color_load = static_cast<GpuLoadOp>(99);
+	if(!Check(device.BeginRenderPass(list, bad_load) == GpuResult::InvalidArgument, "invalid load op should fail")) return false;
+	GpuRenderPassDesc bad_store = MakeRenderPassDesc(texture, GpuLoadOp::Load, "bad-store");
+	bad_store.color_store = static_cast<GpuStoreOp>(99);
+	if(!Check(device.BeginRenderPass(list, bad_store) == GpuResult::InvalidArgument, "invalid store op should fail")) return false;
+	GpuRenderPassDesc bad_clear = MakeRenderPassDesc(texture, GpuLoadOp::Clear, "bad-clear");
+	bad_clear.clear_color.red = std::numeric_limits<float>::quiet_NaN();
+	if(!Check(device.BeginRenderPass(list, bad_clear) == GpuResult::InvalidArgument, "non-finite clear color should fail")) return false;
+
 	if(!Check(device.BeginRenderPass(list, MakeRenderPassDesc(texture, GpuLoadOp::Load, "guard")) == GpuResult::Ok, "guard begin render pass should succeed")) return false;
-	if(!Check(device.Draw(list, 0, 0) == GpuResult::InvalidState, "draw without pipeline fails")) return false;
+	if(!Check(device.Draw(list, 3, 0) == GpuResult::InvalidState, "draw without pipeline fails")) return false;
 	if(!Check(device.SetPipeline(list, pipeline) == GpuResult::Ok, "guard set pipeline should succeed")) return false;
+	if(!Check(device.Draw(list, 3, 0) == GpuResult::InvalidState, "draw without vertex buffer fails")) return false;
+	if(!Check(device.SetVertexBuffer(list, non_vertex) == GpuResult::InvalidArgument, "non-vertex usage buffer should fail binding")) return false;
+	if(!Check(device.SetVertexBuffer(list, vertex_buffer) == GpuResult::Ok, "guard vertex buffer should bind")) return false;
 	if(!Check(device.Draw(list, 0, 0) == GpuResult::InvalidArgument, "draw with zero vertices fails")) return false;
+	if(!Check(device.Draw(list, 3, -1) == GpuResult::InvalidArgument, "draw with negative first vertex fails")) return false;
 	if(!Check(device.Draw(list, 3, 0) == GpuResult::Ok, "guard draw should succeed")) return false;
 	if(!Check(device.EndRenderPass(list) == GpuResult::Ok, "guard end render pass should succeed")) return false;
 	if(!Check(device.EndCommands(list) == GpuResult::Ok, "guard end commands should succeed")) return false;
@@ -376,7 +501,7 @@ static String RunFullSequence()
 	device.CreateSurface(MakeSurfaceDesc(Size(640, 480)), surface);
 	device.CreateSwapchain(MakeSwapchainDesc(surface, Size(640, 480)), swapchain);
 	device.BeginFrame(swapchain, frame);
-	device.CreatePipeline(MakePipelineDesc(), pipeline);
+	CreateBasicPipeline(device, pipeline);
 	device.CreateBuffer(MakeVertexBufferDesc(128), buffer);
 	device.BeginCommands(list);
 	device.BeginRenderPass(list, MakeRenderPassDesc(frame.color_target, GpuLoadOp::Clear, "frame"));
@@ -398,6 +523,7 @@ static bool TestDeterministicLog()
 	String b = RunFullSequence();
 	if(!Check(a == b, "identical sequences should match")) return false;
 	if(!Check(a.Find("CreateSurface") >= 0, "log should contain surface creation")) return false;
+	if(!Check(a.Find("CreateShader") >= 0, "log should contain shader creation")) return false;
 	if(!Check(a.Find("BeginFrame") >= 0, "log should contain begin frame")) return false;
 	if(!Check(a.Find("Present frame=") >= 0, "log should contain present")) return false;
 	return true;
@@ -423,10 +549,12 @@ CONSOLE_APP_MAIN
 	ok &= Check(device.GetBackendKind() == GpuBackendKind::Null, "backend kind should be null");
 	ok &= Check(device.GetDeviceId().IsValid(), "device id should be valid");
 	ok &= Check(device.GetAdapterInfo().adapter_id.IsValid(), "adapter id should be valid");
+	ok &= Check((device.GetAdapterInfo().capability_flags & GpuCapability_Shaders) != 0, "null backend should advertise shader capability");
 	ok &= TestSurfaceLifecycle(device);
 	ok &= TestSwapchainLifecycle(device);
 	ok &= TestFrameLifecycle(device);
 	ok &= TestResourceUploads(device);
+	ok &= TestShaderLifecycle(device);
 	ok &= TestPipelineLifecycle(device);
 	ok &= TestCommandStateValidation(device);
 	ok &= TestRecordingGuards(device);

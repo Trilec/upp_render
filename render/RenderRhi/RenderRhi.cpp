@@ -111,7 +111,7 @@ String DumpGpuLoadOp(GpuLoadOp op)
 	case GpuLoadOp::Clear: return "Clear";
 	case GpuLoadOp::DontCare: return "DontCare";
 	}
-	return "Load";
+	return String("Unknown(") + AsString((int)op) + ")";
 }
 
 String DumpGpuStoreOp(GpuStoreOp op)
@@ -120,7 +120,7 @@ String DumpGpuStoreOp(GpuStoreOp op)
 	case GpuStoreOp::Store: return "Store";
 	case GpuStoreOp::DontCare: return "DontCare";
 	}
-	return "Store";
+	return String("Unknown(") + AsString((int)op) + ")";
 }
 
 String DumpGpuPrimitiveTopology(GpuPrimitiveTopology topology)
@@ -129,14 +129,43 @@ String DumpGpuPrimitiveTopology(GpuPrimitiveTopology topology)
 	case GpuPrimitiveTopology::TriangleList: return "TriangleList";
 	case GpuPrimitiveTopology::LineList: return "LineList";
 	}
-	return "TriangleList";
+	return String("Unknown(") + AsString((int)topology) + ")";
+}
+
+String DumpGpuShaderStage(GpuShaderStage stage)
+{
+	switch(stage) {
+	case GpuShaderStage::Unknown: return "Unknown";
+	case GpuShaderStage::Vertex: return "Vertex";
+	case GpuShaderStage::Fragment: return "Fragment";
+	}
+	return String("Unknown(") + AsString((int)stage) + ")";
+}
+
+String DumpGpuShaderFormat(GpuShaderFormat format)
+{
+	switch(format) {
+	case GpuShaderFormat::Unknown: return "Unknown";
+	case GpuShaderFormat::SpirV: return "SpirV";
+	}
+	return String("Unknown(") + AsString((int)format) + ")";
+}
+
+String DumpGpuVertexLayout(GpuVertexLayout layout)
+{
+	switch(layout) {
+	case GpuVertexLayout::Unknown: return "Unknown";
+	case GpuVertexLayout::Position2Color4F: return "Position2Color4F";
+	}
+	return String("Unknown(") + AsString((int)layout) + ")";
 }
 
 String DumpGpuCapabilityFlags(int flags)
 {
-	static const char *const names[] = { "Buffers", "Textures", "RenderPass", "Pipelines" };
-	static const int bits[] = { GpuCapability_Buffers, GpuCapability_Textures, GpuCapability_RenderPass, GpuCapability_Pipelines };
-	return DumpFlags(flags, names, bits, 4);
+	static const char *const names[] = { "Buffers", "Textures", "RenderPass", "Pipelines", "Shaders" };
+	static const int bits[] = { GpuCapability_Buffers, GpuCapability_Textures, GpuCapability_RenderPass,
+		GpuCapability_Pipelines, GpuCapability_Shaders };
+	return DumpFlags(flags, names, bits, 5);
 }
 
 String DumpGpuResult(GpuResult result)

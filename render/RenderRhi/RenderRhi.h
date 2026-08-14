@@ -60,12 +60,29 @@ enum class GpuPrimitiveTopology {
 	LineList,
 };
 
+enum class GpuShaderStage {
+	Unknown,
+	Vertex,
+	Fragment,
+};
+
+enum class GpuShaderFormat {
+	Unknown,
+	SpirV,
+};
+
+enum class GpuVertexLayout {
+	Unknown,
+	Position2Color4F,
+};
+
 enum GpuCapabilityFlags {
 	GpuCapability_None = 0,
 	GpuCapability_Buffers = 1 << 0,
 	GpuCapability_Textures = 1 << 1,
 	GpuCapability_RenderPass = 1 << 2,
 	GpuCapability_Pipelines = 1 << 3,
+	GpuCapability_Shaders = 1 << 4,
 };
 
 enum class GpuResult {
@@ -141,17 +158,36 @@ struct GpuTextureWriteDesc : Moveable<GpuTextureWriteDesc> {
 	int64 row_pitch = 0;
 };
 
+struct GpuShaderDesc : Moveable<GpuShaderDesc> {
+	GpuShaderStage stage = GpuShaderStage::Unknown;
+	GpuShaderFormat format = GpuShaderFormat::Unknown;
+	String code;
+	String entry_point = "main";
+	String label;
+};
+
+struct GpuClearColor : Moveable<GpuClearColor> {
+	float red = 0.0f;
+	float green = 0.0f;
+	float blue = 0.0f;
+	float alpha = 1.0f;
+};
+
 struct GpuRenderPassDesc : Moveable<GpuRenderPassDesc> {
 	GpuTextureId color_target;
 	GpuFormat color_format = GpuFormat::Unknown;
 	GpuLoadOp color_load = GpuLoadOp::Load;
 	GpuStoreOp color_store = GpuStoreOp::Store;
+	GpuClearColor clear_color;
 	String label;
 };
 
 struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	GpuPrimitiveTopology topology = GpuPrimitiveTopology::TriangleList;
 	GpuFormat color_format = GpuFormat::Unknown;
+	GpuShaderId vertex_shader;
+	GpuShaderId fragment_shader;
+	GpuVertexLayout vertex_layout = GpuVertexLayout::Unknown;
 	String label;
 };
 
@@ -210,6 +246,12 @@ public:
 	virtual GpuResult BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out) = 0;
 	virtual GpuResult Present(GpuFrameId frame) = 0;
 
+	virtual GpuResult CreateShader(const GpuShaderDesc&, GpuShaderId& out) {
+		out = GpuShaderId();
+		return GpuResult::Unsupported;
+	}
+	virtual GpuResult DestroyShader(GpuShaderId) { return GpuResult::Unsupported; }
+
 	virtual GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) = 0;
 	virtual GpuResult DestroyPipeline(GpuPipelineId id) = 0;
 
@@ -232,6 +274,9 @@ String DumpGpuTextureUsage(int usage);
 String DumpGpuLoadOp(GpuLoadOp op);
 String DumpGpuStoreOp(GpuStoreOp op);
 String DumpGpuPrimitiveTopology(GpuPrimitiveTopology topology);
+String DumpGpuShaderStage(GpuShaderStage stage);
+String DumpGpuShaderFormat(GpuShaderFormat format);
+String DumpGpuVertexLayout(GpuVertexLayout layout);
 String DumpGpuCapabilityFlags(int flags);
 String DumpGpuResult(GpuResult result);
 String DumpGpuError(GpuError error);
