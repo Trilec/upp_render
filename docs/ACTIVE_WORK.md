@@ -51,8 +51,12 @@ Published in S17C-B1, platform validation pending with final S17C acceptance:
 - viewport/scissor setup, pipeline binding, vertex-buffer binding and real `vkCmdDraw`
 - synchronous correctness-first queue submission; `Submit` consumes command-list ownership
 - resource destruction is refused while command work is live; shader destruction is refused while a pipeline references it
+- command-local texture layout/initialization tracking supports multiple render passes in one command list without stale bindings or image-view leaks
 - adapter capabilities now advertise buffers, textures, render passes, pipelines and shaders
 - focused `RenderVulkanGraphicsTest` with embedded deterministic SPIR-V; no shader compiler dependency
+- B1 implementation SHA: `080ba9a8ee59b64ce686365c22c9039ca5ef7b48`
+- B1-R1 correction SHA: `c0e739afde819d1c2957db91304b17f30f719003`
+- B1 publication merge on `main`: `a1e0d84eed295fc4650710aa27d1f777bd149463`
 
 Still required before declaring Stage 3 complete:
 
@@ -76,12 +80,12 @@ Do not add text/vector work until the Stage 4 primitive renderer is coherent.
 
 ## Recovery Log
 
-BASE: `5d173473daa70edd0e260253ad84f4783be4f61e` / `main`
-TASK: `TASK-008A1-S17C-B1` real Vulkan graphics command engine; continuing with `TASK-008A1-S17C-B2`
-TOUCHED: `render/RenderVulkan/RenderVulkanRhi.h`, `render/RenderVulkan/RenderVulkanRhi.cpp`, `tests/RenderVulkanGraphicsTest/RenderVulkanGraphicsTest.upp`, `tests/RenderVulkanGraphicsTest/main.cpp`, `docs/ACTIVE_WORK.md`
-STATUS: S17C-B1 implementation/source review complete; B2 session/frame convergence next
-PUBLISHED: S17C-A `28c303d4859b7b6fdce3380e23fcab68aa84c731`; S17C-B1 = this checkpoint / current HEAD
-VALIDATION: source review and whitespace checks complete; Windows/runtime/platform validation pending final S17C checkpoint
+BASE: `a1e0d84eed295fc4650710aa27d1f777bd149463` / `main`
+TASK: `TASK-008A1-S17C-B1` real Vulkan graphics command engine + multi-pass correction; continuing with `TASK-008A1-S17C-B2`
+TOUCHED: B1 — `render/RenderVulkan/RenderVulkanRhi.h`, `render/RenderVulkan/RenderVulkanRhi.cpp`, `tests/RenderVulkanGraphicsTest/RenderVulkanGraphicsTest.upp`, `tests/RenderVulkanGraphicsTest/main.cpp`; status — `docs/ACTIVE_WORK.md`
+STATUS: S17C-B1 implementation/source review published on main; B2 session/frame convergence next
+PUBLISHED: S17C-A `28c303d4859b7b6fdce3380e23fcab68aa84c731`; B1 `080ba9a8ee59b64ce686365c22c9039ca5ef7b48`; B1-R1 `c0e739afde819d1c2957db91304b17f30f719003`; main merge `a1e0d84eed295fc4650710aa27d1f777bd149463`
+VALIDATION: B1 source review and whitespace checks complete; Windows/runtime/platform validation pending final S17C checkpoint
 
 ## Next Action
 
