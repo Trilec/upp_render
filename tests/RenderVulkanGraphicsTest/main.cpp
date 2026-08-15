@@ -176,6 +176,30 @@ CONSOLE_APP_MAIN
 				ok &= Check(device.GetLiveCommandCount() == 0, "Submit should consume command-list ownership");
 			}
 
+			GpuTextureId multi_target;
+			ok &= Check(device.CreateTexture(target_desc, multi_target) == GpuResult::Ok, "multi-pass color target should create");
+			GpuCommandListId multi_commands;
+			ok &= Check(device.BeginCommands(multi_commands) == GpuResult::Ok, "multi-pass command list should begin");
+			for(int pass = 0; pass < 2; ++pass) {
+				GpuRenderPassDesc render_pass;
+				render_pass.color_target = multi_target;
+				render_pass.color_format = GpuFormat::RGBA8;
+				render_pass.color_load = pass == 0 ? GpuLoadOp::Clear : GpuLoadOp::Load;
+				render_pass.color_store = GpuStoreOp::Store;
+				ok &= Check(device.BeginRenderPass(multi_commands, render_pass) == GpuResult::Ok,
+				            "multiple render passes in one command list should preserve pending layout/initialization state");
+				if(pass == 1)
+					ok &= Check(device.Draw(multi_commands, 3) == GpuResult::InvalidState,
+					            "a later render pass must not inherit prior pipeline/vertex bindings");
+				ok &= Check(device.SetPipeline(multi_commands, pipeline) == GpuResult::Ok, "multi-pass pipeline should bind");
+				ok &= Check(device.SetVertexBuffer(multi_commands, vertex_buffer) == GpuResult::Ok, "multi-pass vertex buffer should bind");
+				ok &= Check(device.Draw(multi_commands, 3) == GpuResult::Ok, "multi-pass draw should record");
+				ok &= Check(device.EndRenderPass(multi_commands) == GpuResult::Ok, "multi-pass render pass should end");
+			}
+			ok &= Check(device.EndCommands(multi_commands) == GpuResult::Ok, "multi-pass command list should end");
+			ok &= Check(device.Submit(multi_commands) == GpuResult::Ok, "multi-pass command list should submit");
+			ok &= Check(device.DestroyTexture(multi_target) == GpuResult::Ok, "multi-pass color target should destroy");
+
 			ok &= Check(device.DestroyPipeline(pipeline) == GpuResult::Ok, "pipeline should destroy");
 			ok &= Check(device.DestroyShader(vertex_shader) == GpuResult::Ok, "vertex shader should destroy after pipeline");
 			ok &= Check(device.DestroyShader(fragment_shader) == GpuResult::Ok, "fragment shader should destroy after pipeline");

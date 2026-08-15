@@ -177,12 +177,15 @@ struct VulkanGpuDevice::Impl {
 	struct CommandState : Moveable<CommandState> {
 		VkCommandPool pool = VK_NULL_HANDLE;
 		VkCommandBuffer buffer = VK_NULL_HANDLE;
-		VkImageView target_view = VK_NULL_HANDLE;
+		Vector<VkImageView> target_views;
+		VectorMap<int, VkImageLayout> texture_layouts;
+		VectorMap<int, bool> texture_initialized;
 		GpuTextureId target;
 		GpuPipelineId pipeline;
 		GpuBufferId vertex_buffer;
 		GpuFormat color_format = GpuFormat::Unknown;
 		VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		bool store_result = false;
 		bool pass_active = false;
 		bool ended = false;
 	};
@@ -639,8 +642,9 @@ struct VulkanGpuDevice::Impl {
 
 	void DestroyCommandState(CommandState& state)
 	{
-		if(state.target_view)
-			destroy_image_view(device, state.target_view, nullptr);
+		for(VkImageView view : state.target_views)
+			if(view)
+				destroy_image_view(device, view, nullptr);
 		if(state.pool)
 			destroy_command_pool(device, state.pool, nullptr);
 		state = CommandState();
@@ -951,19 +955,33 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	Impl::CommandState& command = impl->commands[ci]; Impl::TextureState& texture = impl->textures[ti];
 	if(command.pass_active || command.ended) { impl->error = "BeginRenderPass command state is invalid"; return GpuResult::InvalidState; }
 	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format) { impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument; }
-	if(desc.color_load == GpuLoadOp::Load && !texture.initialized) { impl->error = "BeginRenderPass cannot load an uninitialized target"; return GpuResult::InvalidState; }
+	const int layout_index = command.texture_layouts.Find(desc.color_target.value);
+	const VkImageLayout current_layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture.layout;
+	const int initialized_index = command.texture_initialized.Find(desc.color_target.value);
+	const bool current_initialized = initialized_index >= 0 ? command.texture_initialized[initialized_index] : texture.initialized;
+	if(desc.color_load == GpuLoadOp::Load && !current_initialized) { impl->error = "BeginRenderPass cannot load an uninitialized target"; return GpuResult::InvalidState; }
 	VkImageViewCreateInfo vi {}; vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; vi.image = texture.image; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = ToVkFormat(texture.desc.format); vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; vi.subresourceRange.levelCount = 1; vi.subresourceRange.layerCount = 1;
-	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &command.target_view);
+	VkImageView target_view = VK_NULL_HANDLE;
+	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &target_view);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return GpuResult::InvalidState; }
-	VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(texture.layout); barrier.srcAccessMask = Access2ForLayout(texture.layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = texture.layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
-	VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	command.target_views.Add(target_view);
+	if(current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(current_layout); barrier.srcAccessMask = Access2ForLayout(current_layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = current_layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
+		VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	}
 	VkClearValue clear {}; clear.color.float32[0] = desc.clear_color.red; clear.color.float32[1] = desc.clear_color.green; clear.color.float32[2] = desc.clear_color.blue; clear.color.float32[3] = desc.clear_color.alpha;
-	VkRenderingAttachmentInfo attachment {}; attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO; attachment.imageView = command.target_view; attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; attachment.loadOp = ToVkLoadOp(desc.color_load); attachment.storeOp = ToVkStoreOp(desc.color_store); attachment.clearValue = clear;
+	VkRenderingAttachmentInfo attachment {}; attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO; attachment.imageView = target_view; attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; attachment.loadOp = ToVkLoadOp(desc.color_load); attachment.storeOp = ToVkStoreOp(desc.color_store); attachment.clearValue = clear;
 	VkRenderingInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO; rendering.renderArea.extent = { (uint32_t)texture.desc.size.cx, (uint32_t)texture.desc.size.cy }; rendering.layerCount = 1; rendering.colorAttachmentCount = 1; rendering.pColorAttachments = &attachment;
 	impl->cmd_begin_rendering(command.buffer, &rendering);
 	VkViewport vp {}; vp.width = (float)texture.desc.size.cx; vp.height = (float)texture.desc.size.cy; vp.minDepth = 0.0f; vp.maxDepth = 1.0f; impl->cmd_set_viewport(command.buffer, 0, 1, &vp);
 	VkRect2D sc {}; sc.extent = rendering.renderArea.extent; impl->cmd_set_scissor(command.buffer, 0, 1, &sc);
-	command.target = desc.color_target; command.color_format = desc.color_format; command.final_layout = FinalTextureLayout(texture.desc.usage); command.pass_active = true;
+	command.target = desc.color_target;
+	command.pipeline = GpuPipelineId();
+	command.vertex_buffer = GpuBufferId();
+	command.color_format = desc.color_format;
+	command.final_layout = FinalTextureLayout(texture.desc.usage);
+	command.store_result = desc.color_store == GpuStoreOp::Store;
+	command.pass_active = true;
 	return GpuResult::Ok;
 }
 
@@ -1016,6 +1034,22 @@ GpuResult VulkanGpuDevice::EndRenderPass(GpuCommandListId list)
 		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.dstStageMask = Stage2ForLayout(command.final_layout); barrier.dstAccessMask = Access2ForLayout(command.final_layout); barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.newLayout = command.final_layout; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
 		VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
 	}
+	int layout_index = command.texture_layouts.Find(command.target.value);
+	if(layout_index >= 0)
+		command.texture_layouts[layout_index] = command.final_layout;
+	else
+		command.texture_layouts.Add(command.target.value, command.final_layout);
+	int initialized_index = command.texture_initialized.Find(command.target.value);
+	if(initialized_index >= 0)
+		command.texture_initialized[initialized_index] = command.store_result;
+	else
+		command.texture_initialized.Add(command.target.value, command.store_result);
+	command.target = GpuTextureId();
+	command.pipeline = GpuPipelineId();
+	command.vertex_buffer = GpuBufferId();
+	command.color_format = GpuFormat::Unknown;
+	command.final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+	command.store_result = false;
 	command.pass_active = false;
 	return GpuResult::Ok;
 }
@@ -1044,8 +1078,15 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 	VkResult vr = impl->queue_submit(impl->graphics_queue, 1, &submit, VK_NULL_HANDLE);
 	if(vr == VK_SUCCESS) vr = impl->queue_wait_idle(impl->graphics_queue);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("Vulkan command submission", vr); return GpuResult::InvalidState; }
-	int ti = impl->textures.Find(command.target.value);
-	if(ti >= 0) { impl->textures[ti].layout = command.final_layout; impl->textures[ti].initialized = true; }
+	for(int i = 0; i < command.texture_layouts.GetCount(); ++i) {
+		int ti = impl->textures.Find(command.texture_layouts.GetKey(i));
+		if(ti >= 0) {
+			impl->textures[ti].layout = command.texture_layouts[i];
+			int initialized_index = command.texture_initialized.Find(command.texture_layouts.GetKey(i));
+			if(initialized_index >= 0)
+				impl->textures[ti].initialized = command.texture_initialized[initialized_index];
+		}
+	}
 	impl->DestroyCommandState(command); impl->commands.Remove(ci);
 	return GpuResult::Ok;
 }
