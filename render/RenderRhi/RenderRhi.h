@@ -22,6 +22,8 @@ enum class GpuFormat {
 	Unknown,
 	RGBA8,
 	BGRA8,
+	RGBA8Srgb,
+	BGRA8Srgb,
 	R16F,
 	D24S8,
 };
