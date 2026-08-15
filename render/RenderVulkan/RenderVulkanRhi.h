@@ -5,7 +5,7 @@
 
 namespace Upp {
 
-// S17B borrows Vulkan ownership from an already-open surface session.
+// VulkanGpuDevice borrows Vulkan ownership from an already-open surface session.
 // Keep the session alive and ready until this adapter and its resources are destroyed.
 class VulkanGpuDevice final : public GpuDevice {
 public:
@@ -21,6 +21,9 @@ public:
 	const String& GetError() const;
 	int GetLiveBufferCount() const;
 	int GetLiveTextureCount() const;
+	int GetLiveShaderCount() const;
+	int GetLivePipelineCount() const;
+	int GetLiveCommandCount() const;
 
 	GpuDeviceId GetDeviceId() const override;
 	GpuBackendKind GetBackendKind() const override;
@@ -41,6 +44,9 @@ public:
 	GpuResult ResizeSwapchain(GpuSwapchainId id, Size size) override;
 	GpuResult BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out) override;
 	GpuResult Present(GpuFrameId frame) override;
+
+	GpuResult CreateShader(const GpuShaderDesc& desc, GpuShaderId& out) override;
+	GpuResult DestroyShader(GpuShaderId id) override;
 	GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) override;
 	GpuResult DestroyPipeline(GpuPipelineId id) override;
 	GpuResult BeginCommands(GpuCommandListId& out) override;
