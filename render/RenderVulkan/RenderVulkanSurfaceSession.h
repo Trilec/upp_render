@@ -118,6 +118,8 @@ private:
 	bool PresentClearFrameImpl(float red, float green, float blue, float alpha,
 	                           const Vector<VulkanFrameRect> *rects);
 	bool GetFrameInterop(FrameInterop& out) const;
+	bool GetAcquiredFrameInterop(FrameInterop& out, uint32_t& image_index, bool& layout_initialized) const;
+	bool PresentFrameImpl(bool externally_rendered);
 	bool WaitFrameIdle(String& error);
 	void SyncFrameValidation();
 	bool DestroyFrameState();
