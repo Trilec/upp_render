@@ -114,6 +114,20 @@ const VulkanFrameReport& VulkanSurfaceSession::GetFrameReport() const
 	return frame_report;
 }
 
+bool VulkanSurfaceSession::GetAcquiredFrameInterop(FrameInterop& out, uint32_t& image_index, bool& layout_initialized) const
+{
+	image_index = UINT32_MAX;
+	layout_initialized = false;
+	const VulkanFrameState *state = reinterpret_cast<const VulkanFrameState *>(frame_impl);
+	if(!state || !state->acquired || !GetFrameInterop(out) || out.swapchain == VK_NULL_HANDLE ||
+	   out.swapchain_id != state->swapchain_id || state->image_index >= (uint32_t)out.images.GetCount() ||
+	   state->image_index >= (uint32_t)state->image_initialized.GetCount())
+		return false;
+	image_index = state->image_index;
+	layout_initialized = state->image_initialized[state->image_index] != 0;
+	return true;
+}
+
 bool VulkanSurfaceSession::DestroyFrameState()
 {
 	VulkanFrameState *state = reinterpret_cast<VulkanFrameState *>(frame_impl);
@@ -340,6 +354,11 @@ bool VulkanSurfaceSession::AcquireFrame()
 
 bool VulkanSurfaceSession::PresentFrame()
 {
+	return PresentFrameImpl(false);
+}
+
+bool VulkanSurfaceSession::PresentFrameImpl(bool externally_rendered)
+{
 	VulkanFrameState *state = reinterpret_cast<VulkanFrameState *>(frame_impl);
 	if(!state || !state->acquired) {
 		frame_report.error = "No Vulkan frame is acquired";
@@ -353,75 +372,80 @@ bool VulkanSurfaceSession::PresentFrame()
 		return false;
 	}
 
-	VkResult vr = state->reset_command_buffer(state->command_buffer, 0);
-	VkCommandBufferBeginInfo begin_info{};
-	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	if(vr == VK_SUCCESS)
-		vr = state->begin_command_buffer(state->command_buffer, &begin_info);
+	VkResult vr = VK_SUCCESS;
+	VkSemaphore render_finished = VK_NULL_HANDLE;
+	if(!externally_rendered) {
+		vr = state->reset_command_buffer(state->command_buffer, 0);
+		VkCommandBufferBeginInfo begin_info{};
+		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		if(vr == VK_SUCCESS)
+			vr = state->begin_command_buffer(state->command_buffer, &begin_info);
 
-	if(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {
-		VkImageMemoryBarrier2 barrier{};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-		barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-		barrier.srcAccessMask = 0;
-		barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-		barrier.dstAccessMask = 0;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = interop.images[state->image_index];
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = 1;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-		VkDependencyInfo dependency{};
-		dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-		dependency.imageMemoryBarrierCount = 1;
-		dependency.pImageMemoryBarriers = &barrier;
-		state->cmd_pipeline_barrier_2(state->command_buffer, &dependency);
-	}
-	if(vr == VK_SUCCESS)
-		vr = state->end_command_buffer(state->command_buffer);
-	if(vr != VK_SUCCESS) {
-		frame_report.error = String("Vulkan frame command recording failed: ") + AsString((int)vr);
-		DestroyFrameState();
-		return false;
-	}
+		if(vr == VK_SUCCESS && !state->image_initialized[state->image_index]) {
+			VkImageMemoryBarrier2 barrier{};
+			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+			barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+			barrier.srcAccessMask = 0;
+			barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+			barrier.dstAccessMask = 0;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.image = interop.images[state->image_index];
+			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			barrier.subresourceRange.baseMipLevel = 0;
+			barrier.subresourceRange.levelCount = 1;
+			barrier.subresourceRange.baseArrayLayer = 0;
+			barrier.subresourceRange.layerCount = 1;
+			VkDependencyInfo dependency{};
+			dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+			dependency.imageMemoryBarrierCount = 1;
+			dependency.pImageMemoryBarriers = &barrier;
+			state->cmd_pipeline_barrier_2(state->command_buffer, &dependency);
+		}
+		if(vr == VK_SUCCESS)
+			vr = state->end_command_buffer(state->command_buffer);
+		if(vr != VK_SUCCESS) {
+			frame_report.error = String("Vulkan frame command recording failed: ") + AsString((int)vr);
+			DestroyFrameState();
+			return false;
+		}
 
-	vr = state->reset_fences(interop.device, 1, &state->in_flight);
-	if(vr != VK_SUCCESS) {
-		frame_report.error = String("vkResetFences failed: ") + AsString((int)vr);
-		DestroyFrameState();
-		return false;
-	}
+		vr = state->reset_fences(interop.device, 1, &state->in_flight);
+		if(vr != VK_SUCCESS) {
+			frame_report.error = String("vkResetFences failed: ") + AsString((int)vr);
+			DestroyFrameState();
+			return false;
+		}
 
-	VkCommandBufferSubmitInfo command_info{};
-	command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-	command_info.commandBuffer = state->command_buffer;
-	VkSemaphoreSubmitInfo signal_info{};
-	signal_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	signal_info.semaphore = state->render_finished[state->image_index];
-	signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-	VkSubmitInfo2 submit_info{};
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-	submit_info.commandBufferInfoCount = 1;
-	submit_info.pCommandBufferInfos = &command_info;
-	submit_info.signalSemaphoreInfoCount = 1;
-	submit_info.pSignalSemaphoreInfos = &signal_info;
+		VkCommandBufferSubmitInfo command_info{};
+		command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+		command_info.commandBuffer = state->command_buffer;
+		VkSemaphoreSubmitInfo signal_info{};
+		signal_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+		signal_info.semaphore = state->render_finished[state->image_index];
+		signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+		VkSubmitInfo2 submit_info{};
+		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+		submit_info.commandBufferInfoCount = 1;
+		submit_info.pCommandBufferInfos = &command_info;
+		submit_info.signalSemaphoreInfoCount = 1;
+		submit_info.pSignalSemaphoreInfos = &signal_info;
 
-	if(g_frame_test_injection.submit_failure)
-		vr = VK_ERROR_DEVICE_LOST;
-	else
-		vr = state->queue_submit_2(interop.graphics_queue, 1, &submit_info, state->in_flight);
-	if(vr != VK_SUCCESS) {
-		frame_report.error = String("vkQueueSubmit2 failed: ") + AsString((int)vr);
-		state->acquired = false;
-		frame_report.image_acquired = false;
-		DestroyFrameState();
-		return false;
+		if(g_frame_test_injection.submit_failure)
+			vr = VK_ERROR_DEVICE_LOST;
+		else
+			vr = state->queue_submit_2(interop.graphics_queue, 1, &submit_info, state->in_flight);
+		if(vr != VK_SUCCESS) {
+			frame_report.error = String("vkQueueSubmit2 failed: ") + AsString((int)vr);
+			state->acquired = false;
+			frame_report.image_acquired = false;
+			DestroyFrameState();
+			return false;
+		}
+		render_finished = state->render_finished[state->image_index];
 	}
 
 	frame_report.frame_submitted = true;
@@ -429,11 +453,10 @@ bool VulkanSurfaceSession::PresentFrame()
 	frame_report.present_requested = true;
 	VkSwapchainKHR swapchain = interop.swapchain;
 	uint32_t image_index = state->image_index;
-	VkSemaphore render_finished = state->render_finished[image_index];
 	VkPresentInfoKHR present_info{};
 	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.waitSemaphoreCount = 1;
-	present_info.pWaitSemaphores = &render_finished;
+	present_info.waitSemaphoreCount = externally_rendered ? 0u : 1u;
+	present_info.pWaitSemaphores = externally_rendered ? nullptr : &render_finished;
 	present_info.swapchainCount = 1;
 	present_info.pSwapchains = &swapchain;
 	present_info.pImageIndices = &image_index;
