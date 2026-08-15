@@ -91,6 +91,50 @@ static VkAccessFlags AccessForLayout(VkImageLayout layout)
 	}
 }
 
+static VkPipelineStageFlags2 Stage2ForLayout(VkImageLayout layout)
+{
+	switch(layout) {
+	case VK_IMAGE_LAYOUT_UNDEFINED: return VK_PIPELINE_STAGE_2_NONE;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_GENERAL: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+	default: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+	}
+}
+
+static VkAccessFlags2 Access2ForLayout(VkImageLayout layout)
+{
+	switch(layout) {
+	case VK_IMAGE_LAYOUT_UNDEFINED: return 0;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_ACCESS_2_TRANSFER_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_ACCESS_2_SHADER_READ_BIT;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_GENERAL: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+	default: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+	}
+}
+
+static VkAttachmentLoadOp ToVkLoadOp(GpuLoadOp op)
+{
+	switch(op) {
+	case GpuLoadOp::Load: return VK_ATTACHMENT_LOAD_OP_LOAD;
+	case GpuLoadOp::Clear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
+	case GpuLoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	}
+	return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+}
+
+static VkAttachmentStoreOp ToVkStoreOp(GpuStoreOp op)
+{
+	return op == GpuStoreOp::Store ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+}
+
+static VkPrimitiveTopology ToVkTopology(GpuPrimitiveTopology topology)
+{
+	return topology == GpuPrimitiveTopology::LineList ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+}
+
 static String VkFailure(const char *operation, VkResult result)
 {
 	return String(operation) + " failed: " + AsString((int)result);
@@ -116,6 +160,31 @@ struct VulkanGpuDevice::Impl {
 		VkImage image = VK_NULL_HANDLE;
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		bool initialized = false;
+	};
+
+	struct ShaderState : Moveable<ShaderState> {
+		GpuShaderDesc desc;
+		VkShaderModule module = VK_NULL_HANDLE;
+	};
+
+	struct PipelineState : Moveable<PipelineState> {
+		GpuPipelineDesc desc;
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+		VkPipeline pipeline = VK_NULL_HANDLE;
+	};
+
+	struct CommandState : Moveable<CommandState> {
+		VkCommandPool pool = VK_NULL_HANDLE;
+		VkCommandBuffer buffer = VK_NULL_HANDLE;
+		VkImageView target_view = VK_NULL_HANDLE;
+		GpuTextureId target;
+		GpuPipelineId pipeline;
+		GpuBufferId vertex_buffer;
+		GpuFormat color_format = GpuFormat::Unknown;
+		VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		bool pass_active = false;
+		bool ended = false;
 	};
 
 	VulkanSurfaceSession *session = nullptr;
@@ -133,8 +202,14 @@ struct VulkanGpuDevice::Impl {
 	GpuAdapterInfo adapter_info;
 	int next_buffer_id = 1;
 	int next_texture_id = 1;
+	int next_shader_id = 1;
+	int next_pipeline_id = 1;
+	int next_command_id = 1;
 	VectorMap<int, BufferState> buffers;
 	VectorMap<int, TextureState> textures;
+	VectorMap<int, ShaderState> shaders;
+	VectorMap<int, PipelineState> pipelines;
+	VectorMap<int, CommandState> commands;
 
 	PFN_vkGetPhysicalDeviceMemoryProperties get_physical_device_memory_properties = nullptr;
 	VkPhysicalDeviceMemoryProperties memory_properties {};
@@ -158,7 +233,23 @@ struct VulkanGpuDevice::Impl {
 	PFN_vkBeginCommandBuffer begin_command_buffer = nullptr;
 	PFN_vkEndCommandBuffer end_command_buffer = nullptr;
 	PFN_vkCmdPipelineBarrier cmd_pipeline_barrier = nullptr;
+	PFN_vkCmdPipelineBarrier2 cmd_pipeline_barrier_2 = nullptr;
 	PFN_vkCmdCopyBufferToImage cmd_copy_buffer_to_image = nullptr;
+	PFN_vkCreateImageView create_image_view = nullptr;
+	PFN_vkDestroyImageView destroy_image_view = nullptr;
+	PFN_vkCreateShaderModule create_shader_module = nullptr;
+	PFN_vkDestroyShaderModule destroy_shader_module = nullptr;
+	PFN_vkCreatePipelineLayout create_pipeline_layout = nullptr;
+	PFN_vkDestroyPipelineLayout destroy_pipeline_layout = nullptr;
+	PFN_vkCreateGraphicsPipelines create_graphics_pipelines = nullptr;
+	PFN_vkDestroyPipeline destroy_pipeline = nullptr;
+	PFN_vkCmdBeginRendering cmd_begin_rendering = nullptr;
+	PFN_vkCmdEndRendering cmd_end_rendering = nullptr;
+	PFN_vkCmdBindPipeline cmd_bind_pipeline = nullptr;
+	PFN_vkCmdBindVertexBuffers cmd_bind_vertex_buffers = nullptr;
+	PFN_vkCmdDraw cmd_draw = nullptr;
+	PFN_vkCmdSetViewport cmd_set_viewport = nullptr;
+	PFN_vkCmdSetScissor cmd_set_scissor = nullptr;
 	PFN_vkQueueSubmit queue_submit = nullptr;
 	PFN_vkQueueWaitIdle queue_wait_idle = nullptr;
 
@@ -216,7 +307,23 @@ struct VulkanGpuDevice::Impl {
 		       Resolve(begin_command_buffer, "vkBeginCommandBuffer") &&
 		       Resolve(end_command_buffer, "vkEndCommandBuffer") &&
 		       Resolve(cmd_pipeline_barrier, "vkCmdPipelineBarrier") &&
+		       Resolve(cmd_pipeline_barrier_2, "vkCmdPipelineBarrier2") &&
 		       Resolve(cmd_copy_buffer_to_image, "vkCmdCopyBufferToImage") &&
+		       Resolve(create_image_view, "vkCreateImageView") &&
+		       Resolve(destroy_image_view, "vkDestroyImageView") &&
+		       Resolve(create_shader_module, "vkCreateShaderModule") &&
+		       Resolve(destroy_shader_module, "vkDestroyShaderModule") &&
+		       Resolve(create_pipeline_layout, "vkCreatePipelineLayout") &&
+		       Resolve(destroy_pipeline_layout, "vkDestroyPipelineLayout") &&
+		       Resolve(create_graphics_pipelines, "vkCreateGraphicsPipelines") &&
+		       Resolve(destroy_pipeline, "vkDestroyPipeline") &&
+		       Resolve(cmd_begin_rendering, "vkCmdBeginRendering") &&
+		       Resolve(cmd_end_rendering, "vkCmdEndRendering") &&
+		       Resolve(cmd_bind_pipeline, "vkCmdBindPipeline") &&
+		       Resolve(cmd_bind_vertex_buffers, "vkCmdBindVertexBuffers") &&
+		       Resolve(cmd_draw, "vkCmdDraw") &&
+		       Resolve(cmd_set_viewport, "vkCmdSetViewport") &&
+		       Resolve(cmd_set_scissor, "vkCmdSetScissor") &&
 		       Resolve(queue_submit, "vkQueueSubmit") &&
 		       Resolve(queue_wait_idle, "vkQueueWaitIdle");
 	}
@@ -233,7 +340,7 @@ struct VulkanGpuDevice::Impl {
 
 	GpuResult Unsupported(const char *operation)
 	{
-		error = String(operation) + " is deferred beyond TASK-008A1-S17B";
+		error = String(operation) + " is deferred to TASK-008A1-S17C-B2 session convergence";
 		return GpuResult::Unsupported;
 	}
 
@@ -256,6 +363,16 @@ struct VulkanGpuDevice::Impl {
 		if(index < 0)
 			index = find(required);
 		return index;
+	}
+
+	bool HasOpenCommands() const { return commands.GetCount() != 0; }
+
+	bool PipelineUsesShader(int shader_id) const
+	{
+		for(int i = 0; i < pipelines.GetCount(); ++i)
+			if(pipelines[i].desc.vertex_shader.value == shader_id || pipelines[i].desc.fragment_shader.value == shader_id)
+				return true;
+		return false;
 	}
 
 	bool CreateRawBuffer(VkDeviceSize size, VkBufferUsageFlags usage, RawBuffer& out)
@@ -375,7 +492,7 @@ struct VulkanGpuDevice::Impl {
 	{
 		const int bytes_per_pixel = BytesPerPixel(texture.desc.format);
 		if(bytes_per_pixel <= 0 || texture.desc.format == GpuFormat::D24S8) {
-			error = "VulkanGpuDevice texture upload format is unsupported in S17B";
+			error = "VulkanGpuDevice texture upload format is unsupported";
 			return false;
 		}
 		const int64 tight_row = (int64)desc.size.cx * bytes_per_pixel;
@@ -470,12 +587,7 @@ struct VulkanGpuDevice::Impl {
 		                     0, 0, nullptr, 0, nullptr, 1, &before);
 
 		VkBufferImageCopy copy {};
-		copy.bufferOffset = 0;
-		copy.bufferRowLength = 0;
-		copy.bufferImageHeight = 0;
 		copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		copy.imageSubresource.mipLevel = 0;
-		copy.imageSubresource.baseArrayLayer = 0;
 		copy.imageSubresource.layerCount = 1;
 		copy.imageOffset = { desc.origin.x, desc.origin.y, 0 };
 		copy.imageExtent = { (uint32_t)desc.size.cx, (uint32_t)desc.size.cy, 1 };
@@ -520,29 +632,54 @@ struct VulkanGpuDevice::Impl {
 			return false;
 		}
 		texture.layout = final_layout;
+		texture.initialized = true;
 		cleanup();
 		return true;
+	}
+
+	void DestroyCommandState(CommandState& state)
+	{
+		if(state.target_view)
+			destroy_image_view(device, state.target_view, nullptr);
+		if(state.pool)
+			destroy_command_pool(device, state.pool, nullptr);
+		state = CommandState();
 	}
 
 	void DestroyAllResources()
 	{
 		if(!ready || !session || !session->IsReady()) {
+			commands.Clear();
+			pipelines.Clear();
+			shaders.Clear();
 			buffers.Clear();
 			textures.Clear();
 			return;
 		}
 		queue_wait_idle(graphics_queue);
+		while(commands.GetCount()) {
+			DestroyCommandState(commands[commands.GetCount() - 1]);
+			commands.Remove(commands.GetCount() - 1);
+		}
+		while(pipelines.GetCount()) {
+			PipelineState& state = pipelines[pipelines.GetCount() - 1];
+			if(state.pipeline) destroy_pipeline(device, state.pipeline, nullptr);
+			if(state.layout) destroy_pipeline_layout(device, state.layout, nullptr);
+			pipelines.Remove(pipelines.GetCount() - 1);
+		}
+		while(shaders.GetCount()) {
+			ShaderState& state = shaders[shaders.GetCount() - 1];
+			if(state.module) destroy_shader_module(device, state.module, nullptr);
+			shaders.Remove(shaders.GetCount() - 1);
+		}
 		while(textures.GetCount()) {
 			TextureState& state = textures[textures.GetCount() - 1];
-			if(state.image)
-				destroy_image(device, state.image, nullptr);
-			if(state.memory)
-				free_memory(device, state.memory, nullptr);
+			if(state.image) destroy_image(device, state.image, nullptr);
+			if(state.memory) free_memory(device, state.memory, nullptr);
 			textures.Remove(textures.GetCount() - 1);
 		}
 		while(buffers.GetCount()) {
-			BufferState& state = buffers[buffers.GetCount() - 1];
-			DestroyRawBuffer(state.raw);
+			DestroyRawBuffer(buffers[buffers.GetCount() - 1].raw);
 			buffers.Remove(buffers.GetCount() - 1);
 		}
 	}
@@ -556,7 +693,8 @@ VulkanGpuDevice::VulkanGpuDevice(VulkanSurfaceSession& session)
 	impl->adapter_info.adapter_id.value = 1;
 	impl->adapter_info.device_id = impl->device_id;
 	impl->adapter_info.backend_kind = GpuBackendKind::Vulkan;
-	impl->adapter_info.capability_flags = GpuCapability_Buffers | GpuCapability_Textures;
+	impl->adapter_info.capability_flags = GpuCapability_Buffers | GpuCapability_Textures |
+	                                      GpuCapability_RenderPass | GpuCapability_Pipelines | GpuCapability_Shaders;
 	impl->adapter_info.name = session.GetReport().selected_device.name;
 	if(!session.IsReady()) {
 		impl->error = "VulkanGpuDevice requires a ready VulkanSurfaceSession";
@@ -589,307 +727,327 @@ VulkanGpuDevice::~VulkanGpuDevice()
 		impl->DestroyAllResources();
 }
 
-bool VulkanGpuDevice::IsReady() const
-{
-	return impl && impl->ready && impl->session && impl->session->IsReady();
-}
-
-const String& VulkanGpuDevice::GetError() const
-{
-	return impl->error;
-}
-
-int VulkanGpuDevice::GetLiveBufferCount() const
-{
-	return impl ? impl->buffers.GetCount() : 0;
-}
-
-int VulkanGpuDevice::GetLiveTextureCount() const
-{
-	return impl ? impl->textures.GetCount() : 0;
-}
-
-GpuDeviceId VulkanGpuDevice::GetDeviceId() const
-{
-	return impl->device_id;
-}
-
-GpuBackendKind VulkanGpuDevice::GetBackendKind() const
-{
-	return GpuBackendKind::Vulkan;
-}
-
-GpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const
-{
-	return impl->adapter_info;
-}
+bool VulkanGpuDevice::IsReady() const { return impl && impl->ready && impl->session && impl->session->IsReady(); }
+const String& VulkanGpuDevice::GetError() const { return impl->error; }
+int VulkanGpuDevice::GetLiveBufferCount() const { return impl ? impl->buffers.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveTextureCount() const { return impl ? impl->textures.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveShaderCount() const { return impl ? impl->shaders.GetCount() : 0; }
+int VulkanGpuDevice::GetLivePipelineCount() const { return impl ? impl->pipelines.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveCommandCount() const { return impl ? impl->commands.GetCount() : 0; }
+GpuDeviceId VulkanGpuDevice::GetDeviceId() const { return impl->device_id; }
+GpuBackendKind VulkanGpuDevice::GetBackendKind() const { return GpuBackendKind::Vulkan; }
+GpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const { return impl->adapter_info; }
 
 GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out)
 {
 	out = GpuBufferId();
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
-	if(desc.size <= 0) {
-		impl->error = "CreateBuffer requires positive size";
-		return GpuResult::InvalidArgument;
-	}
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(desc.size <= 0) { impl->error = "CreateBuffer requires positive size"; return GpuResult::InvalidArgument; }
 	Impl::RawBuffer raw;
-	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw))
-		return GpuResult::InvalidState;
-	GpuBufferId id;
-	id.value = impl->next_buffer_id++;
+	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw)) return GpuResult::InvalidState;
+	GpuBufferId id; id.value = impl->next_buffer_id++;
 	Impl::BufferState& state = impl->buffers.Add(id.value, Impl::BufferState());
-	state.desc = desc;
-	state.raw = pick(raw);
-	out = id;
+	state.desc = desc; state.raw = pick(raw); out = id;
 	return GpuResult::Ok;
 }
 
 GpuResult VulkanGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size)
 {
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->buffers.Find(id.value);
-	if(!id.IsValid() || index < 0) {
-		impl->error = "WriteBuffer received an unknown buffer";
-		return GpuResult::InvalidHandle;
-	}
-	if(offset < 0 || size <= 0 || !data) {
-		impl->error = "WriteBuffer received an invalid write range";
-		return GpuResult::InvalidArgument;
-	}
+	if(!id.IsValid() || index < 0) { impl->error = "WriteBuffer received an unknown buffer"; return GpuResult::InvalidHandle; }
+	if(offset < 0 || size <= 0 || !data) { impl->error = "WriteBuffer received an invalid write range"; return GpuResult::InvalidArgument; }
 	const int64 buffer_size = impl->buffers[index].desc.size;
-	if(offset > buffer_size || size > buffer_size - offset) {
-		impl->error = "WriteBuffer range exceeds the buffer";
-		return GpuResult::InvalidArgument;
-	}
-	if(!impl->WriteRawBuffer(impl->buffers[index].raw, (VkDeviceSize)offset, data, (VkDeviceSize)size))
-		return GpuResult::InvalidState;
-	return GpuResult::Ok;
+	if(offset > buffer_size || size > buffer_size - offset) { impl->error = "WriteBuffer range exceeds the buffer"; return GpuResult::InvalidArgument; }
+	return impl->WriteRawBuffer(impl->buffers[index].raw, (VkDeviceSize)offset, data, (VkDeviceSize)size) ? GpuResult::Ok : GpuResult::InvalidState;
 }
 
 GpuResult VulkanGpuDevice::DestroyBuffer(GpuBufferId id)
 {
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->buffers.Find(id.value);
-	if(!id.IsValid() || index < 0) {
-		impl->error = "DestroyBuffer received an unknown buffer";
-		return GpuResult::InvalidHandle;
-	}
-	impl->DestroyRawBuffer(impl->buffers[index].raw);
-	impl->buffers.Remove(index);
+	if(!id.IsValid() || index < 0) { impl->error = "DestroyBuffer received an unknown buffer"; return GpuResult::InvalidHandle; }
+	if(impl->HasOpenCommands()) { impl->error = "DestroyBuffer is forbidden while command lists are live"; return GpuResult::InvalidState; }
+	impl->DestroyRawBuffer(impl->buffers[index].raw); impl->buffers.Remove(index);
 	return GpuResult::Ok;
 }
 
 GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out)
 {
 	out = GpuTextureId();
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
-	if(desc.size.cx <= 0 || desc.size.cy <= 0 || desc.format == GpuFormat::Unknown) {
-		impl->error = "CreateTexture requires positive size and a known format";
-		return GpuResult::InvalidArgument;
-	}
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(desc.size.cx <= 0 || desc.size.cy <= 0 || desc.format == GpuFormat::Unknown) { impl->error = "CreateTexture requires positive size and a known format"; return GpuResult::InvalidArgument; }
 	const VkFormat format = ToVkFormat(desc.format);
-	if(format == VK_FORMAT_UNDEFINED) {
-		impl->error = "CreateTexture format is unsupported";
-		return GpuResult::Unsupported;
-	}
+	if(format == VK_FORMAT_UNDEFINED) { impl->error = "CreateTexture format is unsupported"; return GpuResult::Unsupported; }
 	VkImageCreateInfo ici {};
-	ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	ici.imageType = VK_IMAGE_TYPE_2D;
-	ici.format = format;
-	ici.extent = { (uint32_t)desc.size.cx, (uint32_t)desc.size.cy, 1 };
-	ici.mipLevels = 1;
-	ici.arrayLayers = 1;
-	ici.samples = VK_SAMPLE_COUNT_1_BIT;
-	ici.tiling = VK_IMAGE_TILING_OPTIMAL;
-	ici.usage = ToVkImageUsage(desc.usage);
-	ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO; ici.imageType = VK_IMAGE_TYPE_2D; ici.format = format;
+	ici.extent = { (uint32_t)desc.size.cx, (uint32_t)desc.size.cy, 1 }; ici.mipLevels = 1; ici.arrayLayers = 1;
+	ici.samples = VK_SAMPLE_COUNT_1_BIT; ici.tiling = VK_IMAGE_TILING_OPTIMAL; ici.usage = ToVkImageUsage(desc.usage);
+	ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE; ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	VkImage image = VK_NULL_HANDLE;
 	VkResult vr = impl->create_image(impl->device, &ici, nullptr, &image);
-	if(vr != VK_SUCCESS) {
-		impl->error = VkFailure("vkCreateImage", vr);
-		return GpuResult::InvalidState;
-	}
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImage", vr); return GpuResult::InvalidState; }
 	VkDeviceMemory memory = VK_NULL_HANDLE;
-	if(!impl->AllocateImageMemory(image, memory)) {
-		impl->destroy_image(impl->device, image, nullptr);
-		return GpuResult::InvalidState;
-	}
-	GpuTextureId id;
-	id.value = impl->next_texture_id++;
+	if(!impl->AllocateImageMemory(image, memory)) { impl->destroy_image(impl->device, image, nullptr); return GpuResult::InvalidState; }
+	GpuTextureId id; id.value = impl->next_texture_id++;
 	Impl::TextureState& state = impl->textures.Add(id.value, Impl::TextureState());
-	state.desc = desc;
-	state.image = image;
-	state.memory = memory;
-	state.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-	out = id;
+	state.desc = desc; state.image = image; state.memory = memory; out = id;
 	return GpuResult::Ok;
 }
 
 GpuResult VulkanGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size)
 {
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->textures.Find(id.value);
-	if(!id.IsValid() || index < 0) {
-		impl->error = "WriteTexture received an unknown texture";
-		return GpuResult::InvalidHandle;
-	}
+	if(!id.IsValid() || index < 0) { impl->error = "WriteTexture received an unknown texture"; return GpuResult::InvalidHandle; }
 	Impl::TextureState& state = impl->textures[index];
-	if(!data || data_size <= 0 || desc.origin.x < 0 || desc.origin.y < 0 ||
-	   desc.size.cx <= 0 || desc.size.cy <= 0 || desc.row_pitch <= 0) {
-		impl->error = "WriteTexture received an invalid write layout";
-		return GpuResult::InvalidArgument;
+	if(!data || data_size <= 0 || desc.origin.x < 0 || desc.origin.y < 0 || desc.size.cx <= 0 || desc.size.cy <= 0 || desc.row_pitch <= 0) {
+		impl->error = "WriteTexture received an invalid write layout"; return GpuResult::InvalidArgument;
 	}
-	if(desc.size.cx > state.desc.size.cx || desc.size.cy > state.desc.size.cy ||
-	   desc.origin.x > state.desc.size.cx - desc.size.cx ||
-	   desc.origin.y > state.desc.size.cy - desc.size.cy) {
-		impl->error = "WriteTexture region exceeds the texture";
-		return GpuResult::InvalidArgument;
+	if(desc.size.cx > state.desc.size.cx || desc.size.cy > state.desc.size.cy || desc.origin.x > state.desc.size.cx - desc.size.cx || desc.origin.y > state.desc.size.cy - desc.size.cy) {
+		impl->error = "WriteTexture region exceeds the texture"; return GpuResult::InvalidArgument;
 	}
-	if(state.desc.format == GpuFormat::D24S8) {
-		impl->error = "WriteTexture depth/stencil upload is deferred beyond S17B";
-		return GpuResult::Unsupported;
-	}
+	if(state.desc.format == GpuFormat::D24S8) { impl->error = "WriteTexture depth/stencil upload is deferred"; return GpuResult::Unsupported; }
 	const int bytes_per_pixel = BytesPerPixel(state.desc.format);
 	const int64 tight_row = (int64)desc.size.cx * bytes_per_pixel;
-	if(desc.row_pitch < tight_row) {
-		impl->error = "WriteTexture row pitch is too small";
-		return GpuResult::InvalidArgument;
-	}
-	if(desc.size.cy > 1 && desc.row_pitch > (std::numeric_limits<int64>::max() - tight_row) / (desc.size.cy - 1)) {
-		impl->error = "WriteTexture layout overflows int64";
-		return GpuResult::InvalidArgument;
-	}
+	if(desc.row_pitch < tight_row) { impl->error = "WriteTexture row pitch is too small"; return GpuResult::InvalidArgument; }
+	if(desc.size.cy > 1 && desc.row_pitch > (std::numeric_limits<int64>::max() - tight_row) / (desc.size.cy - 1)) { impl->error = "WriteTexture layout overflows int64"; return GpuResult::InvalidArgument; }
 	const int64 required_size = desc.row_pitch * (desc.size.cy - 1) + tight_row;
-	if(data_size < required_size) {
-		impl->error = "WriteTexture data span is too small";
-		return GpuResult::InvalidArgument;
-	}
-	if(!impl->UploadTexture(state, desc, data, data_size))
-		return GpuResult::InvalidState;
-	return GpuResult::Ok;
+	if(data_size < required_size) { impl->error = "WriteTexture data span is too small"; return GpuResult::InvalidArgument; }
+	return impl->UploadTexture(state, desc, data, data_size) ? GpuResult::Ok : GpuResult::InvalidState;
 }
 
 GpuResult VulkanGpuDevice::DestroyTexture(GpuTextureId id)
 {
-	if(!impl->CheckReady())
-		return GpuResult::InvalidState;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->textures.Find(id.value);
-	if(!id.IsValid() || index < 0) {
-		impl->error = "DestroyTexture received an unknown texture";
-		return GpuResult::InvalidHandle;
-	}
+	if(!id.IsValid() || index < 0) { impl->error = "DestroyTexture received an unknown texture"; return GpuResult::InvalidHandle; }
+	if(impl->HasOpenCommands()) { impl->error = "DestroyTexture is forbidden while command lists are live"; return GpuResult::InvalidState; }
 	VkResult vr = impl->queue_wait_idle(impl->graphics_queue);
-	if(vr != VK_SUCCESS) {
-		impl->error = VkFailure("vkQueueWaitIdle", vr);
-		return GpuResult::InvalidState;
-	}
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkQueueWaitIdle", vr); return GpuResult::InvalidState; }
 	Impl::TextureState& state = impl->textures[index];
-	if(state.image)
-		impl->destroy_image(impl->device, state.image, nullptr);
-	if(state.memory)
-		impl->free_memory(impl->device, state.memory, nullptr);
+	if(state.image) impl->destroy_image(impl->device, state.image, nullptr);
+	if(state.memory) impl->free_memory(impl->device, state.memory, nullptr);
 	impl->textures.Remove(index);
 	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::CreateSurface(const GpuSurfaceDesc&, GpuSurfaceId& out)
-{
-	out = GpuSurfaceId();
-	return impl->Unsupported("CreateSurface");
-}
-
-GpuResult VulkanGpuDevice::DestroySurface(GpuSurfaceId)
-{
-	return impl->Unsupported("DestroySurface");
-}
-
-GpuResult VulkanGpuDevice::CreateSwapchain(const GpuSwapchainDesc&, GpuSwapchainId& out)
-{
-	out = GpuSwapchainId();
-	return impl->Unsupported("CreateSwapchain");
-}
-
-GpuResult VulkanGpuDevice::DestroySwapchain(GpuSwapchainId)
-{
-	return impl->Unsupported("DestroySwapchain");
-}
-
-GpuResult VulkanGpuDevice::ResizeSwapchain(GpuSwapchainId, Size)
-{
-	return impl->Unsupported("ResizeSwapchain");
-}
-
+GpuResult VulkanGpuDevice::CreateSurface(const GpuSurfaceDesc&, GpuSurfaceId& out) { out = GpuSurfaceId(); return impl->Unsupported("CreateSurface"); }
+GpuResult VulkanGpuDevice::DestroySurface(GpuSurfaceId) { return impl->Unsupported("DestroySurface"); }
+GpuResult VulkanGpuDevice::CreateSwapchain(const GpuSwapchainDesc&, GpuSwapchainId& out) { out = GpuSwapchainId(); return impl->Unsupported("CreateSwapchain"); }
+GpuResult VulkanGpuDevice::DestroySwapchain(GpuSwapchainId) { return impl->Unsupported("DestroySwapchain"); }
+GpuResult VulkanGpuDevice::ResizeSwapchain(GpuSwapchainId, Size) { return impl->Unsupported("ResizeSwapchain"); }
 GpuResult VulkanGpuDevice::BeginFrame(GpuSwapchainId, GpuFrameInfo& out)
 {
-	out.frame = GpuFrameId();
-	out.swapchain = GpuSwapchainId();
-	out.color_target = GpuTextureId();
-	out.size = Size(0, 0);
-	out.color_format = GpuFormat::Unknown;
+	out.frame = GpuFrameId(); out.swapchain = GpuSwapchainId(); out.color_target = GpuTextureId(); out.size = Size(0, 0); out.color_format = GpuFormat::Unknown;
 	return impl->Unsupported("BeginFrame");
 }
+GpuResult VulkanGpuDevice::Present(GpuFrameId) { return impl->Unsupported("Present"); }
 
-GpuResult VulkanGpuDevice::Present(GpuFrameId)
+GpuResult VulkanGpuDevice::CreateShader(const GpuShaderDesc& desc, GpuShaderId& out)
 {
-	return impl->Unsupported("Present");
+	out = GpuShaderId();
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if((desc.stage != GpuShaderStage::Vertex && desc.stage != GpuShaderStage::Fragment) || desc.format != GpuShaderFormat::SpirV || desc.entry_point.IsEmpty()) {
+		impl->error = "CreateShader requires a vertex/fragment SPIR-V shader and entry point"; return GpuResult::InvalidArgument;
+	}
+	if(desc.code.GetCount() < 20 || (desc.code.GetCount() & 3) != 0) { impl->error = "CreateShader SPIR-V payload has invalid size"; return GpuResult::InvalidArgument; }
+	uint32_t magic = 0; std::memcpy(&magic, desc.code.Begin(), sizeof(magic));
+	if(magic != 0x07230203u) { impl->error = "CreateShader SPIR-V payload has invalid magic"; return GpuResult::InvalidArgument; }
+	Vector<uint32_t> words; words.SetCount(desc.code.GetCount() / 4); std::memcpy(words.Begin(), desc.code.Begin(), desc.code.GetCount());
+	VkShaderModuleCreateInfo ci {}; ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO; ci.codeSize = (size_t)desc.code.GetCount(); ci.pCode = words.Begin();
+	VkShaderModule module = VK_NULL_HANDLE;
+	VkResult vr = impl->create_shader_module(impl->device, &ci, nullptr, &module);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateShaderModule", vr); return GpuResult::InvalidState; }
+	GpuShaderId id; id.value = impl->next_shader_id++;
+	Impl::ShaderState& state = impl->shaders.Add(id.value, Impl::ShaderState()); state.desc = desc; state.module = module; out = id;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc&, GpuPipelineId& out)
+GpuResult VulkanGpuDevice::DestroyShader(GpuShaderId id)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int index = impl->shaders.Find(id.value);
+	if(!id.IsValid() || index < 0) { impl->error = "DestroyShader received an unknown shader"; return GpuResult::InvalidHandle; }
+	if(impl->PipelineUsesShader(id.value) || impl->HasOpenCommands()) { impl->error = "DestroyShader is forbidden while referenced"; return GpuResult::InvalidState; }
+	impl->destroy_shader_module(impl->device, impl->shaders[index].module, nullptr); impl->shaders.Remove(index);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out)
 {
 	out = GpuPipelineId();
-	return impl->Unsupported("CreatePipeline");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int vi = impl->shaders.Find(desc.vertex_shader.value), fi = impl->shaders.Find(desc.fragment_shader.value);
+	if(!desc.vertex_shader.IsValid() || !desc.fragment_shader.IsValid() || vi < 0 || fi < 0) { impl->error = "CreatePipeline requires valid shader handles"; return GpuResult::InvalidHandle; }
+	if(impl->shaders[vi].desc.stage != GpuShaderStage::Vertex || impl->shaders[fi].desc.stage != GpuShaderStage::Fragment) { impl->error = "CreatePipeline shader stages do not match"; return GpuResult::InvalidArgument; }
+	if(desc.vertex_layout != GpuVertexLayout::Position2Color4F || ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || desc.color_format == GpuFormat::D24S8) {
+		impl->error = "CreatePipeline requires Position2Color4F and a supported color format"; return GpuResult::InvalidArgument;
+	}
+	VkPipelineLayoutCreateInfo lci {}; lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	VkPipelineLayout layout = VK_NULL_HANDLE;
+	VkResult vr = impl->create_pipeline_layout(impl->device, &lci, nullptr, &layout);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreatePipelineLayout", vr); return GpuResult::InvalidState; }
+	VkPipelineShaderStageCreateInfo stages[2] {};
+	stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT; stages[0].module = impl->shaders[vi].module; stages[0].pName = impl->shaders[vi].desc.entry_point.Begin();
+	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = impl->shaders[fi].module; stages[1].pName = impl->shaders[fi].desc.entry_point.Begin();
+	VkVertexInputBindingDescription binding {}; binding.binding = 0; binding.stride = 6 * sizeof(float); binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	VkVertexInputAttributeDescription attrs[2] {};
+	attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32_SFLOAT; attrs[0].offset = 0;
+	attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[1].offset = 2 * sizeof(float);
+	VkPipelineVertexInputStateCreateInfo vertex {}; vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding; vertex.vertexAttributeDescriptionCount = 2; vertex.pVertexAttributeDescriptions = attrs;
+	VkPipelineInputAssemblyStateCreateInfo assembly {}; assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO; assembly.topology = ToVkTopology(desc.topology);
+	VkPipelineViewportStateCreateInfo viewport {}; viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO; viewport.viewportCount = 1; viewport.scissorCount = 1;
+	VkPipelineRasterizationStateCreateInfo raster {}; raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE; raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0f;
+	VkPipelineMultisampleStateCreateInfo ms {}; ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	VkPipelineColorBlendAttachmentState blend_attachment {}; blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	VkPipelineColorBlendStateCreateInfo blend {}; blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO; blend.attachmentCount = 1; blend.pAttachments = &blend_attachment;
+	VkDynamicState dynamic_states[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	VkPipelineDynamicStateCreateInfo dynamic {}; dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO; dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = dynamic_states;
+	VkFormat color_format = ToVkFormat(desc.color_format);
+	VkPipelineRenderingCreateInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO; rendering.colorAttachmentCount = 1; rendering.pColorAttachmentFormats = &color_format;
+	VkGraphicsPipelineCreateInfo pci {}; pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; pci.pNext = &rendering; pci.stageCount = 2; pci.pStages = stages;
+	pci.pVertexInputState = &vertex; pci.pInputAssemblyState = &assembly; pci.pViewportState = &viewport; pci.pRasterizationState = &raster; pci.pMultisampleState = &ms; pci.pColorBlendState = &blend; pci.pDynamicState = &dynamic; pci.layout = layout;
+	VkPipeline pipeline = VK_NULL_HANDLE;
+	vr = impl->create_graphics_pipelines(impl->device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline);
+	if(vr != VK_SUCCESS) { impl->destroy_pipeline_layout(impl->device, layout, nullptr); impl->error = VkFailure("vkCreateGraphicsPipelines", vr); return GpuResult::InvalidState; }
+	GpuPipelineId id; id.value = impl->next_pipeline_id++;
+	Impl::PipelineState& state = impl->pipelines.Add(id.value, Impl::PipelineState()); state.desc = desc; state.layout = layout; state.pipeline = pipeline; out = id;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::DestroyPipeline(GpuPipelineId)
+GpuResult VulkanGpuDevice::DestroyPipeline(GpuPipelineId id)
 {
-	return impl->Unsupported("DestroyPipeline");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int index = impl->pipelines.Find(id.value);
+	if(!id.IsValid() || index < 0) { impl->error = "DestroyPipeline received an unknown pipeline"; return GpuResult::InvalidHandle; }
+	if(impl->HasOpenCommands()) { impl->error = "DestroyPipeline is forbidden while command lists are live"; return GpuResult::InvalidState; }
+	impl->destroy_pipeline(impl->device, impl->pipelines[index].pipeline, nullptr); impl->destroy_pipeline_layout(impl->device, impl->pipelines[index].layout, nullptr); impl->pipelines.Remove(index);
+	return GpuResult::Ok;
 }
 
 GpuResult VulkanGpuDevice::BeginCommands(GpuCommandListId& out)
 {
 	out = GpuCommandListId();
-	return impl->Unsupported("BeginCommands");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	Impl::CommandState state;
+	VkCommandPoolCreateInfo pci {}; pci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO; pci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT; pci.queueFamilyIndex = impl->graphics_queue_family_index;
+	VkResult vr = impl->create_command_pool(impl->device, &pci, nullptr, &state.pool);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateCommandPool", vr); return GpuResult::InvalidState; }
+	VkCommandBufferAllocateInfo ai {}; ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO; ai.commandPool = state.pool; ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount = 1;
+	vr = impl->allocate_command_buffers(impl->device, &ai, &state.buffer);
+	if(vr == VK_SUCCESS) { VkCommandBufferBeginInfo bi {}; bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO; bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; vr = impl->begin_command_buffer(state.buffer, &bi); }
+	if(vr != VK_SUCCESS) { impl->DestroyCommandState(state); impl->error = VkFailure("begin command list", vr); return GpuResult::InvalidState; }
+	GpuCommandListId id; id.value = impl->next_command_id++; impl->commands.Add(id.value, pick(state)); out = id;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId, const GpuRenderPassDesc&)
+GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc)
 {
-	return impl->Unsupported("BeginRenderPass");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value), ti = impl->textures.Find(desc.color_target.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "BeginRenderPass received an unknown command list"; return GpuResult::InvalidHandle; }
+	if(!desc.color_target.IsValid() || ti < 0) { impl->error = "BeginRenderPass received an unknown color target"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci]; Impl::TextureState& texture = impl->textures[ti];
+	if(command.pass_active || command.ended) { impl->error = "BeginRenderPass command state is invalid"; return GpuResult::InvalidState; }
+	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format) { impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument; }
+	if(desc.color_load == GpuLoadOp::Load && !texture.initialized) { impl->error = "BeginRenderPass cannot load an uninitialized target"; return GpuResult::InvalidState; }
+	VkImageViewCreateInfo vi {}; vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; vi.image = texture.image; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = ToVkFormat(texture.desc.format); vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; vi.subresourceRange.levelCount = 1; vi.subresourceRange.layerCount = 1;
+	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &command.target_view);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return GpuResult::InvalidState; }
+	VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(texture.layout); barrier.srcAccessMask = Access2ForLayout(texture.layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = texture.layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
+	VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	VkClearValue clear {}; clear.color.float32[0] = desc.clear_color.red; clear.color.float32[1] = desc.clear_color.green; clear.color.float32[2] = desc.clear_color.blue; clear.color.float32[3] = desc.clear_color.alpha;
+	VkRenderingAttachmentInfo attachment {}; attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO; attachment.imageView = command.target_view; attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; attachment.loadOp = ToVkLoadOp(desc.color_load); attachment.storeOp = ToVkStoreOp(desc.color_store); attachment.clearValue = clear;
+	VkRenderingInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO; rendering.renderArea.extent = { (uint32_t)texture.desc.size.cx, (uint32_t)texture.desc.size.cy }; rendering.layerCount = 1; rendering.colorAttachmentCount = 1; rendering.pColorAttachments = &attachment;
+	impl->cmd_begin_rendering(command.buffer, &rendering);
+	VkViewport vp {}; vp.width = (float)texture.desc.size.cx; vp.height = (float)texture.desc.size.cy; vp.minDepth = 0.0f; vp.maxDepth = 1.0f; impl->cmd_set_viewport(command.buffer, 0, 1, &vp);
+	VkRect2D sc {}; sc.extent = rendering.renderArea.extent; impl->cmd_set_scissor(command.buffer, 0, 1, &sc);
+	command.target = desc.color_target; command.color_format = desc.color_format; command.final_layout = FinalTextureLayout(texture.desc.usage); command.pass_active = true;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId, GpuPipelineId)
+GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipeline)
 {
-	return impl->Unsupported("SetPipeline");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value), pi = impl->pipelines.Find(pipeline.value);
+	if(!list.IsValid() || ci < 0 || !pipeline.IsValid() || pi < 0) { impl->error = "SetPipeline received an unknown handle"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(!command.pass_active || command.ended || impl->pipelines[pi].desc.color_format != command.color_format) { impl->error = "SetPipeline command/pass state or format is invalid"; return GpuResult::InvalidState; }
+	impl->cmd_bind_pipeline(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, impl->pipelines[pi].pipeline); command.pipeline = pipeline;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::SetVertexBuffer(GpuCommandListId, GpuBufferId)
+GpuResult VulkanGpuDevice::SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer)
 {
-	return impl->Unsupported("SetVertexBuffer");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value), bi = impl->buffers.Find(buffer.value);
+	if(!list.IsValid() || ci < 0 || !buffer.IsValid() || bi < 0) { impl->error = "SetVertexBuffer received an unknown handle"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(!command.pass_active || command.ended || !(impl->buffers[bi].desc.usage & GpuBufferUsage_Vertex)) { impl->error = "SetVertexBuffer requires an active pass and vertex buffer"; return GpuResult::InvalidState; }
+	VkBuffer vk_buffer = impl->buffers[bi].raw.buffer; VkDeviceSize offset = 0; impl->cmd_bind_vertex_buffers(command.buffer, 0, 1, &vk_buffer, &offset); command.vertex_buffer = buffer;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::Draw(GpuCommandListId, int, int)
+GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first_vertex)
 {
-	return impl->Unsupported("Draw");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "Draw received an unknown command list"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(vertex_count <= 0 || first_vertex < 0) { impl->error = "Draw received an invalid vertex range"; return GpuResult::InvalidArgument; }
+	if(!command.pass_active || !command.pipeline.IsValid() || !command.vertex_buffer.IsValid()) { impl->error = "Draw requires an active pass, pipeline, and vertex buffer"; return GpuResult::InvalidState; }
+	impl->cmd_draw(command.buffer, (uint32_t)vertex_count, 1, (uint32_t)first_vertex, 0);
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::EndRenderPass(GpuCommandListId)
+GpuResult VulkanGpuDevice::EndRenderPass(GpuCommandListId list)
 {
-	return impl->Unsupported("EndRenderPass");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "EndRenderPass received an unknown command list"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(!command.pass_active || command.ended) { impl->error = "EndRenderPass requires an active pass"; return GpuResult::InvalidState; }
+	impl->cmd_end_rendering(command.buffer);
+	int ti = impl->textures.Find(command.target.value);
+	if(ti < 0) { impl->error = "EndRenderPass lost its color target"; return GpuResult::InvalidState; }
+	Impl::TextureState& texture = impl->textures[ti];
+	if(command.final_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.dstStageMask = Stage2ForLayout(command.final_layout); barrier.dstAccessMask = Access2ForLayout(command.final_layout); barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.newLayout = command.final_layout; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
+		VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	}
+	command.pass_active = false;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::EndCommands(GpuCommandListId)
+GpuResult VulkanGpuDevice::EndCommands(GpuCommandListId list)
 {
-	return impl->Unsupported("EndCommands");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "EndCommands received an unknown command list"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(command.pass_active || command.ended) { impl->error = "EndCommands command state is invalid"; return GpuResult::InvalidState; }
+	VkResult vr = impl->end_command_buffer(command.buffer);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkEndCommandBuffer", vr); return GpuResult::InvalidState; }
+	command.ended = true;
+	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::Submit(GpuCommandListId)
+GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 {
-	return impl->Unsupported("Submit");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "Submit received an unknown command list"; return GpuResult::InvalidHandle; }
+	Impl::CommandState& command = impl->commands[ci];
+	if(!command.ended || command.pass_active) { impl->error = "Submit requires an ended command list"; return GpuResult::InvalidState; }
+	VkSubmitInfo submit {}; submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO; submit.commandBufferCount = 1; submit.pCommandBuffers = &command.buffer;
+	VkResult vr = impl->queue_submit(impl->graphics_queue, 1, &submit, VK_NULL_HANDLE);
+	if(vr == VK_SUCCESS) vr = impl->queue_wait_idle(impl->graphics_queue);
+	if(vr != VK_SUCCESS) { impl->error = VkFailure("Vulkan command submission", vr); return GpuResult::InvalidState; }
+	int ti = impl->textures.Find(command.target.value);
+	if(ti >= 0) { impl->textures[ti].layout = command.final_layout; impl->textures[ti].initialized = true; }
+	impl->DestroyCommandState(command); impl->commands.Remove(ci);
+	return GpuResult::Ok;
 }
 
 }
