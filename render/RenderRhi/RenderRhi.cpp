@@ -65,6 +65,8 @@ String DumpGpuFormat(GpuFormat format)
 	case GpuFormat::Unknown: return "Unknown";
 	case GpuFormat::RGBA8: return "RGBA8";
 	case GpuFormat::BGRA8: return "BGRA8";
+	case GpuFormat::RGBA8Srgb: return "RGBA8Srgb";
+	case GpuFormat::BGRA8Srgb: return "BGRA8Srgb";
 	case GpuFormat::R16F: return "R16F";
 	case GpuFormat::D24S8: return "D24S8";
 	}
