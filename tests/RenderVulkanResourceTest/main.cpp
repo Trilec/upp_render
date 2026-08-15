@@ -61,7 +61,7 @@ CONSOLE_APP_MAIN
 			ok &= Check(device.GetBackendKind() == GpuBackendKind::Vulkan, "VulkanGpuDevice backend should be Vulkan");
 			ok &= Check((device.GetAdapterInfo().capability_flags & (GpuCapability_Buffers | GpuCapability_Textures)) ==
 			            (GpuCapability_Buffers | GpuCapability_Textures),
-			            "S17B adapter should advertise buffer and texture capabilities");
+			            "adapter should advertise buffer and texture capabilities");
 
 			byte buffer_data[64] = {};
 			for(int i = 0; i < 64; ++i)
@@ -117,8 +117,12 @@ CONSOLE_APP_MAIN
 			            "explicit Vulkan resource destruction should leave zero adapter-owned resources");
 
 			GpuCommandListId commands;
-			ok &= Check(device.BeginCommands(commands) == GpuResult::Unsupported && !commands.IsValid(),
-			            "S17B should report command recording as explicitly deferred");
+			ok &= Check(device.BeginCommands(commands) == GpuResult::Ok && commands.IsValid(),
+			            "graphics-enabled adapter should begin an empty command list");
+			ok &= Check(device.EndCommands(commands) == GpuResult::Ok,
+			            "empty command list should end cleanly");
+			ok &= Check(device.Submit(commands) == GpuResult::Ok,
+			            "empty command list should submit cleanly");
 
 			GpuBufferId destructor_buffer;
 			GpuTextureId destructor_texture;
@@ -130,9 +134,9 @@ CONSOLE_APP_MAIN
 
 		session.Close();
 		ok &= Check(session.GetReport().validation_warning_count == 0,
-		            "S17B Vulkan resource path should emit zero validation warnings");
+		            "Vulkan resource path should emit zero validation warnings");
 		ok &= Check(session.GetReport().validation_error_count == 0,
-		            "S17B Vulkan resource path should emit zero validation errors");
+		            "Vulkan resource path should emit zero validation errors");
 	}
 	else {
 		session.Close();
@@ -148,7 +152,7 @@ CONSOLE_APP_MAIN
 	            diag.surface_live_count == 0 &&
 	            diag.device_live_count == 0 &&
 	            diag.swapchain_live_count == 0,
-	            "S17B resource test should finish with zero accepted Vulkan ownership diagnostics");
+	            "resource test should finish with zero accepted Vulkan ownership diagnostics");
 
 	if(ok) {
 		Cout() << "RenderVulkanResourceTest passed" << EOL;
