@@ -1320,6 +1320,7 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	Impl::CommandState& command = impl->commands[ci]; Impl::TextureState& texture = impl->textures[ti];
 	if(command.pass_active || command.ended) { impl->error = "BeginRenderPass command state is invalid"; return GpuResult::InvalidState; }
 	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format) { impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument; }
+	GpuFrameId frame_binding;
 	if(texture.borrowed_swapchain) {
 		Impl::FrameState *frame = impl->FindFrame(texture.owner_frame);
 		Impl::SwapchainState *swapchain = impl->FindSwapchain(texture.owner_swapchain);
@@ -1331,7 +1332,7 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 			impl->error = "BeginRenderPass command list cannot target multiple active frames";
 			return GpuResult::InvalidState;
 		}
-		command.frame = texture.owner_frame;
+		frame_binding = texture.owner_frame;
 	}
 	const int layout_index = command.texture_layouts.Find(desc.color_target.value);
 	const VkImageLayout current_layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture.layout;
@@ -1342,6 +1343,8 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	VkImageView target_view = VK_NULL_HANDLE;
 	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &target_view);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return GpuResult::InvalidState; }
+	if(frame_binding.IsValid())
+		command.frame = frame_binding;
 	command.target_views.Add(target_view);
 	if(current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(current_layout); barrier.srcAccessMask = Access2ForLayout(current_layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = current_layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
