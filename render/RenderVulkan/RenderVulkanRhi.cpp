@@ -12,6 +12,8 @@ static VkFormat ToVkFormat(GpuFormat format)
 	switch(format) {
 	case GpuFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
 	case GpuFormat::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
+	case GpuFormat::RGBA8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
+	case GpuFormat::BGRA8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
 	case GpuFormat::R16F: return VK_FORMAT_R16_SFLOAT;
 	case GpuFormat::D24S8: return VK_FORMAT_D24_UNORM_S8_UINT;
 	case GpuFormat::Unknown: return VK_FORMAT_UNDEFINED;
@@ -19,11 +21,32 @@ static VkFormat ToVkFormat(GpuFormat format)
 	return VK_FORMAT_UNDEFINED;
 }
 
+static GpuFormat FromVkFormat(VkFormat format)
+{
+	switch(format) {
+	case VK_FORMAT_R8G8B8A8_UNORM: return GpuFormat::RGBA8;
+	case VK_FORMAT_B8G8R8A8_UNORM: return GpuFormat::BGRA8;
+	case VK_FORMAT_R8G8B8A8_SRGB: return GpuFormat::RGBA8Srgb;
+	case VK_FORMAT_B8G8R8A8_SRGB: return GpuFormat::BGRA8Srgb;
+	case VK_FORMAT_R16_SFLOAT: return GpuFormat::R16F;
+	case VK_FORMAT_D24_UNORM_S8_UINT: return GpuFormat::D24S8;
+	default: return GpuFormat::Unknown;
+	}
+}
+
+static bool IsSwapchainColorFormat(GpuFormat format)
+{
+	return format == GpuFormat::RGBA8 || format == GpuFormat::BGRA8 ||
+	       format == GpuFormat::RGBA8Srgb || format == GpuFormat::BGRA8Srgb;
+}
+
 static int BytesPerPixel(GpuFormat format)
 {
 	switch(format) {
 	case GpuFormat::RGBA8:
 	case GpuFormat::BGRA8:
+	case GpuFormat::RGBA8Srgb:
+	case GpuFormat::BGRA8Srgb:
 	case GpuFormat::D24S8:
 		return 4;
 	case GpuFormat::R16F:
@@ -74,6 +97,7 @@ static VkPipelineStageFlags StageForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_PIPELINE_STAGE_TRANSFER_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	default: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	}
@@ -86,6 +110,7 @@ static VkAccessFlags AccessForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_ACCESS_TRANSFER_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_ACCESS_SHADER_READ_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return 0;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
 	default: return VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
 	}
@@ -98,6 +123,7 @@ static VkPipelineStageFlags2 Stage2ForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	default: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	}
@@ -110,6 +136,7 @@ static VkAccessFlags2 Access2ForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_ACCESS_2_TRANSFER_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_ACCESS_2_SHADER_READ_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return 0;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
 	default: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
 	}
@@ -161,6 +188,11 @@ struct VulkanGpuDevice::Impl {
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		bool initialized = false;
+		bool borrowed_swapchain = false;
+		bool renderable = false;
+		GpuSwapchainId owner_swapchain;
+		GpuFrameId owner_frame;
+		int image_index = -1;
 	};
 
 	struct ShaderState : Moveable<ShaderState> {
@@ -183,11 +215,34 @@ struct VulkanGpuDevice::Impl {
 		GpuTextureId target;
 		GpuPipelineId pipeline;
 		GpuBufferId vertex_buffer;
+		GpuFrameId frame;
 		GpuFormat color_format = GpuFormat::Unknown;
 		VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		bool store_result = false;
 		bool pass_active = false;
 		bool ended = false;
+	};
+
+	struct SurfaceState : Moveable<SurfaceState> {
+		GpuSurfaceDesc desc;
+		int live_swapchains = 0;
+	};
+
+	struct SwapchainState : Moveable<SwapchainState> {
+		GpuSwapchainDesc desc;
+		GpuTextureId backbuffer;
+		GpuFrameId active_frame;
+		uint64_t session_swapchain_id = 0;
+		Vector<uint8_t> content_initialized;
+	};
+
+	struct FrameState : Moveable<FrameState> {
+		GpuSwapchainId swapchain;
+		GpuTextureId color_target;
+		uint32_t image_index = UINT32_MAX;
+		bool active = false;
+		bool presented = false;
+		bool rendered = false;
 	};
 
 	VulkanSurfaceSession *session = nullptr;
@@ -208,11 +263,17 @@ struct VulkanGpuDevice::Impl {
 	int next_shader_id = 1;
 	int next_pipeline_id = 1;
 	int next_command_id = 1;
+	int next_surface_id = 1;
+	int next_swapchain_id = 1;
+	int next_frame_id = 1;
 	VectorMap<int, BufferState> buffers;
 	VectorMap<int, TextureState> textures;
 	VectorMap<int, ShaderState> shaders;
 	VectorMap<int, PipelineState> pipelines;
 	VectorMap<int, CommandState> commands;
+	VectorMap<int, SurfaceState> surfaces;
+	VectorMap<int, SwapchainState> swapchains;
+	VectorMap<int, FrameState> frames;
 
 	PFN_vkGetPhysicalDeviceMemoryProperties get_physical_device_memory_properties = nullptr;
 	VkPhysicalDeviceMemoryProperties memory_properties {};
@@ -341,12 +402,6 @@ struct VulkanGpuDevice::Impl {
 		return true;
 	}
 
-	GpuResult Unsupported(const char *operation)
-	{
-		error = String(operation) + " is deferred to TASK-008A1-S17C-B2 session convergence";
-		return GpuResult::Unsupported;
-	}
-
 	int FindMemoryType(uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags *out_flags = nullptr) const
 	{
 		auto find = [&](VkMemoryPropertyFlags wanted) -> int {
@@ -370,12 +425,80 @@ struct VulkanGpuDevice::Impl {
 
 	bool HasOpenCommands() const { return commands.GetCount() != 0; }
 
+	bool HasFrameCommands(GpuFrameId frame) const
+	{
+		for(int i = 0; i < commands.GetCount(); ++i)
+			if(commands[i].frame == frame)
+				return true;
+		return false;
+	}
+
 	bool PipelineUsesShader(int shader_id) const
 	{
 		for(int i = 0; i < pipelines.GetCount(); ++i)
 			if(pipelines[i].desc.vertex_shader.value == shader_id || pipelines[i].desc.fragment_shader.value == shader_id)
 				return true;
 		return false;
+	}
+
+	TextureState *FindTexture(GpuTextureId id)
+	{
+		int index = textures.Find(id.value);
+		return index >= 0 ? &textures[index] : nullptr;
+	}
+
+	SwapchainState *FindSwapchain(GpuSwapchainId id)
+	{
+		int index = swapchains.Find(id.value);
+		return index >= 0 ? &swapchains[index] : nullptr;
+	}
+
+	FrameState *FindFrame(GpuFrameId id)
+	{
+		int index = frames.Find(id.value);
+		return index >= 0 ? &frames[index] : nullptr;
+	}
+
+	void ClearBorrowedTexture(TextureState& texture)
+	{
+		texture.image = VK_NULL_HANDLE;
+		texture.memory = VK_NULL_HANDLE;
+		texture.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		texture.initialized = false;
+		texture.renderable = false;
+		texture.owner_frame = GpuFrameId();
+		texture.image_index = -1;
+	}
+
+	void RemoveFramesForSwapchain(GpuSwapchainId swapchain)
+	{
+		for(int i = frames.GetCount() - 1; i >= 0; --i)
+			if(frames[i].swapchain == swapchain)
+				frames.Remove(i);
+	}
+
+	bool ApplySessionSwapchainReport(SwapchainState& state)
+	{
+		const VulkanSurfaceReport& report = session->GetReport();
+		const GpuFormat actual_format = FromVkFormat(report.swapchain_format);
+		if(!session->HasSwapchain() || report.swapchain_id == 0 || report.swapchain_image_count < 2 ||
+		   report.swapchain_extent.cx <= 0 || report.swapchain_extent.cy <= 0 || !IsSwapchainColorFormat(actual_format)) {
+			error = "Vulkan session produced an unsupported neutral swapchain description";
+			return false;
+		}
+		state.session_swapchain_id = report.swapchain_id;
+		state.desc.size = report.swapchain_extent;
+		state.desc.color_format = actual_format;
+		state.desc.image_count = report.swapchain_image_count;
+		state.active_frame = GpuFrameId();
+		state.content_initialized.SetCount(report.swapchain_image_count, 0);
+		TextureState *texture = FindTexture(state.backbuffer);
+		if(texture) {
+			texture->desc.size = report.swapchain_extent;
+			texture->desc.format = actual_format;
+			ClearBorrowedTexture(*texture);
+		}
+		return true;
 	}
 
 	bool CreateRawBuffer(VkDeviceSize size, VkBufferUsageFlags usage, RawBuffer& out)
@@ -658,6 +781,9 @@ struct VulkanGpuDevice::Impl {
 			shaders.Clear();
 			buffers.Clear();
 			textures.Clear();
+			frames.Clear();
+			swapchains.Clear();
+			surfaces.Clear();
 			return;
 		}
 		queue_wait_idle(graphics_queue);
@@ -676,10 +802,23 @@ struct VulkanGpuDevice::Impl {
 			if(state.module) destroy_shader_module(device, state.module, nullptr);
 			shaders.Remove(shaders.GetCount() - 1);
 		}
+		if(swapchains.GetCount() && session->HasSwapchain()) {
+			const uint64_t current_id = session->GetReport().swapchain_id;
+			for(int i = 0; i < swapchains.GetCount(); ++i)
+				if(swapchains[i].session_swapchain_id == current_id) {
+					session->DestroySwapchain();
+					break;
+				}
+		}
+		frames.Clear();
+		swapchains.Clear();
+		surfaces.Clear();
 		while(textures.GetCount()) {
 			TextureState& state = textures[textures.GetCount() - 1];
-			if(state.image) destroy_image(device, state.image, nullptr);
-			if(state.memory) free_memory(device, state.memory, nullptr);
+			if(!state.borrowed_swapchain) {
+				if(state.image) destroy_image(device, state.image, nullptr);
+				if(state.memory) free_memory(device, state.memory, nullptr);
+			}
 			textures.Remove(textures.GetCount() - 1);
 		}
 		while(buffers.GetCount()) {
@@ -738,6 +877,17 @@ int VulkanGpuDevice::GetLiveTextureCount() const { return impl ? impl->textures.
 int VulkanGpuDevice::GetLiveShaderCount() const { return impl ? impl->shaders.GetCount() : 0; }
 int VulkanGpuDevice::GetLivePipelineCount() const { return impl ? impl->pipelines.GetCount() : 0; }
 int VulkanGpuDevice::GetLiveCommandCount() const { return impl ? impl->commands.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveSurfaceCount() const { return impl ? impl->surfaces.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveSwapchainCount() const { return impl ? impl->swapchains.GetCount() : 0; }
+int VulkanGpuDevice::GetLiveFrameCount() const
+{
+	if(!impl) return 0;
+	int count = 0;
+	for(int i = 0; i < impl->frames.GetCount(); ++i)
+		if(impl->frames[i].active)
+			++count;
+	return count;
+}
 GpuDeviceId VulkanGpuDevice::GetDeviceId() const { return impl->device_id; }
 GpuBackendKind VulkanGpuDevice::GetBackendKind() const { return GpuBackendKind::Vulkan; }
 GpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const { return impl->adapter_info; }
@@ -805,6 +955,7 @@ GpuResult VulkanGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDe
 	int index = impl->textures.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "WriteTexture received an unknown texture"; return GpuResult::InvalidHandle; }
 	Impl::TextureState& state = impl->textures[index];
+	if(state.borrowed_swapchain) { impl->error = "WriteTexture cannot write a borrowed swapchain backbuffer"; return GpuResult::InvalidState; }
 	if(!data || data_size <= 0 || desc.origin.x < 0 || desc.origin.y < 0 || desc.size.cx <= 0 || desc.size.cy <= 0 || desc.row_pitch <= 0) {
 		impl->error = "WriteTexture received an invalid write layout"; return GpuResult::InvalidArgument;
 	}
@@ -826,6 +977,7 @@ GpuResult VulkanGpuDevice::DestroyTexture(GpuTextureId id)
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->textures.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "DestroyTexture received an unknown texture"; return GpuResult::InvalidHandle; }
+	if(impl->textures[index].borrowed_swapchain) { impl->error = "DestroyTexture cannot destroy a borrowed swapchain backbuffer"; return GpuResult::InvalidState; }
 	if(impl->HasOpenCommands()) { impl->error = "DestroyTexture is forbidden while command lists are live"; return GpuResult::InvalidState; }
 	VkResult vr = impl->queue_wait_idle(impl->graphics_queue);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkQueueWaitIdle", vr); return GpuResult::InvalidState; }
@@ -836,17 +988,230 @@ GpuResult VulkanGpuDevice::DestroyTexture(GpuTextureId id)
 	return GpuResult::Ok;
 }
 
-GpuResult VulkanGpuDevice::CreateSurface(const GpuSurfaceDesc&, GpuSurfaceId& out) { out = GpuSurfaceId(); return impl->Unsupported("CreateSurface"); }
-GpuResult VulkanGpuDevice::DestroySurface(GpuSurfaceId) { return impl->Unsupported("DestroySurface"); }
-GpuResult VulkanGpuDevice::CreateSwapchain(const GpuSwapchainDesc&, GpuSwapchainId& out) { out = GpuSwapchainId(); return impl->Unsupported("CreateSwapchain"); }
-GpuResult VulkanGpuDevice::DestroySwapchain(GpuSwapchainId) { return impl->Unsupported("DestroySwapchain"); }
-GpuResult VulkanGpuDevice::ResizeSwapchain(GpuSwapchainId, Size) { return impl->Unsupported("ResizeSwapchain"); }
-GpuResult VulkanGpuDevice::BeginFrame(GpuSwapchainId, GpuFrameInfo& out)
+GpuResult VulkanGpuDevice::CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out)
+{
+	out = GpuSurfaceId();
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(desc.size.cx <= 0 || desc.size.cy <= 0 || !desc.native_window.IsValid() || desc.native_window.kind != GpuNativeWindowKind::Win32) {
+		impl->error = "CreateSurface requires positive size and a valid Win32 native window";
+		return GpuResult::InvalidArgument;
+	}
+	const GpuNativeWindowDesc& session_window = impl->session->GetReport().native_window;
+	if(desc.native_window.kind != session_window.kind || desc.native_window.handle != session_window.handle) {
+		impl->error = "CreateSurface must describe the VulkanSurfaceSession native window";
+		return GpuResult::InvalidArgument;
+	}
+	if(impl->surfaces.GetCount()) {
+		impl->error = "VulkanGpuDevice exposes one logical surface for its borrowed session";
+		return GpuResult::InvalidState;
+	}
+	GpuSurfaceId id; id.value = impl->next_surface_id++;
+	Impl::SurfaceState& state = impl->surfaces.Add(id.value, Impl::SurfaceState());
+	state.desc = desc; out = id;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DestroySurface(GpuSurfaceId id)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int index = impl->surfaces.Find(id.value);
+	if(!id.IsValid() || index < 0) { impl->error = "DestroySurface received an unknown surface"; return GpuResult::InvalidHandle; }
+	if(impl->surfaces[index].live_swapchains > 0) { impl->error = "DestroySurface is forbidden while a logical swapchain is live"; return GpuResult::InvalidState; }
+	impl->surfaces.Remove(index);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::CreateSwapchain(const GpuSwapchainDesc& desc, GpuSwapchainId& out)
+{
+	out = GpuSwapchainId();
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int surface_index = impl->surfaces.Find(desc.surface.value);
+	if(!desc.surface.IsValid() || surface_index < 0) { impl->error = "CreateSwapchain received an unknown surface"; return GpuResult::InvalidHandle; }
+	if(desc.size.cx <= 0 || desc.size.cy <= 0 || desc.image_count < 2 || !IsSwapchainColorFormat(desc.color_format)) {
+		impl->error = "CreateSwapchain requires positive size, at least two images, and an 8-bit color format";
+		return GpuResult::InvalidArgument;
+	}
+	if(impl->swapchains.GetCount() || impl->session->HasSwapchain()) {
+		impl->error = "CreateSwapchain refuses duplicate or externally-created session swapchain ownership";
+		return GpuResult::InvalidState;
+	}
+	if(!impl->session->CreateSwapchain(desc.size)) {
+		impl->error = impl->session->GetReport().swapchain_error;
+		if(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession swapchain creation failed";
+		return GpuResult::InvalidState;
+	}
+	const VulkanSurfaceReport& report = impl->session->GetReport();
+	const GpuFormat actual_format = FromVkFormat(report.swapchain_format);
+	if(report.swapchain_id == 0 || report.swapchain_image_count < 2 || report.swapchain_extent.cx <= 0 || report.swapchain_extent.cy <= 0 || !IsSwapchainColorFormat(actual_format)) {
+		impl->session->DestroySwapchain();
+		impl->error = "VulkanSurfaceSession selected a swapchain format not represented by GpuFormat";
+		return GpuResult::Unsupported;
+	}
+
+	GpuSwapchainId id; id.value = impl->next_swapchain_id++;
+	GpuTextureId backbuffer; backbuffer.value = impl->next_texture_id++;
+	Impl::SwapchainState& state = impl->swapchains.Add(id.value, Impl::SwapchainState());
+	state.desc = desc;
+	state.desc.size = report.swapchain_extent;
+	state.desc.color_format = actual_format;
+	state.desc.image_count = report.swapchain_image_count;
+	state.backbuffer = backbuffer;
+	state.session_swapchain_id = report.swapchain_id;
+	state.content_initialized.SetCount(report.swapchain_image_count, 0);
+
+	Impl::TextureState& texture = impl->textures.Add(backbuffer.value, Impl::TextureState());
+	texture.desc.size = report.swapchain_extent;
+	texture.desc.format = actual_format;
+	texture.desc.usage = GpuTextureUsage_ColorAttachment;
+	texture.desc.label = desc.label;
+	texture.borrowed_swapchain = true;
+	texture.owner_swapchain = id;
+	impl->surfaces[surface_index].live_swapchains++;
+	out = id;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DestroySwapchain(GpuSwapchainId id)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int index = impl->swapchains.Find(id.value);
+	if(!id.IsValid() || index < 0) { impl->error = "DestroySwapchain received an unknown swapchain"; return GpuResult::InvalidHandle; }
+	Impl::SwapchainState& state = impl->swapchains[index];
+	if(state.active_frame.IsValid()) { impl->error = "DestroySwapchain is forbidden while a frame is active"; return GpuResult::InvalidState; }
+	if(!impl->session->HasSwapchain() || impl->session->GetReport().swapchain_id != state.session_swapchain_id) {
+		impl->error = "DestroySwapchain detected session swapchain ownership changed outside VulkanGpuDevice";
+		return GpuResult::InvalidState;
+	}
+	if(!impl->session->DestroySwapchain()) {
+		impl->error = impl->session->GetReport().swapchain_error;
+		if(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession swapchain destruction failed";
+		return GpuResult::InvalidState;
+	}
+	int surface_index = impl->surfaces.Find(state.desc.surface.value);
+	if(surface_index >= 0 && impl->surfaces[surface_index].live_swapchains > 0)
+		impl->surfaces[surface_index].live_swapchains--;
+	int texture_index = impl->textures.Find(state.backbuffer.value);
+	if(texture_index >= 0) impl->textures.Remove(texture_index);
+	impl->RemoveFramesForSwapchain(id);
+	impl->swapchains.Remove(index);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::ResizeSwapchain(GpuSwapchainId id, Size size)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	int index = impl->swapchains.Find(id.value);
+	if(!id.IsValid() || index < 0) { impl->error = "ResizeSwapchain received an unknown swapchain"; return GpuResult::InvalidHandle; }
+	if(size.cx <= 0 || size.cy <= 0) { impl->error = "ResizeSwapchain requires positive size"; return GpuResult::InvalidArgument; }
+	Impl::SwapchainState& state = impl->swapchains[index];
+	if(state.active_frame.IsValid()) { impl->error = "ResizeSwapchain is forbidden while a frame is active"; return GpuResult::InvalidState; }
+	if(!impl->session->HasSwapchain() || impl->session->GetReport().swapchain_id != state.session_swapchain_id) {
+		impl->error = "ResizeSwapchain detected session swapchain ownership changed outside VulkanGpuDevice";
+		return GpuResult::InvalidState;
+	}
+	const Size old_size = state.desc.size;
+	if(!impl->session->DestroySwapchain()) {
+		impl->error = "ResizeSwapchain could not destroy the current session swapchain";
+		return GpuResult::InvalidState;
+	}
+	if(!impl->session->CreateSwapchain(size)) {
+		String failure = impl->session->GetReport().swapchain_error;
+		bool rolled_back = impl->session->CreateSwapchain(old_size);
+		if(rolled_back)
+			impl->ApplySessionSwapchainReport(state);
+		impl->error = String("ResizeSwapchain recreation failed") + (failure.IsEmpty() ? String() : String(": ") + failure);
+		return GpuResult::InvalidState;
+	}
+	if(!impl->ApplySessionSwapchainReport(state)) {
+		impl->session->DestroySwapchain();
+		bool rolled_back = impl->session->CreateSwapchain(old_size);
+		if(rolled_back)
+			impl->ApplySessionSwapchainReport(state);
+		return GpuResult::Unsupported;
+	}
+	impl->RemoveFramesForSwapchain(id);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& out)
 {
 	out.frame = GpuFrameId(); out.swapchain = GpuSwapchainId(); out.color_target = GpuTextureId(); out.size = Size(0, 0); out.color_format = GpuFormat::Unknown;
-	return impl->Unsupported("BeginFrame");
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	Impl::SwapchainState *state = impl->FindSwapchain(swapchain);
+	if(!swapchain.IsValid() || !state) { impl->error = "BeginFrame received an unknown swapchain"; return GpuResult::InvalidHandle; }
+	if(state->active_frame.IsValid()) { impl->error = "BeginFrame refuses a second active frame"; return GpuResult::InvalidState; }
+	if(!impl->session->HasSwapchain() || impl->session->GetReport().swapchain_id != state->session_swapchain_id) {
+		impl->error = "BeginFrame detected session swapchain ownership changed outside VulkanGpuDevice";
+		return GpuResult::InvalidState;
+	}
+	impl->RemoveFramesForSwapchain(swapchain);
+	if(!impl->session->AcquireFrame()) {
+		impl->error = impl->session->GetFrameReport().error;
+		if(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession frame acquisition failed";
+		return GpuResult::InvalidState;
+	}
+	VulkanSurfaceSession::FrameInterop interop;
+	uint32_t image_index = UINT32_MAX;
+	bool layout_initialized = false;
+	if(!impl->session->GetAcquiredFrameInterop(interop, image_index, layout_initialized) || interop.swapchain_id != state->session_swapchain_id || image_index >= (uint32_t)state->content_initialized.GetCount()) {
+		impl->session->PresentFrame();
+		impl->error = "VulkanGpuDevice could not map the acquired session frame";
+		return GpuResult::InvalidState;
+	}
+	Impl::TextureState *texture = impl->FindTexture(state->backbuffer);
+	if(!texture || image_index >= (uint32_t)interop.images.GetCount()) {
+		impl->session->PresentFrame();
+		impl->error = "VulkanGpuDevice logical backbuffer is missing";
+		return GpuResult::InvalidState;
+	}
+	GpuFrameId frame; frame.value = impl->next_frame_id++;
+	Impl::FrameState& frame_state = impl->frames.Add(frame.value, Impl::FrameState());
+	frame_state.swapchain = swapchain;
+	frame_state.color_target = state->backbuffer;
+	frame_state.image_index = image_index;
+	frame_state.active = true;
+	state->active_frame = frame;
+	texture->image = interop.images[image_index];
+	texture->layout = layout_initialized ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+	texture->initialized = state->content_initialized[image_index] != 0;
+	texture->renderable = true;
+	texture->owner_frame = frame;
+	texture->image_index = (int)image_index;
+	out.frame = frame;
+	out.swapchain = swapchain;
+	out.color_target = state->backbuffer;
+	out.size = state->desc.size;
+	out.color_format = state->desc.color_format;
+	return GpuResult::Ok;
 }
-GpuResult VulkanGpuDevice::Present(GpuFrameId) { return impl->Unsupported("Present"); }
+
+GpuResult VulkanGpuDevice::Present(GpuFrameId frame)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	Impl::FrameState *state = impl->FindFrame(frame);
+	if(!frame.IsValid() || !state) { impl->error = "Present received an unknown frame"; return GpuResult::InvalidHandle; }
+	if(state->presented || !state->active) { impl->error = "Present requires an active unpresented frame"; return GpuResult::InvalidState; }
+	Impl::SwapchainState *swapchain = impl->FindSwapchain(state->swapchain);
+	if(!swapchain || swapchain->active_frame != frame) { impl->error = "Present frame is not active on its swapchain"; return GpuResult::InvalidState; }
+	if(impl->HasFrameCommands(frame)) { impl->error = "Present refuses unsubmitted command work for the active frame"; return GpuResult::InvalidState; }
+	bool ok = state->rendered ? impl->session->PresentFrameImpl(true) : impl->session->PresentFrame();
+	if(!ok) {
+		impl->error = impl->session->GetFrameReport().error;
+		if(!impl->session->HasAcquiredFrame()) {
+			Impl::TextureState *texture = impl->FindTexture(state->color_target);
+			if(texture) impl->ClearBorrowedTexture(*texture);
+			state->active = false;
+			swapchain->active_frame = GpuFrameId();
+		}
+		return GpuResult::InvalidState;
+	}
+	Impl::TextureState *texture = impl->FindTexture(state->color_target);
+	if(texture) impl->ClearBorrowedTexture(*texture);
+	state->active = false;
+	state->presented = true;
+	swapchain->active_frame = GpuFrameId();
+	return GpuResult::Ok;
+}
 
 GpuResult VulkanGpuDevice::CreateShader(const GpuShaderDesc& desc, GpuShaderId& out)
 {
@@ -955,6 +1320,20 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	Impl::CommandState& command = impl->commands[ci]; Impl::TextureState& texture = impl->textures[ti];
 	if(command.pass_active || command.ended) { impl->error = "BeginRenderPass command state is invalid"; return GpuResult::InvalidState; }
 	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format) { impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument; }
+	GpuFrameId frame_binding;
+	if(texture.borrowed_swapchain) {
+		Impl::FrameState *frame = impl->FindFrame(texture.owner_frame);
+		Impl::SwapchainState *swapchain = impl->FindSwapchain(texture.owner_swapchain);
+		if(!texture.renderable || !texture.image || !frame || !frame->active || frame->presented || !swapchain || swapchain->active_frame != texture.owner_frame) {
+			impl->error = "BeginRenderPass borrowed swapchain backbuffer is not active";
+			return GpuResult::InvalidState;
+		}
+		if(command.frame.IsValid() && command.frame != texture.owner_frame) {
+			impl->error = "BeginRenderPass command list cannot target multiple active frames";
+			return GpuResult::InvalidState;
+		}
+		frame_binding = texture.owner_frame;
+	}
 	const int layout_index = command.texture_layouts.Find(desc.color_target.value);
 	const VkImageLayout current_layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture.layout;
 	const int initialized_index = command.texture_initialized.Find(desc.color_target.value);
@@ -964,6 +1343,8 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	VkImageView target_view = VK_NULL_HANDLE;
 	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &target_view);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return GpuResult::InvalidState; }
+	if(frame_binding.IsValid())
+		command.frame = frame_binding;
 	command.target_views.Add(target_view);
 	if(current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(current_layout); barrier.srcAccessMask = Access2ForLayout(current_layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = current_layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
@@ -979,7 +1360,7 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	command.pipeline = GpuPipelineId();
 	command.vertex_buffer = GpuBufferId();
 	command.color_format = desc.color_format;
-	command.final_layout = FinalTextureLayout(texture.desc.usage);
+	command.final_layout = texture.borrowed_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : FinalTextureLayout(texture.desc.usage);
 	command.store_result = desc.color_store == GpuStoreOp::Store;
 	command.pass_active = true;
 	return GpuResult::Ok;
@@ -1074,6 +1455,11 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 	if(!list.IsValid() || ci < 0) { impl->error = "Submit received an unknown command list"; return GpuResult::InvalidHandle; }
 	Impl::CommandState& command = impl->commands[ci];
 	if(!command.ended || command.pass_active) { impl->error = "Submit requires an ended command list"; return GpuResult::InvalidState; }
+	Impl::FrameState *frame = nullptr;
+	if(command.frame.IsValid()) {
+		frame = impl->FindFrame(command.frame);
+		if(!frame || !frame->active || frame->presented) { impl->error = "Submit frame command work is no longer active"; return GpuResult::InvalidState; }
+	}
 	VkSubmitInfo submit {}; submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO; submit.commandBufferCount = 1; submit.pCommandBuffers = &command.buffer;
 	VkResult vr = impl->queue_submit(impl->graphics_queue, 1, &submit, VK_NULL_HANDLE);
 	if(vr == VK_SUCCESS) vr = impl->queue_wait_idle(impl->graphics_queue);
@@ -1086,6 +1472,13 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 			if(initialized_index >= 0)
 				impl->textures[ti].initialized = command.texture_initialized[initialized_index];
 		}
+	}
+	if(frame) {
+		frame->rendered = true;
+		Impl::SwapchainState *swapchain = impl->FindSwapchain(frame->swapchain);
+		Impl::TextureState *texture = impl->FindTexture(frame->color_target);
+		if(swapchain && texture && frame->image_index < (uint32_t)swapchain->content_initialized.GetCount())
+			swapchain->content_initialized[frame->image_index] = texture->initialized ? 1 : 0;
 	}
 	impl->DestroyCommandState(command); impl->commands.Remove(ci);
 	return GpuResult::Ok;

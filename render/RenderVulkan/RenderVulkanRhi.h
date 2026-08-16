@@ -24,6 +24,9 @@ public:
 	int GetLiveShaderCount() const;
 	int GetLivePipelineCount() const;
 	int GetLiveCommandCount() const;
+	int GetLiveSurfaceCount() const;
+	int GetLiveSwapchainCount() const;
+	int GetLiveFrameCount() const;
 
 	GpuDeviceId GetDeviceId() const override;
 	GpuBackendKind GetBackendKind() const override;

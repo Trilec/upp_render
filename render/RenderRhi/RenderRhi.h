@@ -209,6 +209,8 @@ struct GpuSurfaceDesc : Moveable<GpuSurfaceDesc> {
 struct GpuSwapchainDesc : Moveable<GpuSwapchainDesc> {
 	String label;
 	GpuSurfaceId surface;
+	// Requested presentation properties. A backend may negotiate supported values;
+	// BeginFrame reports the actual acquired size and color format in GpuFrameInfo.
 	Size size = Size(0, 0);
 	GpuFormat color_format = GpuFormat::RGBA8;
 	int image_count = 2;
