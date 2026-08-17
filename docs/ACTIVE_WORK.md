@@ -6,26 +6,29 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 ## Accepted Baseline
 
 - Branch: `main`
-- Platform-accepted through: `TASK-008A1-S17B-R1`
-- S17A neutral-contract SHA: `5d7e5e2537a7fd70bd9d344c9cb885a04014c041`
-- S17B implementation SHA: `07e7870ae91316305f84a9fdc32b7488fd37eb3a`
-- S17B-R1 correction SHA: `6d36c102dcc30b79bf61156a1aec2d77bd598ecc`
-- S17B Windows acceptance HEAD: `dbd76e60ef090ca440461b8d3e7a1ab0f2a96e39`
-- S17B Windows result: PASS — focused resource Debug 4/4, Release 2/2, all named regressions passed
-- S17B validation: 0 Vulkan warnings, 0 Vulkan errors; final tracked Vulkan ownership counts zero
+- Stage 3 Vulkan backend/bootstrap: **PASS / 100% accepted**
+- Stage-3 Windows acceptance HEAD: `6ab33a42a3421643359cabfdae7afed7628ad349`
+- Stage-3 substantive convergence SHA: `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`
+- Stage-3 validation: `RenderVulkanGraphicsTest` Debug 4/4, Release 2/2; resource Debug/Release; RHI Debug/Release; frame and clear regressions all PASS
+- Stage-3 Vulkan validation: 0 warnings / 0 errors
+- Stage-3 final ownership: runtime/instance/debug messenger/surface/device/swapchain = `0/0/0/0/0/0`
+- Earlier S17B accepted baseline retained: S17A `5d7e5e2537a7fd70bd9d344c9cb885a04014c041`; S17B `07e7870ae91316305f84a9fdc32b7488fd37eb3a`; S17B-R1 `6d36c102dcc30b79bf61156a1aec2d77bd598ecc`
 
 ## Current Objective
 
-Run one combined Windows/runtime acceptance of the source-complete Stage 3 Vulkan backend and Stage 4 GPU 2D renderer. If clean, mark both stages 100% and move to Stage 5.
+Complete the narrow Stage-4 Windows re-acceptance after `TASK-009-W1-R1` fixed the one production compile blocker found by the first combined run. Do not repeat Stage 3 unless a new Stage-3-affecting change is introduced.
 
-Active validation task: `TASK-009-W1` — combined Stage-3/Stage-4 Windows acceptance.
+Active validation task: `TASK-009-W1-R1-W2` — Stage-4 Windows re-acceptance on current `main`.
 
 ## Stage 3 - Vulkan Backend / Bootstrap
 
-Implementation complete, platform validation pending.
+**100% complete and platform accepted.**
 
-Published S17C convergence includes:
+Accepted implementation includes:
 
+- runtime / loader / validation, instance/debug messenger, physical/device/queue setup and Win32 surface
+- explicit grouped/default Vulkan ownership with deterministic cleanup
+- session-owned swapchain creation/recreation and frame acquire/present
 - neutral vertex/fragment shader lifecycle and SPIR-V payload descriptor
 - `Position2Color4F` vertex layout and render-pass clear colour
 - real `VkShaderModule`, dynamic-rendering graphics pipelines, command recording, vertex binding and `vkCmdDraw`
@@ -45,20 +48,23 @@ Key publication SHAs:
 - B2A session handoff merge: `5357c7938dc4b0e067470fc1c188c2b8941a6d53`
 - B2-B0 explicit sRGB format merge: `869ab63649ccd6bf4ee4cca2365d58e5a4c3ce86`
 - final Stage-3 substantive convergence merge: `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`
+- final Stage-3 acceptance HEAD: `6ab33a42a3421643359cabfdae7afed7628ad349`
 
-Stage-3 completion gate:
+`TASK-009-W1` Stage-3 evidence:
 
-- `ced346bae602ed6b9b34c8a468c19cc26ffc5c08` is an ancestor of tested current HEAD
-- focused Vulkan graphics Debug/Release passes
-- resource/RHI/frame/clear regressions pass
-- GpuCtrl real presentation path remains clean
-- Vulkan validation warnings/errors = 0/0
-- final runtime/instance/debug/surface/device/swapchain ownership diagnostics = 0
-- neutral public headers remain free of Vulkan types
+- required Stage-3 SHA ancestor check: PASS / exit 0
+- `RenderVulkanGraphicsTest` Debug: 4/4 PASS
+- `RenderVulkanGraphicsTest` Release: 2/2 PASS
+- `RenderVulkanResourceTest` Debug/Release: PASS
+- `RenderRhiTest` Debug/Release: PASS
+- `RenderVulkanFrameTest` Debug: PASS
+- `RenderVulkanClearFrameTest` Debug: PASS
+- Vulkan validation warnings/errors: 0/0
+- final Vulkan ownership: 0/0/0/0/0/0
 
 ## Stage 4 - GPU 2D Renderer
 
-Implementation complete, platform validation pending.
+Implementation is source-complete. Platform acceptance is pending one narrow re-run after `TASK-009-W1-R1`.
 
 Published `TASK-009A` renderer core:
 
@@ -98,7 +104,7 @@ Published `TASK-009C` live control integration:
 - teardown reverses borrowing order: renderer -> logical swapchain/surface -> adapter -> session
 - live immutable scene exercises opaque/translucent fills, translucent stroke, rounded rectangle, device-space clip, Save/Restore and a genuine scale/shear/translation affine transform
 - `GpuCtrlReplayTest` validates that same live scene through production `UiRenderer2D` + `RenderNull`
-- existing `GpuCtrlPresentationTest` now exercises the production renderer path while retaining two-control/resize/refresh/hide-show/ownership coverage
+- existing `GpuCtrlPresentationTest` exercises the production renderer path while retaining two-control/resize/refresh/hide-show/ownership coverage
 - TASK-009C merge: `b15c7579a0471290dc416131ebe9180a4c14be05`
 
 Published `TASK-009D` semantic parity closure:
@@ -108,29 +114,48 @@ Published `TASK-009D` semantic parity closure:
 - both replays preserve the immutable display-list dump
 - GPU-contract path retains full primitive/state accounting, one-draw batching, SourceOver pipeline state and persistent resource reuse evidence
 - exact GPU pixel readback remains Stage-8 hardening, where the project plan places software/GPU output comparison
-- TASK-009D merge / final Stage-4 source checkpoint: `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`
+- TASK-009D merge / Stage-4 source checkpoint: `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`
 
-Stage-4 completion gate:
+`TASK-009-W1` first Stage-4 attempt:
 
-- `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953` is an ancestor of tested current HEAD
-- `RenderGpu2DTest` Debug/Release passes
-- `GpuCtrlReplayTest` Debug/Release passes
-- real Vulkan `GpuCtrlPresentationTest` Debug/Release passes through resize/refresh/hide-show
-- Vulkan validation warnings/errors = 0/0
+- Stage-4 SHA ancestor check: PASS / exit 0
+- `RenderGpu2DTest` Debug/Release: built successfully
+- first blocker: `GpuCtrlReplayTest` compile failure in production `render/GpuCtrl/GpuCtrl.cpp`
+- cause: direct `RoundedRect(Rectf, radius)` construction collided with CtrlLib `RoundedRect(...)` free functions in the same `Upp` namespace
+- classification: narrow production compile defect; no renderer/RHI architecture change required
+- `GpuCtrlPresentationTest` was not run because validation correctly stopped at the first blocker
+
+Published `TASK-009-W1-R1` correction:
+
+- `render/GpuCtrl/GpuCtrl.cpp` now uses the established elaborated-type pattern: `struct RoundedRect rounded(...)`, then passes the local value to `FillRoundedRect`
+- no RHI, Vulkan ownership, renderer semantics, display-list semantics, package membership, tests or public API changed
+- correction SHA: `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
+
+Stage-4 completion gate now:
+
+- `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a` is an ancestor of tested current HEAD
+- `RenderGpu2DTest` Debug/Release run and PASS
+- `GpuCtrlReplayTest` Debug/Release build and PASS
+- real Vulkan `GpuCtrlPresentationTest` Debug/Release build and PASS through resize/refresh/hide-show
+- Vulkan validation warnings/errors = 0/0 for the real presentation path
 - no crash, hang, device loss, unexpected idle recreation, or ownership leak
 - final Vulkan ownership diagnostics = 0
 
-Regular non-swapchain sRGB texture-upload parity in `RenderNull` remains deferred to Stage 5 image/texture work. It is not part of Stage-4 solid-primitive rendering.
+Non-blocking observation from `TASK-009-W1`:
+
+- `RenderNull.cpp` warns that `RGBA8Srgb` / `BGRA8Srgb` are not handled by `BytesPerPixel`
+- this is intentionally not folded into the R1 compile correction: adding those cases would expand regular non-swapchain sRGB texture-upload semantics that are already deferred to Stage 5 image/texture work
+- resolve that behavior deliberately in Stage 5 rather than silently changing it during Stage-4 acceptance
 
 ## Recovery Log
 
-BASE: `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953` / `main`
-TASK: `TASK-009-W1` combined Stage-3/Stage-4 Windows acceptance
-TOUCHED: latest source checkpoint — `tests/RenderGpu2DTest/RenderGpu2DTest.upp`, `tests/RenderGpu2DTest/main.cpp`; status — `docs/ACTIVE_WORK.md`
-STATUS: IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING
-PUBLISHED: Stage-3 convergence `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; Stage-4 A `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`; B `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`; C `b15c7579a0471290dc416131ebe9180a4c14be05`; D/final source checkpoint `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`
-VALIDATION: source/static and aggregate PR reviews complete for Stage 3 and TASK-009A/B/C/D; Windows/runtime/Vulkan acceptance pending
+BASE: `6ab33a42a3421643359cabfdae7afed7628ad349` / `main`
+TASK: `TASK-009-W1-R1` repair first Stage-4 Windows compile blocker and re-run Stage-4 acceptance
+TOUCHED: `render/GpuCtrl/GpuCtrl.cpp`; status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS / 100%; Stage 4 IMPLEMENTATION COMPLETE — PLATFORM REVALIDATION PENDING
+PUBLISHED: Stage-3 convergence `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; Stage-4 A `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`; B `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`; C `b15c7579a0471290dc416131ebe9180a4c14be05`; D `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`; R1 `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
+VALIDATION: Stage 3 accepted by `TASK-009-W1`; Stage 4 stopped at production compile blocker on pre-R1 HEAD; corrected-tree Stage-4 revalidation pending
 
 ## Next Action
 
-Gary runs `TASK-009-W1` against current `main`, confirming both `ced346bae602ed6b9b34c8a468c19cc26ffc5c08` and `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953` are ancestors of current HEAD. Validate Stage 3 first so its result can be classified independently, then run Stage-4 renderer/control tests. Stop on the first genuine compile/runtime/validation/ownership blocker and report exact evidence. No edits, commits or pushes. If both gates pass, mark Stage 3 and Stage 4 100% and move directly to Stage 5.
+Gary runs `TASK-009-W1-R1-W2` against current `main`. Confirm `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a` is an ancestor, then run Stage-4 tests only: `RenderGpu2DTest` Debug/Release, `GpuCtrlReplayTest` Debug/Release, and `GpuCtrlPresentationTest` Debug/Release. Stop on the first genuine blocker. No edits, commits or pushes are needed for this validation. If clean, mark Stage 4 100% and move directly to Stage 5.
