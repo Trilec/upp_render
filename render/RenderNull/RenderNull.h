@@ -48,6 +48,10 @@ public:
 	GpuResult Submit(GpuCommandListId list) override;
 
 	String DumpLog() const;
+	int GetLiveBufferCount() const { return buffers.GetCount(); }
+	int GetLiveTextureCount() const { return textures.GetCount(); }
+	int GetLiveShaderCount() const { return shaders.GetCount(); }
+	int GetLivePipelineCount() const { return pipelines.GetCount(); }
 	bool GetPipelineDesc(GpuPipelineId id, GpuPipelineDesc& out) const {
 		int index = pipelines.Find(id.value);
 		if(!id.IsValid() || index < 0)

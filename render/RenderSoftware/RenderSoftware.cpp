@@ -49,6 +49,7 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 					--depth;
 				}
 			}
+		}
 	};
 
 	int depth = 0;
