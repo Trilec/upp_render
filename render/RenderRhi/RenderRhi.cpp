@@ -158,8 +158,27 @@ String DumpGpuVertexLayout(GpuVertexLayout layout)
 	switch(layout) {
 	case GpuVertexLayout::Unknown: return "Unknown";
 	case GpuVertexLayout::Position2Color4F: return "Position2Color4F";
+	case GpuVertexLayout::Position2Uv2Color4F: return "Position2Uv2Color4F";
 	}
 	return String("Unknown(") + AsString((int)layout) + ")";
+}
+
+String DumpGpuSamplerFilter(GpuSamplerFilter filter)
+{
+	switch(filter) {
+	case GpuSamplerFilter::Nearest: return "Nearest";
+	case GpuSamplerFilter::Linear: return "Linear";
+	}
+	return String("Unknown(") + AsString((int)filter) + ")";
+}
+
+String DumpGpuSamplerAddressMode(GpuSamplerAddressMode mode)
+{
+	switch(mode) {
+	case GpuSamplerAddressMode::ClampToEdge: return "ClampToEdge";
+	case GpuSamplerAddressMode::Repeat: return "Repeat";
+	}
+	return String("Unknown(") + AsString((int)mode) + ")";
 }
 
 String DumpGpuCapabilityFlags(int flags)
