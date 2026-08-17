@@ -146,14 +146,23 @@ CONSOLE_APP_MAIN
 	ok &= Check(ImageDiffersFrom(output, background), "vector software replay should produce visible output");
 	ok &= Check(list.Dump() == dump, "software vector replay must not mutate the display list");
 
-	UiDisplayOp raster_op = list[2];
 	Image raster;
 	Rectf raster_rect;
 	String raster_error;
-	ok &= Check(RasterizeUiVectorOp(raster_op, 2.0, raster, raster_rect, raster_error),
+	ok &= Check(RasterizeUiVectorOp(list[2], 2.0, raster, raster_rect, raster_error),
 	            "shared vector raster authority should rasterize a gradient path");
 	ok &= Check(!raster.IsEmpty() && raster_rect.right > raster_rect.left && raster_rect.bottom > raster_rect.top,
 	            "shared vector raster should return image plus local bounds");
+
+	UiPath malformed;
+	malformed.LineTo(Pointf(4, 4));
+	UiDisplayListBuilder malformed_builder;
+	malformed_builder.FillPath(malformed, UiPaint::Solid(Rgba8(255, 255, 255)));
+	UiDisplayList malformed_list;
+	ok &= Check(malformed_builder.Finish(malformed_list), "malformed path should still record immutably");
+	ImagePainter malformed_painter(Size(16, 16));
+	ok &= Check(!software.Replay(malformed_list, malformed_painter),
+	            "software replay should reject a path segment before MoveTo");
 
 	if(ok) {
 		Cout() << "RenderVectorTest passed" << EOL;
