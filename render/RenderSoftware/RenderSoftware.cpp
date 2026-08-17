@@ -101,8 +101,10 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 				painter.DrawImage(ToRect(op.rect), op.image);
 			break;
 		case UiDisplayOpType::DrawText:
-			if(!op.text.IsEmpty())
-				painter.DrawText((int)op.point.x, (int)op.point.y, op.text, op.font, op.color.ToColor());
+			if(!op.text.IsEmpty()) {
+				painter.Text(op.point, op.text, op.font);
+				painter.Fill(ToRgba(op.color));
+			}
 			break;
 		}
 	}
