@@ -253,6 +253,7 @@ bool UiRenderer2D::EnsurePipeline(GpuFormat format, GpuPipelineId& out)
 	desc.vertex_shader = vertex_shader;
 	desc.fragment_shader = fragment_shader;
 	desc.vertex_layout = GpuVertexLayout::Position2Color4F;
+	desc.blend_mode = GpuBlendMode::SourceOver;
 	desc.label = "UiRenderer2D solid pipeline";
 	GpuPipelineId pipeline;
 	GpuResult result = device->CreatePipeline(desc, pipeline);
