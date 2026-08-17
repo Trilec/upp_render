@@ -118,7 +118,30 @@ private:
 		bool drawable = false;
 	};
 
-	struct TextImpl;
+	struct TextImpl {
+		static constexpr int ATLAS_SIZE = 1024;
+		static constexpr int ATLAS_PADDING = 1;
+
+		struct AtlasPage : Moveable<AtlasPage> {
+			GpuTextureId texture;
+			int cursor_x = ATLAS_PADDING;
+			int cursor_y = ATLAS_PADDING;
+			int row_height = 0;
+		};
+
+		struct GlyphEntry : Moveable<GlyphEntry> {
+			int page = -1;
+			Rect pixel_rect;
+			Pointf offset = Pointf(0, 0);
+			Size size = Size(0, 0);
+			double advance = 0;
+			bool drawable = false;
+		};
+
+		Vector<AtlasPage> pages;
+		VectorMap<String, GlyphEntry> glyphs;
+	};
+
 	struct TextCleanup {
 		UiRenderer2D *owner = nullptr;
 		~TextCleanup();
