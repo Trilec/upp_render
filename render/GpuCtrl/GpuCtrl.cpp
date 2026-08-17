@@ -51,9 +51,9 @@ static bool BuildDefaultDisplayList(Size size, UiDisplayList& list, Rgba8& backg
 	affine.y.y = 0.92;
 	affine.t = Pointf(0.08 * w, 0.03 * h);
 	builder.ConcatTransform(affine);
-	builder.FillRoundedRect(RoundedRect(Rectf(0.30 * w, 0.24 * h, 0.76 * w, 0.72 * h),
-	                                      max(1.0, unit * 0.08)),
-	                        Rgba8(55, 118, 238, 188));
+	struct RoundedRect rounded(Rectf(0.30 * w, 0.24 * h, 0.76 * w, 0.72 * h),
+	                           max(1.0, unit * 0.08));
+	builder.FillRoundedRect(rounded, Rgba8(55, 118, 238, 188));
 	builder.Restore();
 	builder.FillRect(Rectf(0.58 * w, 0.56 * h, 0.94 * w, 0.92 * h),
 	                 Rgba8(246, 210, 54, 128));
