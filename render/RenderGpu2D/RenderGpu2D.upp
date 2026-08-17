@@ -1,0 +1,7 @@
+uses
+	RenderCanvas,
+	RenderRhi;
+
+file
+	RenderGpu2D.h,
+	RenderGpu2D.cpp;
