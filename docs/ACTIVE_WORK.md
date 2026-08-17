@@ -17,10 +17,10 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 ## Current Objective
 
 1. Complete one focused Windows/runtime acceptance of the published S17C Stage-3 convergence checkpoint and mark Vulkan bootstrap complete if clean.
-2. Complete Stage 4 GPU 2D rendering in large recoverable slices while that platform validation runs in parallel.
+2. Close Stage 4 source semantics/parity, then run one combined Stage-3/Stage-4 Windows acceptance.
 
 Active validation task: `TASK-008A1-S17C-W1` — accept the published neutral graphics + surface/swapchain/frame convergence on Windows.
-Active implementation task: `TASK-009C` — migrate the live `GpuCtrl` proof to `VulkanGpuDevice` + `UiRenderer2D`, then run combined Stage-3/Stage-4 acceptance.
+Active implementation task: `TASK-009D` — close Stage-4 semantic parity using the same immutable display list through `SoftwareUiRenderer` and `UiRenderer2D`, then publish the final validation boundary.
 
 ## Stage 3 Closure Gate
 
@@ -81,26 +81,37 @@ Published in `TASK-009B`:
 - focused test proves both cached 2D pipelines request SourceOver
 - TASK-009B merge: `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`
 
+Published in `TASK-009C`:
+
+- the old S16 private `GpuCtrlFrameIntent` / FillRect-only / translation-only replay authority is removed from `GpuCtrl`
+- live `GpuCtrl` now opens one `VulkanSurfaceSession`, constructs a borrowing `VulkanGpuDevice`, constructs a borrowing `UiRenderer2D`, and manages neutral logical surface/swapchain/frame handles through that adapter
+- live painting now follows `BeginFrame -> UiRenderer2D::RenderFrame -> Submit -> Present`; presentation remains session-authoritative and no second Vulkan ownership tree is created
+- resize goes through neutral `ResizeSwapchain`; out-of-date recovery is one bounded recreate/retry, not a render loop
+- teardown reverses borrowing order: renderer -> logical swapchain/surface -> adapter -> session
+- live immutable scene exercises opaque/translucent fills, translucent stroke, rounded rectangle, device-space clip, Save/Restore, and a genuine scale/shear/translation affine transform
+- `GpuCtrlReplayTest` now validates that same live scene through production `UiRenderer2D` + `RenderNull` instead of asserting retired S16 limitations
+- existing `GpuCtrlPresentationTest` remains the real two-control Vulkan lifecycle/resize/refresh/ownership regression and now naturally runs through the production renderer path
+- TASK-009C merge: `b15c7579a0471290dc416131ebe9180a4c14be05`
+
 Still required before declaring Stage 4 complete:
 
-- replace the old private S16 `GpuCtrl` FillRect/translation-only presentation route with the real neutral `VulkanGpuDevice` + `UiRenderer2D` frame path
-- live control proof exercises fill, stroke, rounded rectangle, affine transform, clipping and translucent source-over rendering
-- focused Windows Debug/Release acceptance for `RenderGpu2DTest` plus the real Vulkan/control path
-- semantic/parity evidence covering the complete Stage-4 primitive/state surface
+- one source-side semantic parity closure: the same representative Stage-4 immutable display list must replay successfully through both `SoftwareUiRenderer` and `UiRenderer2D`; exact GPU pixel readback remains Stage-8 hardening, not a Stage-4 API expansion
+- focused Windows Debug/Release acceptance for `RenderGpu2DTest` and `GpuCtrlReplayTest`
+- real Vulkan `GpuCtrlPresentationTest` remains clean through refresh/resize/hide-show with zero validation warnings/errors and zero final ownership
 
-Regular non-swapchain sRGB texture-upload parity in `RenderNull` is deferred to Stage 5 image/texture work; it does not block Stage-4 solid primitive rendering.
+Regular non-swapchain sRGB texture-upload parity in `RenderNull` remains deferred to Stage 5 image/texture work; it does not block Stage-4 solid primitive rendering.
 
 Do not add text/vector work until this Stage-4 primitive renderer is accepted.
 
 ## Recovery Log
 
-BASE: `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54` / `main`
-TASK: `TASK-009C` real GpuCtrl neutral renderer migration while `TASK-008A1-S17C-W1` validates Stage 3 in parallel
-TOUCHED: TASK-009B — `render/RenderRhi/RenderRhi.h`, `render/RenderVulkan/RenderVulkanRhi.cpp`, `render/RenderNull/RenderNull.h`, `render/RenderGpu2D/RenderGpu2D.cpp`, `tests/RenderGpu2DTest/main.cpp`; status — `docs/ACTIVE_WORK.md`
-STATUS: PARTIAL — Stage-4 renderer core and source-over blending published; live GpuCtrl migration and Windows acceptance remain. Stage-3 implementation is complete but Windows acceptance is still pending.
-PUBLISHED: S17C-B2-B1 `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; TASK-009A `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`; TASK-009B `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`
-VALIDATION: TASK-009A/B source/static and aggregate PR reviews complete; Windows/runtime validation pending; S17C-W1 pending
+BASE: `b15c7579a0471290dc416131ebe9180a4c14be05` / `main`
+TASK: `TASK-009D` Stage-4 semantic parity closure while `TASK-008A1-S17C-W1` validates Stage 3 in parallel
+TOUCHED: TASK-009C — `render/GpuCtrl/GpuCtrl.cpp`, `render/GpuCtrl/GpuCtrl.upp`, `render/GpuCtrl/GpuCtrlTestHooks.h`, `tests/GpuCtrlReplayTest/GpuCtrlReplayTest.upp`, `tests/GpuCtrlReplayTest/main.cpp`; status — `docs/ACTIVE_WORK.md`
+STATUS: PARTIAL — Stage-4 renderer core, source-over blending and live GpuCtrl integration are published; semantic parity closure and Windows acceptance remain. Stage-3 implementation is complete but Windows acceptance remains.
+PUBLISHED: S17C-B2-B1 `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; TASK-009A `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`; TASK-009B `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`; TASK-009C `b15c7579a0471290dc416131ebe9180a4c14be05`
+VALIDATION: TASK-009A/B/C source/static and aggregate PR reviews complete; Windows/runtime validation pending; S17C-W1 pending
 
 ## Next Action
 
-Refresh current `main`, fetch the complete `GpuCtrl` package plus presentation/replay tests, and implement `TASK-009C`: session opens once, `VulkanGpuDevice` borrows it, neutral surface/swapchain IDs own the logical frame lifecycle, `UiRenderer2D` replays the control's immutable display list, and presentation returns through the session without duplicate Vulkan ownership. Publish and verify that checkpoint, then run one combined Stage-3/Stage-4 Windows acceptance. Do not declare either stage 100% until the relevant Windows evidence is clean.
+Implement and publish `TASK-009D` by extending `RenderGpu2DTest` so one representative Stage-4 immutable display list replays through the software reference (`SoftwareUiRenderer` + `ImagePainter`) and through the production GPU renderer contract (`UiRenderer2D` + `RenderNull`). Keep exact GPU pixel readback deferred to Stage 8. Then update this recovery record and give Gary one combined final Windows acceptance: Stage-3 focused Vulkan tests first, followed by Stage-4 renderer/control tests. Do not declare either stage 100% until that acceptance is clean.
