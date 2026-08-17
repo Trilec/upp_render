@@ -1,5 +1,7 @@
 #include "RenderSoftware.h"
 
+#include <RenderVector/RenderVector.h>
+
 namespace Upp {
 
 static Rect ToRect(const Rectf& r)
@@ -107,6 +109,12 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 				painter.DrawText(0, 0, op.text, op.font, op.color.ToColor());
 				painter.End();
 			}
+			break;
+		case UiDisplayOpType::FillPath:
+		case UiDisplayOpType::StrokePath:
+		case UiDisplayOpType::DrawSvg:
+			if(!ReplayUiVectorOp(painter, op, error))
+				return false;
 			break;
 		}
 	}
