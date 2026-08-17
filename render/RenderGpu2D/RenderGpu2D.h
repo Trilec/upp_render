@@ -163,13 +163,12 @@ private:
 
 	struct VectorImpl {
 		struct CacheEntry : Moveable<CacheEntry> {
-			String key;
 			GpuTextureId texture;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
 		};
 
-		Vector<CacheEntry> cache;
+		VectorMap<String, CacheEntry> cache;
 	};
 
 	struct VectorCleanup {
