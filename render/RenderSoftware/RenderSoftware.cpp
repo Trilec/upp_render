@@ -96,6 +96,10 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			painter.RoundedRectangle(op.rounded.rect, op.rounded.radius);
 			painter.Fill(ToRgba(op.color));
 			break;
+		case UiDisplayOpType::DrawImage:
+			if(!op.image.IsEmpty())
+				painter.DrawImage(ToRect(op.rect), op.image);
+			break;
 		}
 	}
 
