@@ -7,6 +7,19 @@ namespace Upp {
 
 namespace {
 
+static bool IsVectorOp(UiDisplayOpType type)
+{
+	return type == UiDisplayOpType::FillPath || type == UiDisplayOpType::StrokePath ||
+	       type == UiDisplayOpType::DrawSvg;
+}
+
+static bool FiniteTransform(const Transform2D& transform)
+{
+	return std::isfinite(transform.x.x) && std::isfinite(transform.x.y) &&
+	       std::isfinite(transform.y.x) && std::isfinite(transform.y.y) &&
+	       std::isfinite(transform.t.x) && std::isfinite(transform.t.y);
+}
+
 static int VectorRasterScale(const Transform2D& transform)
 {
 	const Pointf origin = transform.TransformPoint(Pointf(0, 0));
@@ -36,9 +49,7 @@ static String VectorCacheKey(const UiDisplayOp& op, int raster_scale)
 		key << "S|" << op.path.Dump() << '|' << op.paint.Dump() << '|' << op.stroke.Dump();
 		break;
 	case UiDisplayOpType::DrawSvg:
-		// Keep the full SVG source in the key so cache correctness never relies on
-		// a finite-width hash collision assumption. The display list already owns
-		// the source, and vector cache sizes are modest in normal UI workloads.
+		// Full source avoids making correctness depend on a finite-width hash.
 		key << "V|" << FormatDoubleFix(op.rect.left, 6) << ',' << FormatDoubleFix(op.rect.top, 6)
 		    << ',' << FormatDoubleFix(op.rect.right, 6) << ',' << FormatDoubleFix(op.rect.bottom, 6)
 		    << '|' << op.svg;
@@ -71,29 +82,19 @@ void UiRenderer2D::DestroyVectorExtension()
 {
 	if(!vector_impl)
 		return;
-	if(device) {
-		for(int i = vector_impl->cache.GetCount() - 1; i >= 0; --i) {
-			const VectorImpl::CacheEntry& entry = vector_impl->cache[i];
-			if(entry.texture.IsValid())
-				device->DestroyTexture(entry.texture);
-		}
-	}
 	delete vector_impl;
 	vector_impl = nullptr;
 	vector_cleanup.owner = nullptr;
 }
 
-bool UiRenderer2D::EnsureVectorTexture(const UiDisplayOp& op, const Transform2D& transform,
-                                       VectorDraw& out)
+bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform,
+                                      VectorRaster& out, UiRenderer2DStats& vector_stats)
 {
-	out = VectorDraw();
-	if(!device)
-		return Fail("UiRenderer2D vector cache has no device");
-	if((device->GetAdapterInfo().capability_flags & GpuCapability_Textures) == 0)
-		return Fail("UiRenderer2D vector rendering requires texture support");
-	if(op.type != UiDisplayOpType::FillPath && op.type != UiDisplayOpType::StrokePath &&
-	   op.type != UiDisplayOpType::DrawSvg)
+	out = VectorRaster();
+	if(!IsVectorOp(op.type))
 		return Fail("UiRenderer2D vector cache received a non-vector operation");
+	if(!FiniteTransform(transform))
+		return Fail("UiRenderer2D vector content has a non-finite transform");
 
 	const int raster_scale = VectorRasterScale(transform);
 	const String key = VectorCacheKey(op, raster_scale);
@@ -101,53 +102,109 @@ bool UiRenderer2D::EnsureVectorTexture(const UiDisplayOp& op, const Transform2D&
 	const int found = cache.cache.Find(key);
 	if(found >= 0) {
 		const VectorImpl::CacheEntry& entry = cache.cache[found];
-		out.texture = entry.texture;
+		out.image = entry.image;
 		out.local_rect = entry.local_rect;
-		out.drawable = entry.texture.IsValid();
-		stats.vector_texture_count = cache.cache.GetCount();
+		out.drawable = !entry.image.IsEmpty();
+		vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 		return true;
 	}
 
-	stats.vector_cache_miss_count++;
+	vector_stats.vector_cache_miss_count++;
 	Image raster;
 	Rectf local_rect;
 	String raster_error;
 	if(!RasterizeUiVectorOp(op, raster_scale, raster, local_rect, raster_error))
 		return Fail("UiRenderer2D vector rasterization failed: " + raster_error);
-	if(raster.IsEmpty())
+	if(raster.IsEmpty()) {
+		vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 		return true;
-
-	Image straight = Unmultiply(raster);
-	GpuTextureDesc desc;
-	desc.size = straight.GetSize();
-	desc.format = GpuFormat::RGBA8Srgb;
-	desc.usage = GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst;
-	desc.label = "UiRenderer2D vector raster";
-	GpuTextureId texture;
-	GpuResult result = device->CreateTexture(desc, texture);
-	if(result != GpuResult::Ok)
-		return Fail("UiRenderer2D vector texture creation failed: " + DumpGpuResult(result));
-
-	GpuTextureWriteDesc upload;
-	upload.size = straight.GetSize();
-	upload.row_pitch = (int64)straight.GetWidth() * (int)sizeof(RGBA);
-	const int64 bytes = (int64)straight.GetLength() * (int)sizeof(RGBA);
-	result = device->WriteTexture(texture, upload, straight.Begin(), bytes);
-	if(result != GpuResult::Ok) {
-		device->DestroyTexture(texture);
-		return Fail("UiRenderer2D vector texture upload failed: " + DumpGpuResult(result));
 	}
 
 	VectorImpl::CacheEntry& stored = cache.cache.Add(key);
-	stored.texture = texture;
+	stored.image = raster;
 	stored.local_rect = local_rect;
 	stored.raster_scale = raster_scale;
-	stats.vector_texture_upload_count++;
-	stats.vector_texture_count = cache.cache.GetCount();
+	vector_stats.vector_raster_count++;
+	vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 
-	out.texture = stored.texture;
+	out.image = stored.image;
 	out.local_rect = stored.local_rect;
 	out.drawable = true;
+	return true;
+}
+
+bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,
+                                         UiRenderer2DStats& vector_stats)
+{
+	vector_stats = UiRenderer2DStats();
+	if(!source.IsValid())
+		return Fail(source.GetError());
+
+	UiDisplayListBuilder builder;
+	ReplayState state;
+	Vector<ReplayState> stack;
+
+	for(int i = 0; i < source.GetCount(); ++i) {
+		const UiDisplayOp& op = source[i];
+		switch(op.type) {
+		case UiDisplayOpType::Save:
+			builder.Save();
+			stack.Add(state);
+			break;
+		case UiDisplayOpType::Restore:
+			if(stack.IsEmpty())
+				return Fail("UiRenderer2D vector materialization restore without save");
+			builder.Restore();
+			state = stack.Pop();
+			break;
+		case UiDisplayOpType::ClipRect:
+			builder.ClipRect(op.rect);
+			break;
+		case UiDisplayOpType::ConcatTransform:
+			if(!FiniteTransform(op.transform))
+				return Fail("UiRenderer2D vector materialization received non-finite transform");
+			builder.ConcatTransform(op.transform);
+			state.transform = state.transform * op.transform;
+			break;
+		case UiDisplayOpType::FillRect:
+			builder.FillRect(op.rect, op.color);
+			break;
+		case UiDisplayOpType::StrokeRect:
+			builder.StrokeRect(op.rect, op.width, op.color);
+			break;
+		case UiDisplayOpType::FillRoundedRect:
+			builder.FillRoundedRect(op.rounded, op.color);
+			break;
+		case UiDisplayOpType::DrawImage:
+			builder.DrawImage(op.rect, op.image);
+			break;
+		case UiDisplayOpType::DrawText:
+			builder.DrawText(op.point, op.text, op.font, op.color);
+			break;
+		case UiDisplayOpType::FillPath:
+		case UiDisplayOpType::StrokePath:
+		case UiDisplayOpType::DrawSvg: {
+			vector_stats.vector_op_count++;
+			if(op.type == UiDisplayOpType::DrawSvg)
+				vector_stats.svg_count++;
+			else {
+				vector_stats.vector_path_count++;
+				if(op.paint.kind != UiPaintKind::Solid)
+					vector_stats.gradient_count++;
+			}
+			VectorRaster raster;
+			if(!EnsureVectorRaster(op, state.transform, raster, vector_stats))
+				return false;
+			if(raster.drawable)
+				builder.DrawImage(raster.local_rect, raster.image);
+			break;
+		}
+		}
+	}
+	if(!stack.IsEmpty())
+		return Fail("UiRenderer2D vector materialization ended with unbalanced save state");
+	if(!builder.Finish(out))
+		return Fail("UiRenderer2D vector materialization failed: " + builder.GetError());
 	return true;
 }
 
