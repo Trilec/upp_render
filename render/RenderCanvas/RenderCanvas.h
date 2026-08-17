@@ -7,6 +7,123 @@ namespace Upp {
 
 class UiDisplayList;
 
+enum class UiPathVerb {
+	MoveTo,
+	LineTo,
+	QuadraticTo,
+	CubicTo,
+	Close,
+};
+
+struct UiPathCommand : Moveable<UiPathCommand> {
+	UiPathVerb verb = UiPathVerb::MoveTo;
+	Pointf p1 = Pointf(0, 0);
+	Pointf p2 = Pointf(0, 0);
+	Pointf p3 = Pointf(0, 0);
+
+	bool operator==(const UiPathCommand& other) const;
+	bool operator!=(const UiPathCommand& other) const { return !(*this == other); }
+};
+
+class UiPath : Moveable<UiPath> {
+public:
+	UiPath& MoveTo(Pointf p);
+	UiPath& LineTo(Pointf p);
+	UiPath& QuadraticTo(Pointf control, Pointf end);
+	UiPath& CubicTo(Pointf control1, Pointf control2, Pointf end);
+	UiPath& Close();
+	void Clear() { commands.Clear(); }
+
+	bool IsEmpty() const { return commands.IsEmpty(); }
+	int GetCount() const { return commands.GetCount(); }
+	const UiPathCommand& operator[](int i) const { return commands[i]; }
+	Rectf GetControlBounds() const;
+	String Dump() const;
+
+	bool operator==(const UiPath& other) const;
+	bool operator!=(const UiPath& other) const { return !(*this == other); }
+
+private:
+	Vector<UiPathCommand> commands;
+};
+
+enum class UiFillRule {
+	NonZero,
+	EvenOdd,
+};
+
+enum class UiGradientSpread {
+	Pad,
+	Repeat,
+	Reflect,
+};
+
+enum class UiPaintKind {
+	Solid,
+	LinearGradient,
+	RadialGradient,
+};
+
+struct UiGradientStop : Moveable<UiGradientStop> {
+	double position = 0;
+	Rgba8 color;
+
+	UiGradientStop() = default;
+	UiGradientStop(double p, Rgba8 c) : position(p), color(c) {}
+
+	bool operator==(const UiGradientStop& other) const;
+	bool operator!=(const UiGradientStop& other) const { return !(*this == other); }
+};
+
+struct UiPaint : Moveable<UiPaint> {
+	UiPaintKind kind = UiPaintKind::Solid;
+	Rgba8 color;
+	Pointf p0 = Pointf(0, 0); // linear start / radial focal point
+	Pointf p1 = Pointf(0, 0); // linear end / radial centre
+	double radius = 0;
+	UiGradientSpread spread = UiGradientSpread::Pad;
+	Vector<UiGradientStop> stops;
+
+	static UiPaint Solid(Rgba8 color);
+	static UiPaint Linear(Pointf start, Pointf end, Rgba8 start_color, Rgba8 end_color,
+	                      UiGradientSpread spread = UiGradientSpread::Pad);
+	static UiPaint Radial(Pointf focal, Pointf centre, double radius,
+	                      Rgba8 inner_color, Rgba8 outer_color,
+	                      UiGradientSpread spread = UiGradientSpread::Pad);
+	UiPaint& AddStop(double position, Rgba8 color);
+
+	bool IsValid(String *reason = nullptr) const;
+	String Dump() const;
+	bool operator==(const UiPaint& other) const;
+	bool operator!=(const UiPaint& other) const { return !(*this == other); }
+};
+
+enum class UiLineCap {
+	Butt,
+	Square,
+	Round,
+};
+
+enum class UiLineJoin {
+	Miter,
+	Round,
+	Bevel,
+};
+
+struct UiStrokeStyle : Moveable<UiStrokeStyle> {
+	double width = 1;
+	UiLineCap cap = UiLineCap::Butt;
+	UiLineJoin join = UiLineJoin::Miter;
+	double miter_limit = 10;
+	Vector<double> dash;
+	double dash_offset = 0;
+
+	bool IsValid(String *reason = nullptr) const;
+	String Dump() const;
+	bool operator==(const UiStrokeStyle& other) const;
+	bool operator!=(const UiStrokeStyle& other) const { return !(*this == other); }
+};
+
 // Backend-neutral drawing contract used for recording.
 class UiCanvas {
 public:
@@ -23,6 +140,11 @@ public:
 	virtual void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) = 0;
 	virtual void DrawImage(const Rectf& rect, const Image& image) = 0;
 	virtual void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) = 0;
+	virtual void FillPath(const UiPath& path, const UiPaint& paint,
+	                      UiFillRule rule = UiFillRule::NonZero) = 0;
+	virtual void StrokePath(const UiPath& path, const UiPaint& paint,
+	                        const UiStrokeStyle& style) = 0;
+	virtual void DrawSvg(const Rectf& rect, const String& svg) = 0;
 };
 
 enum class UiDisplayOpType {
@@ -35,6 +157,9 @@ enum class UiDisplayOpType {
 	FillRoundedRect,
 	DrawImage,
 	DrawText,
+	FillPath,
+	StrokePath,
+	DrawSvg,
 };
 
 struct UiDisplayOp : Moveable<UiDisplayOp> {
@@ -48,6 +173,11 @@ struct UiDisplayOp : Moveable<UiDisplayOp> {
 	Image image;
 	WString text;
 	Font font;
+	UiPath path;
+	UiPaint paint;
+	UiFillRule fill_rule = UiFillRule::NonZero;
+	UiStrokeStyle stroke;
+	String svg;
 
 	bool operator==(const UiDisplayOp& other) const;
 	bool operator!=(const UiDisplayOp& other) const { return !(*this == other); }
@@ -90,6 +220,11 @@ public:
 	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) override;
 	void DrawImage(const Rectf& rect, const Image& image) override;
 	void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) override;
+	void FillPath(const UiPath& path, const UiPaint& paint,
+	              UiFillRule rule = UiFillRule::NonZero) override;
+	void StrokePath(const UiPath& path, const UiPaint& paint,
+	                const UiStrokeStyle& style) override;
+	void DrawSvg(const Rectf& rect, const String& svg) override;
 
 	bool Finish(UiDisplayList& out);
 	bool IsFinished() const { return finished; }
