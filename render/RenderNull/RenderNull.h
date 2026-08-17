@@ -55,6 +55,10 @@ public:
 		out = pipelines[index].desc;
 		return true;
 	}
+	int GetLiveBufferCount() const { return buffers.GetCount(); }
+	int GetLiveTextureCount() const { return textures.GetCount(); }
+	int GetLiveShaderCount() const { return shaders.GetCount(); }
+	int GetLivePipelineCount() const { return pipelines.GetCount(); }
 
 private:
 	struct BufferState : Moveable<BufferState> {
