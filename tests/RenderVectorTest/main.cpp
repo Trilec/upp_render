@@ -29,6 +29,15 @@ static bool ImageDiffersFrom(const Image& image, RGBA reference)
 	return false;
 }
 
+static bool HasPartialAlpha(const Image& image)
+{
+	for(int y = 0; y < image.GetHeight(); ++y)
+		for(int x = 0; x < image.GetWidth(); ++x)
+			if(image[y][x].a > 0 && image[y][x].a < 255)
+				return true;
+	return false;
+}
+
 static UiPath MakePath()
 {
 	UiPath path;
@@ -50,7 +59,7 @@ static UiPaint MakeGradient()
 {
 	UiPaint paint = UiPaint::Linear(Pointf(8, 8), Pointf(92, 52),
 	                                Rgba8(30, 90, 210, 230),
-	                                Rgba8(235, 90, 40, 210));
+	                                Rgba8(235, 90, 40, 210), UiGradientSpread::Reflect);
 	paint.AddStop(0.5, Rgba8(120, 220, 160, 220));
 	return paint;
 }
@@ -82,11 +91,19 @@ CONSOLE_APP_MAIN
 	const UiStrokeStyle stroke = MakeStroke();
 
 	String reason;
-	ok &= Check(gradient.IsValid(&reason), "multi-stop linear gradient should be valid");
+	ok &= Check(gradient.IsValid(&reason), "multi-stop reflected linear gradient should be valid");
 	ok &= Check(stroke.IsValid(&reason), "round dashed stroke style should be valid");
 	UiPaint invalid = UiPaint::Linear(Pointf(1, 1), Pointf(1, 1),
 	                                  Rgba8(0, 0, 0), Rgba8(255, 255, 255));
 	ok &= Check(!invalid.IsValid(&reason), "zero-length linear gradient should be rejected");
+
+	UiPaint repeat_radial = UiPaint::Radial(Pointf(18, 16), Pointf(24, 22), 18.0,
+	                                        Rgba8(255, 255, 255), Rgba8(30, 60, 120),
+	                                        UiGradientSpread::Repeat);
+	repeat_radial.AddStop(0.4, Rgba8(120, 210, 170));
+	ok &= Check(repeat_radial.IsValid(&reason), "multi-stop repeated radial gradient should be valid");
+	ok &= Check(repeat_radial.Dump().Find("spread=Repeat") >= 0,
+	            "radial paint dump should preserve Repeat spread semantics");
 
 	UiDisplayListBuilder builder;
 	builder.Save();
@@ -117,8 +134,10 @@ CONSOLE_APP_MAIN
 	ok &= Check(dump.Find("C 96 18 96 42 84 52") >= 0 &&
 	            dump.Find("Q 0 30 8 8") >= 0,
 	            "dump should preserve cubic and quadratic commands");
-	ok &= Check(dump.Find("Linear 8 8 92 52") >= 0 && dump.Find("0.5:rgba(120,220,160,220)") >= 0,
-	            "dump should preserve multi-stop gradient evidence");
+	ok &= Check(dump.Find("Linear 8 8 92 52") >= 0 &&
+	            dump.Find("spread=Reflect") >= 0 &&
+	            dump.Find("0.5:rgba(120,220,160,220)") >= 0,
+	            "dump should preserve reflected multi-stop gradient evidence");
 	ok &= Check(dump.Find("cap=Round join=Round") >= 0 && dump.Find("dash=7,3 offset=1.5") >= 0,
 	            "dump should preserve stroke style evidence");
 	ok &= Check(dump.Find("DrawSvg 94 10 124 40 bytes=") >= 0 && dump.Find(" hash=") >= 0,
@@ -150,9 +169,32 @@ CONSOLE_APP_MAIN
 	Rectf raster_rect;
 	String raster_error;
 	ok &= Check(RasterizeUiVectorOp(list[2], 2.0, raster, raster_rect, raster_error),
-	            "shared vector raster authority should rasterize a gradient path");
+	            "shared vector raster authority should rasterize a reflected gradient path");
 	ok &= Check(!raster.IsEmpty() && raster_rect.right > raster_rect.left && raster_rect.bottom > raster_rect.top,
 	            "shared vector raster should return image plus local bounds");
+
+	UiDisplayOp repeat_op;
+	repeat_op.type = UiDisplayOpType::FillPath;
+	repeat_op.path = MakePath();
+	repeat_op.paint = repeat_radial;
+	repeat_op.fill_rule = UiFillRule::NonZero;
+	Image repeat_raster;
+	Rectf repeat_rect;
+	ok &= Check(RasterizeUiVectorOp(repeat_op, 1.0, repeat_raster, repeat_rect, raster_error),
+	            "shared Painter authority should rasterize Repeat radial gradients");
+	ok &= Check(!repeat_raster.IsEmpty(), "repeated radial gradient raster should be visible");
+
+	UiDisplayOp aa_op;
+	aa_op.type = UiDisplayOpType::FillPath;
+	aa_op.path = MakePath();
+	aa_op.paint = UiPaint::Solid(Rgba8(255, 255, 255, 255));
+	aa_op.fill_rule = UiFillRule::EvenOdd;
+	Image aa_raster;
+	Rectf aa_rect;
+	ok &= Check(RasterizeUiVectorOp(aa_op, 1.0, aa_raster, aa_rect, raster_error),
+	            "opaque curved path should rasterize through antialiased Painter mode");
+	ok &= Check(HasPartialAlpha(aa_raster),
+	            "opaque curved path should contain partial-alpha edge coverage proving antialiasing");
 
 	UiPath malformed;
 	malformed.LineTo(Pointf(4, 4));
