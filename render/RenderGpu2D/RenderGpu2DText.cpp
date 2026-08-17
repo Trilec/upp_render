@@ -71,7 +71,11 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 
 	const int metric_width = max(1, max(font.GetMaxWidth(), font.GetWidth(ch)));
 	const int metric_height = max(1, max(font.GetLineHeight(), font.GetCy()));
-	const int margin = max(4, abs(font.GetOverhang()) + 3);
+	const int overhang = abs(font.GetOverhang());
+	if(metric_width > TextImpl::ATLAS_SIZE || metric_height > TextImpl::ATLAS_SIZE ||
+	   overhang > TextImpl::ATLAS_SIZE)
+		return Fail("UiRenderer2D font metrics exceed the glyph-atlas raster bound");
+	const int margin = max(4, overhang + 3);
 	const int canvas_width = max(16, metric_width * 3 + margin * 2);
 	const int canvas_height = max(16, metric_height * 2 + margin * 2);
 	const int draw_x = margin + metric_width;
@@ -102,7 +106,8 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 
 	if(right < left || bottom < top) {
 		entry.drawable = false;
-		text.glyphs.Add(key, pick(entry));
+		TextImpl::GlyphEntry& stored = text.glyphs.Add(key);
+		stored = pick(entry);
 		stats.glyph_atlas_page_count = text.pages.GetCount();
 		return true;
 	}
