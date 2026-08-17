@@ -67,6 +67,14 @@ static String SampleSvg()
 	       "<path d='M8 17 L14 23 L25 9' fill='none' stroke='#fff' stroke-width='3'/></svg>";
 }
 
+static WString Stage5Label()
+{
+	WString text;
+	text.Cat('V');
+	text.Cat('5');
+	return text;
+}
+
 static bool BuildScene(UiDisplayList& out)
 {
 	UiDisplayListBuilder builder;
@@ -83,6 +91,7 @@ static bool BuildScene(UiDisplayList& out)
 	builder.FillPath(MakePath(), MakeGradient(), UiFillRule::EvenOdd);
 	builder.StrokePath(MakePath(), UiPaint::Solid(Rgba8(245, 245, 250, 220)), MakeStroke());
 	builder.DrawSvg(Rectf(82, 12, 112, 42), SampleSvg());
+	builder.DrawText(Pointf(88, 46), Stage5Label(), SansSerif(14).Bold(), Rgba8(245, 248, 255, 230));
 	builder.Restore();
 	builder.FillRect(Rectf(118, 52, 150, 76), Rgba8(220, 105, 40, 200));
 	return builder.Finish(out);
@@ -139,12 +148,17 @@ CONSOLE_APP_MAIN
 		            "first frame should rasterize exactly three unique vector assets");
 		ok &= Check(first.texture_upload_count == 3,
 		            "first frame should reuse DrawImage and upload exactly three vector rasters");
-		ok &= Check(first.image_count == 3 && first.textured_vertex_count > 0,
-		            "materialized vector assets should flow through sampled-image geometry");
-		ok &= Check(first.batch_count == 5 && first.draw_count == 5,
-		            "solid/vector/vector/SVG/solid order should remain five batches and draws");
+		ok &= Check(first.image_count == 3 && first.text_run_count == 1 && first.glyph_count == 2,
+		            "materialized vector assets and original text should share one renderer pass");
+		ok &= Check(first.glyph_cache_miss_count == 2 && first.glyph_atlas_upload_count == 2 &&
+		            first.glyph_atlas_page_count == 1,
+		            "mixed Stage-5 frame should populate the accepted glyph atlas exactly once per glyph");
+		ok &= Check(first.textured_vertex_count > 0,
+		            "mixed vector/text scene should emit sampled geometry");
+		ok &= Check(first.batch_count == 6 && first.draw_count == 6,
+		            "solid/vector/vector/SVG/text/solid order should remain six batches and draws");
 		ok &= Check(first.textured_vertex_buffer_grew && first.textured_vertex_buffer_capacity > 0,
-		            "first vector frame should allocate the reusable textured vertex buffer");
+		            "first mixed Stage-5 frame should allocate the reusable textured vertex buffer");
 		ok &= Check(scene.Dump() == dump, "vector GPU replay must not mutate the source display list");
 
 		ok &= Check(renderer.Render(scene, MakeTarget(target, size)), "second vector GPU frame should render from caches");
@@ -155,11 +169,13 @@ CONSOLE_APP_MAIN
 		            "second frame should retain three cached vector rasters");
 		ok &= Check(second.texture_upload_count == 0,
 		            "second frame should reuse the accepted GPU image texture cache");
-		ok &= Check(second.batch_count == 5 && second.draw_count == 5,
-		            "cached vector rendering should preserve deterministic draw order");
+		ok &= Check(second.glyph_cache_miss_count == 0 && second.glyph_atlas_upload_count == 0,
+		            "second mixed frame should also reuse the glyph atlas");
+		ok &= Check(second.batch_count == 6 && second.draw_count == 6,
+		            "cached mixed Stage-5 rendering should preserve deterministic draw order");
 		ok &= Check(!second.textured_vertex_buffer_grew &&
 		            second.textured_vertex_buffer_capacity == first.textured_vertex_buffer_capacity,
-		            "second vector frame should reuse its textured vertex buffer");
+		            "second mixed frame should reuse its textured vertex buffer");
 		ok &= Check(scene.Dump() == dump, "cached vector replay must preserve display-list immutability");
 
 		renderer.Close();
@@ -171,14 +187,14 @@ CONSOLE_APP_MAIN
 	}
 
 	const String log = device.DumpLog();
-	ok &= Check(CountText(log, "CreateTexture id=") == 4,
-	            "vector test should create target plus three cached raster textures");
-	ok &= Check(CountText(log, "WriteTexture id=") == 3,
-	            "vector rasters should upload only on first use");
-	ok &= Check(CountText(log, "SetSampledTexture list=") == 6,
-	            "two frames should bind three vector textures each");
-	ok &= Check(CountText(log, "Draw list=") == 10,
-	            "two five-batch frames should issue ten draws");
+	ok &= Check(CountText(log, "CreateTexture id=") == 5,
+	            "mixed vector test should create target, three vector textures and one glyph atlas");
+	ok &= Check(CountText(log, "WriteTexture id=") == 5,
+	            "first mixed frame should upload three vector rasters plus two glyphs only");
+	ok &= Check(CountText(log, "SetSampledTexture list=") == 8,
+	            "two frames should bind three vector textures plus one glyph atlas each");
+	ok &= Check(CountText(log, "Draw list=") == 12,
+	            "two six-batch mixed frames should issue twelve draws");
 	ok &= Check(device.DestroyTexture(target) == GpuResult::Ok,
 	            "vector target should destroy after renderer shutdown");
 	ok &= Check(device.GetLiveTextureCount() == 0,
