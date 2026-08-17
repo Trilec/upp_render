@@ -224,22 +224,24 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 		return Fail("UiRenderer2D glyph atlas upload failed: " + DumpGpuResult(result));
 
 	entry.page = page_index;
-	entry.pixel_rect = Rect(atlas_position, Size(glyph_width, glyph_height));
+	entry.pixel_rect = Rect(atlas_position.x, atlas_position.y,
+	                        atlas_position.x + glyph_width, atlas_position.y + glyph_height);
 	entry.offset = Pointf(left - draw_x, top - draw_y);
 	entry.size = Size(glyph_width, glyph_height);
 	entry.drawable = true;
-	text.glyphs.Add(key, entry);
+	TextImpl::GlyphEntry& stored = text.glyphs.Add(key);
+	stored = pick(entry);
 	stats.glyph_atlas_upload_count++;
 	stats.glyph_atlas_page_count = text.pages.GetCount();
 
 	out.texture = text.pages[page_index].texture;
-	out.uv = Rectf((double)entry.pixel_rect.left / TextImpl::ATLAS_SIZE,
-	               (double)entry.pixel_rect.top / TextImpl::ATLAS_SIZE,
-	               (double)entry.pixel_rect.right / TextImpl::ATLAS_SIZE,
-	               (double)entry.pixel_rect.bottom / TextImpl::ATLAS_SIZE);
-	out.offset = entry.offset;
-	out.size = entry.size;
-	out.advance = entry.advance;
+	out.uv = Rectf((double)stored.pixel_rect.left / TextImpl::ATLAS_SIZE,
+	               (double)stored.pixel_rect.top / TextImpl::ATLAS_SIZE,
+	               (double)stored.pixel_rect.right / TextImpl::ATLAS_SIZE,
+	               (double)stored.pixel_rect.bottom / TextImpl::ATLAS_SIZE);
+	out.offset = stored.offset;
+	out.size = stored.size;
+	out.advance = stored.advance;
 	out.drawable = true;
 	return true;
 }
