@@ -47,6 +47,7 @@ public:
 	GpuResult Submit(GpuCommandListId list) override;
 
 	String DumpLog() const;
+	bool GetPipelineDesc(GpuPipelineId id, GpuPipelineDesc& out) const;
 
 private:
 	struct BufferState : Moveable<BufferState> {
