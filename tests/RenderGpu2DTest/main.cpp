@@ -111,6 +111,13 @@ CONSOLE_APP_MAIN
 
 		ok &= Check(renderer.Render(mixed, MakeTarget(bgra_target, GpuFormat::BGRA8, size)), "second color format should render");
 		ok &= Check(renderer.GetStats().draw_count == 1, "second format should still use one batched draw");
+		GpuPipelineDesc captured;
+		GpuPipelineId rgba_pipeline; rgba_pipeline.value = 1;
+		GpuPipelineId bgra_pipeline; bgra_pipeline.value = 2;
+		ok &= Check(device.GetPipelineDesc(rgba_pipeline, captured) && captured.blend_mode == GpuBlendMode::SourceOver,
+		            "RGBA UiRenderer2D pipeline should request explicit SourceOver blending");
+		ok &= Check(device.GetPipelineDesc(bgra_pipeline, captured) && captured.blend_mode == GpuBlendMode::SourceOver,
+		            "BGRA UiRenderer2D pipeline should request explicit SourceOver blending");
 
 		UiDisplayListBuilder empty_builder;
 		UiDisplayList empty;
