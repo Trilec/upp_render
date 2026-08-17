@@ -12,13 +12,19 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 - Stage-3 validation: `RenderVulkanGraphicsTest` Debug 4/4, Release 2/2; resource Debug/Release; RHI Debug/Release; frame and clear regressions all PASS
 - Stage-3 Vulkan validation: 0 warnings / 0 errors
 - Stage-3 final ownership: runtime/instance/debug messenger/surface/device/swapchain = `0/0/0/0/0/0`
-- Earlier S17B accepted baseline retained: S17A `5d7e5e2537a7fd70bd9d344c9cb885a04014c041`; S17B `07e7870ae91316305f84a9fdc32b7488fd37eb3a`; S17B-R1 `6d36c102dcc30b79bf61156a1aec2d77bd598ecc`
+- Stage 4 GPU 2D renderer: **PASS / 100% accepted**
+- Stage-4 Windows acceptance HEAD: `f8e7b24d510b4b5889370823dc1c0a5ef43a7f54`
+- Stage-4 final compile correction SHA: `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
+- Stage-4 validation: `RenderGpu2DTest`, `GpuCtrlReplayTest`, and `GpuCtrlPresentationTest` Debug/Release all PASS
+- Stage-4 Vulkan validation: 0 warnings / 0 errors
+- Stage-4 lifecycle: refresh, resize/recreation, hide/show and GPU readiness PASS; no crash/hang/device loss
+- Stage-4 final ownership: runtime/instance/debug messenger/surface/device/swapchain = `0/0/0/0/0/0`
 
 ## Current Objective
 
-Complete the narrow Stage-4 Windows re-acceptance after `TASK-009-W1-R1` fixed the one production compile blocker found by the first combined run. Do not repeat Stage 3 unless a new Stage-3-affecting change is introduced.
+Proceed directly into Stage 5 — Text, Images and Vector Rendering.
 
-Active validation task: `TASK-009-W1-R1-W2` — Stage-4 Windows re-acceptance on current `main`.
+Active implementation task: `TASK-010A` — establish the neutral Stage-5 content contract and first production image/text foundation without disturbing the accepted Stage-3/Stage-4 ownership and primitive renderer.
 
 ## Stage 3 - Vulkan Backend / Bootstrap
 
@@ -64,12 +70,12 @@ Key publication SHAs:
 
 ## Stage 4 - GPU 2D Renderer
 
-Implementation is source-complete. Platform acceptance is pending one narrow re-run after `TASK-009-W1-R1`.
+**100% complete and platform accepted.**
 
-Published `TASK-009A` renderer core:
+Accepted renderer scope:
 
-- backend-neutral `render/RenderGpu2D` package with production `UiRenderer2D`
-- direct replay of immutable `UiDisplayList`, not another private drawing authority
+- production backend-neutral `UiRenderer2D`
+- direct immutable `UiDisplayList` replay
 - filled rectangles
 - rectangle strokes/borders
 - uniform rounded rectangles
@@ -77,85 +83,71 @@ Published `TASK-009A` renderer core:
 - nested `Save`/`Restore`
 - cumulative device-space clipping and target-bound clipping
 - deterministic convex tessellation to `Position2Color4F`
-- compatible solid primitives batched into one draw
-- persistent SPIR-V shader pair
-- pipeline cache by render-target format
-- grow/reuse persistent vertex buffer
-- Rgba alpha retained in vertex data
-- clear-only frames issue no geometry draw
-- focused `RenderGpu2DTest` through `RenderNull`
-- TASK-009A merge: `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`
+- compatible primitive batching into one draw
+- persistent SPIR-V shaders, pipeline cache and reusable vertex buffer
+- explicit straight-alpha SourceOver blending
+- live `GpuCtrl` integration through `VulkanSurfaceSession -> VulkanGpuDevice -> UiRenderer2D`
+- neutral logical surface/swapchain/frame lifecycle with session-authoritative present
+- resize/out-of-date recovery without timer or busy render loop
+- software-reference semantic replay of the same immutable Stage-4 display list
 
-Published `TASK-009B` alpha/blending:
+Key publication SHAs:
 
-- explicit neutral `GpuBlendMode::Opaque` / `GpuBlendMode::SourceOver`
-- `UiRenderer2D` explicitly requests source-over blending
-- Vulkan mapping uses straight-alpha `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` colour blending and `ONE / ONE_MINUS_SRC_ALPHA` alpha blending
-- deterministic Null inspection proves renderer pipelines request SourceOver
-- TASK-009B merge: `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`
+- TASK-009A renderer core: `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`
+- TASK-009B blending: `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`
+- TASK-009C live control integration: `b15c7579a0471290dc416131ebe9180a4c14be05`
+- TASK-009D semantic parity: `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`
+- TASK-009-W1-R1 compile correction: `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
 
-Published `TASK-009C` live control integration:
+`TASK-009-W1-R1-W2` Stage-4 evidence:
 
-- retired S16 private FillRect/translation-only replay authority removed from `GpuCtrl`
-- live `GpuCtrl` uses one `VulkanSurfaceSession`, a borrowing `VulkanGpuDevice`, and a borrowing `UiRenderer2D`
-- live paint follows `BeginFrame -> UiRenderer2D::RenderFrame -> Submit -> Present`
-- neutral logical surface/swapchain/frame handles own adapter lifecycle while Vulkan session remains the sole Vulkan ownership authority
-- resize uses neutral `ResizeSwapchain`; out-of-date recovery is one bounded recreate/retry, not a timer/render loop
-- teardown reverses borrowing order: renderer -> logical swapchain/surface -> adapter -> session
-- live immutable scene exercises opaque/translucent fills, translucent stroke, rounded rectangle, device-space clip, Save/Restore and a genuine scale/shear/translation affine transform
-- `GpuCtrlReplayTest` validates that same live scene through production `UiRenderer2D` + `RenderNull`
-- existing `GpuCtrlPresentationTest` exercises the production renderer path while retaining two-control/resize/refresh/hide-show/ownership coverage
-- TASK-009C merge: `b15c7579a0471290dc416131ebe9180a4c14be05`
+- tested HEAD: `f8e7b24d510b4b5889370823dc1c0a5ef43a7f54`
+- R1 ancestor check: PASS / exit 0
+- `RenderGpu2DTest` Debug/Release: PASS
+- `GpuCtrlReplayTest` Debug/Release: PASS
+- `GpuCtrlPresentationTest` Debug/Release: PASS
+- Vulkan validation warnings/errors: 0/0
+- refresh, resize/recreation, hide/show and GPU readiness: PASS
+- no crash, hang or device loss
+- final Vulkan ownership: 0/0/0/0/0/0
+- final tree: clean; no validator edits/commit/push
 
-Published `TASK-009D` semantic parity closure:
+## Stage 5 - Text, Images and Vector Rendering
 
-- the same representative Stage-4 immutable display list replays through `SoftwareUiRenderer` and `UiRenderer2D`
-- software reference replay must succeed and visibly alter the reference image
-- both replays preserve the immutable display-list dump
-- GPU-contract path retains full primitive/state accounting, one-draw batching, SourceOver pipeline state and persistent resource reuse evidence
-- exact GPU pixel readback remains Stage-8 hardening, where the project plan places software/GPU output comparison
-- TASK-009D merge / Stage-4 source checkpoint: `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`
+Active now.
 
-`TASK-009-W1` first Stage-4 attempt:
+Project-plan scope:
 
-- Stage-4 SHA ancestor check: PASS / exit 0
-- `RenderGpu2DTest` Debug/Release: built successfully
-- first blocker: `GpuCtrlReplayTest` compile failure in production `render/GpuCtrl/GpuCtrl.cpp`
-- cause: direct `RoundedRect(Rectf, radius)` construction collided with CtrlLib `RoundedRect(...)` free functions in the same `Upp` namespace
-- classification: narrow production compile defect; no renderer/RHI architecture change required
-- `GpuCtrlPresentationTest` was not run because validation correctly stopped at the first blocker
+- text shaping
+- glyph caching
+- vector paths
+- gradients
+- anti-aliasing
+- icon and SVG geometry support
 
-Published `TASK-009-W1-R1` correction:
+Supervisory addition required for a useful UI renderer:
 
-- `render/GpuCtrl/GpuCtrl.cpp` now uses the established elaborated-type pattern: `struct RoundedRect rounded(...)`, then passes the local value to `FillRoundedRect`
-- no RHI, Vulkan ownership, renderer semantics, display-list semantics, package membership, tests or public API changed
-- correction SHA: `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
+- image sampling/drawing and texture-backed content belong in Stage 5 as well
+- regular non-swapchain sRGB texture semantics deferred from Stage 4 must be resolved deliberately here
 
-Stage-4 completion gate now:
+Implementation direction:
 
-- `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a` is an ancestor of tested current HEAD
-- `RenderGpu2DTest` Debug/Release run and PASS
-- `GpuCtrlReplayTest` Debug/Release build and PASS
-- real Vulkan `GpuCtrlPresentationTest` Debug/Release build and PASS through resize/refresh/hide-show
-- Vulkan validation warnings/errors = 0/0 for the real presentation path
-- no crash, hang, device loss, unexpected idle recreation, or ownership leak
-- final Vulkan ownership diagnostics = 0
+1. `TASK-010A` — neutral content/image foundation and first production image path; resolve sRGB texture semantics consistently in `RenderNull` and Vulkan.
+2. `TASK-010B` — shaped text + glyph cache/atlas using U++ text/font authority; GPU consumes shaped glyph placement rather than inventing a second typography system.
+3. `TASK-010C` — vector paths, gradients and anti-aliasing, then icon/SVG geometry integration.
+4. Stage-5 Windows acceptance across neutral/Null/software/Vulkan/live-control paths.
 
-Non-blocking observation from `TASK-009-W1`:
-
-- `RenderNull.cpp` warns that `RGBA8Srgb` / `BGRA8Srgb` are not handled by `BytesPerPixel`
-- this is intentionally not folded into the R1 compile correction: adding those cases would expand regular non-swapchain sRGB texture-upload semantics that are already deferred to Stage 5 image/texture work
-- resolve that behavior deliberately in Stage 5 rather than silently changing it during Stage-4 acceptance
+Do not replace U++ font/theme authority and do not leak Vulkan types into public neutral APIs.
 
 ## Recovery Log
 
-BASE: `6ab33a42a3421643359cabfdae7afed7628ad349` / `main`
-TASK: `TASK-009-W1-R1` repair first Stage-4 Windows compile blocker and re-run Stage-4 acceptance
-TOUCHED: `render/GpuCtrl/GpuCtrl.cpp`; status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS / 100%; Stage 4 IMPLEMENTATION COMPLETE — PLATFORM REVALIDATION PENDING
-PUBLISHED: Stage-3 convergence `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; Stage-4 A `ca972a087c63a8d54a7f2a9e1683c906b6c747a4`; B `ba2bfcfc76c9e1fd0b6c7c5f3347a22882d41b54`; C `b15c7579a0471290dc416131ebe9180a4c14be05`; D `b8a0993fe36eb87a1c99ae6a5d59c9da703f5953`; R1 `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`
-VALIDATION: Stage 3 accepted by `TASK-009-W1`; Stage 4 stopped at production compile blocker on pre-R1 HEAD; corrected-tree Stage-4 revalidation pending
+BASE: `f8e7b24d510b4b5889370823dc1c0a5ef43a7f54` / `main`
+TASK: `TASK-010A` Stage-5 neutral content/image foundation
+TOUCHED: status only — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS / 100%; Stage 4 PASS / 100%; Stage 5 ACTIVE
+PUBLISHED: Stage-3 convergence `ced346bae602ed6b9b34c8a468c19cc26ffc5c08`; Stage-4 final correction `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a`; Stage-4 acceptance HEAD `f8e7b24d510b4b5889370823dc1c0a5ef43a7f54`
+VALIDATION: Stage 3 and Stage 4 platform accepted; Stage 5 not yet validated
 
 ## Next Action
 
-Gary runs `TASK-009-W1-R1-W2` against current `main`. Confirm `17c46c69d9961a9b75da98dd4d3e8c2ff17f678a` is an ancestor, then run Stage-4 tests only: `RenderGpu2DTest` Debug/Release, `GpuCtrlReplayTest` Debug/Release, and `GpuCtrlPresentationTest` Debug/Release. Stop on the first genuine blocker. No edits, commits or pushes are needed for this validation. If clean, mark Stage 4 100% and move directly to Stage 5.
+Refresh current `main`, inspect the complete Stage-5 dependency slice (`RenderCanvas`, `RenderCore`, `RenderRhi`, `RenderNull`, `RenderVulkan`, `RenderGpu2D`, `RenderSoftware`, tests and package files), then implement and publish `TASK-010A` as the first coherent Stage-5 checkpoint. Preserve the accepted Stage-3/Stage-4 architecture and keep image/text/vector work backend-neutral at the recording layer.
