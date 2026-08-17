@@ -7,7 +7,7 @@ Image UiRenderer2D::Unmultiply(const Image& image)
 	if(image.IsEmpty())
 		return Image();
 
-	ImageBuffer output(image.GetSize());
+	ImageBuffer output(image.GetWidth(), image.GetHeight());
 	for(int y = 0; y < image.GetHeight(); ++y) {
 		const RGBA *source = image[y];
 		RGBA *target = output[y];
