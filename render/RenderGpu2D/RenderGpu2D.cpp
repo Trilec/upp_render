@@ -291,25 +291,18 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			if(emitted)
 				stats.emitted_primitive_count++;
 
+			const double ascent = run_font.GetAscent();
+			const double thickness = max(ascent / 16.0, 1.0);
 			const double run_width = pen_x - op.point.x;
-			if(run_width > 0 && (run_font.IsUnderline() || run_font.IsStrikeout())) {
-				const int hg = max(abs(run_font.GetCy()), 1);
-				const int thickness = max(run_font.IsBold() ? hg / 10 : hg / 20, 1);
-				const int ascent = run_font.GetAscent();
-				if(run_font.IsUnderline()) {
-					const int descent = run_font.GetDescent();
-					const int p = min(descent - thickness,
-					                  max(descent > 0 ? descent / 2 : hg / 15, int(descent > 0)));
-					const double y = op.point.y + ascent + p;
-					if(!append_rect(Rectf(op.point.x, y, op.point.x + run_width, y + thickness), op.color))
-						return false;
-				}
-				if(run_font.IsStrikeout()) {
-					const int p = -ascent / 3;
-					const double y = op.point.y + ascent + p;
-					if(!append_rect(Rectf(op.point.x, y, op.point.x + run_width, y + thickness), op.color))
-						return false;
-				}
+			if(run_width > 0 && run_font.IsUnderline()) {
+				const double y = op.point.y + ascent + thickness;
+				if(!append_rect(Rectf(op.point.x, y, op.point.x + run_width, y + thickness), op.color))
+					return false;
+			}
+			if(run_width > 0 && run_font.IsStrikeout()) {
+				const double y = op.point.y + 2 * ascent / 3.0;
+				if(!append_rect(Rectf(op.point.x, y, op.point.x + run_width, y + thickness), op.color))
+					return false;
 			}
 			break;
 		}
