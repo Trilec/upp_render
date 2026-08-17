@@ -66,6 +66,14 @@ static String SampleSvg()
 	       "<path d='M9 17 L14 22 L24 10' fill='none' stroke='#fff' stroke-width='3'/></svg>";
 }
 
+static WString Stage5Label()
+{
+	WString text;
+	text.Cat('V');
+	text.Cat('5');
+	return text;
+}
+
 static bool MakeScene(UiDisplayList& out)
 {
 	UiDisplayListBuilder builder;
@@ -82,6 +90,7 @@ static bool MakeScene(UiDisplayList& out)
 	builder.FillPath(MakePath(), MakeGradient(), UiFillRule::EvenOdd);
 	builder.StrokePath(MakePath(), UiPaint::Solid(Rgba8(245, 245, 250, 220)), MakeStroke());
 	builder.DrawSvg(Rectf(84, 12, 114, 42), SampleSvg());
+	builder.DrawText(Pointf(90, 47), Stage5Label(), SansSerif(14).Bold(), Rgba8(245, 248, 255, 230));
 	builder.Restore();
 	builder.FillRect(Rectf(122, 52, 156, 77), Rgba8(220, 100, 35, 185));
 	return builder.Finish(out);
@@ -133,7 +142,7 @@ CONSOLE_APP_MAIN
 				offscreen.clear_color.alpha = 1.0f;
 
 				ok &= Check(renderer.Render(scene, offscreen),
-				            "real Vulkan offscreen vector frame should render");
+				            "real Vulkan offscreen vector/text frame should render");
 				const UiRenderer2DStats first = renderer.GetStats();
 				ok &= Check(first.vector_op_count == 3 && first.vector_path_count == 2 &&
 				            first.svg_count == 1 && first.gradient_count == 1,
@@ -143,21 +152,26 @@ CONSOLE_APP_MAIN
 				            "first Vulkan vector frame should rasterize three unique assets");
 				ok &= Check(first.texture_upload_count == 3,
 				            "first Vulkan vector frame should upload three materialized images");
-				ok &= Check(first.batch_count == 5 && first.draw_count == 5,
-				            "real Vulkan should preserve solid/vector/vector/SVG/solid ordering");
+				ok &= Check(first.text_run_count == 1 && first.glyph_count == 2 &&
+				            first.glyph_cache_miss_count == 2 && first.glyph_atlas_upload_count == 2,
+				            "vector materialization should preserve and populate the accepted text path");
+				ok &= Check(first.batch_count == 6 && first.draw_count == 6,
+				            "real Vulkan should preserve solid/vector/vector/SVG/text/solid ordering");
 				ok &= Check(scene.Dump() == scene_dump,
 				            "real Vulkan vector replay must not mutate the display list");
 
 				ok &= Check(renderer.Render(scene, offscreen),
-				            "second Vulkan vector frame should render from CPU/GPU caches");
+				            "second Vulkan vector frame should render from CPU/GPU/text caches");
 				const UiRenderer2DStats second = renderer.GetStats();
 				ok &= Check(second.vector_cache_miss_count == 0 && second.vector_raster_count == 0 &&
 				            second.vector_cache_entry_count == 3,
 				            "second Vulkan vector frame should reuse all U++ vector rasters");
 				ok &= Check(second.texture_upload_count == 0,
 				            "second Vulkan vector frame should reuse GPU image textures");
-				ok &= Check(second.batch_count == 5 && second.draw_count == 5,
-				            "cached Vulkan vector order should remain deterministic");
+				ok &= Check(second.glyph_cache_miss_count == 0 && second.glyph_atlas_upload_count == 0,
+				            "second Vulkan vector frame should also reuse the glyph atlas");
+				ok &= Check(second.batch_count == 6 && second.draw_count == 6,
+				            "cached Vulkan Stage-5 order should remain deterministic");
 
 				GpuSurfaceDesc surface_desc;
 				surface_desc.size = Size(164, 82);
@@ -180,11 +194,13 @@ CONSOLE_APP_MAIN
 				GpuClearColor clear;
 				clear.red = 0.02f; clear.green = 0.03f; clear.blue = 0.05f; clear.alpha = 1.0f;
 				ok &= Check(renderer.RenderFrame(scene, frame, clear),
-				            "vector scene should render into acquired swapchain image");
+				            "mixed vector/text scene should render into acquired swapchain image");
 				ok &= Check(renderer.GetStats().vector_cache_miss_count == 0 &&
 				            renderer.GetStats().vector_raster_count == 0 &&
-				            renderer.GetStats().texture_upload_count == 0,
-				            "swapchain vector render should reuse CPU and GPU caches");
+				            renderer.GetStats().texture_upload_count == 0 &&
+				            renderer.GetStats().glyph_cache_miss_count == 0 &&
+				            renderer.GetStats().glyph_atlas_upload_count == 0,
+				            "swapchain Stage-5 render should reuse vector, image and glyph caches");
 				ok &= Check(device.Present(frame.frame) == GpuResult::Ok,
 				            "vector swapchain frame should present through session authority");
 				ok &= Check(device.DestroySwapchain(swapchain) == GpuResult::Ok,
