@@ -43,6 +43,16 @@ static bool ImageDiffersFrom(const Image& image, RGBA reference)
 	return false;
 }
 
+static Image MakeTestImage()
+{
+	ImageBuffer buffer(2, 2);
+	buffer[0][0] = MakeRgba(255, 0, 0, 255);
+	buffer[0][1] = MakeRgba(0, 255, 0, 255);
+	buffer[1][0] = MakeRgba(0, 0, 255, 255);
+	buffer[1][1] = MakeRgba(96, 48, 24, 128);
+	return Image(buffer);
+}
+
 static bool BuildMixedList(UiDisplayList& out)
 {
 	UiDisplayListBuilder builder;
@@ -61,6 +71,25 @@ static bool BuildMixedList(UiDisplayList& out)
 	builder.Restore();
 	builder.FillRect(Rectf(70, 52, 126, 94), Rgba8(245, 210, 60, 128));
 	builder.FillRect(Rectf(180, 140, 220, 180), Rgba8(255, 0, 255, 255));
+	return builder.Finish(out);
+}
+
+static bool BuildImageList(const Image& image, UiDisplayList& out)
+{
+	UiDisplayListBuilder builder;
+	builder.FillRect(Rectf(4, 4, 34, 28), Rgba8(30, 70, 120, 255));
+	builder.Save();
+	builder.ClipRect(Rectf(24, 12, 104, 82));
+	Transform2D affine;
+	affine.x.x = 1.0;
+	affine.x.y = 0.15;
+	affine.y.x = -0.10;
+	affine.y.y = 1.0;
+	affine.t = Pointf(8, 2);
+	builder.ConcatTransform(affine);
+	builder.DrawImage(Rectf(10, 8, 78, 62), image);
+	builder.Restore();
+	builder.FillRect(Rectf(88, 58, 124, 92), Rgba8(210, 90, 40, 170));
 	return builder.Finish(out);
 }
 
@@ -168,17 +197,77 @@ CONSOLE_APP_MAIN
 	}
 
 	String log = device.DumpLog();
-	ok &= Check(CountText(log, "CreateShader id=") == 2, "renderer should keep one persistent shader pair");
-	ok &= Check(CountText(log, "CreatePipeline id=") == 2, "renderer should cache one pipeline per target format");
-	ok &= Check(CountText(log, "CreateBuffer id=") == 1, "renderer should reuse one persistent vertex buffer at stable capacity");
-	ok &= Check(CountText(log, "WriteBuffer id=") == 3, "three geometry frames should upload vertices");
-	ok &= Check(CountText(log, "Draw list=") == 3, "three geometry frames should issue one draw each");
-	ok &= Check(CountText(log, "DestroyPipeline id=") == 2, "renderer shutdown should release cached pipelines");
-	ok &= Check(CountText(log, "DestroyShader id=") == 2, "renderer shutdown should release shaders");
-	ok &= Check(CountText(log, "DestroyBuffer id=") == 1, "renderer shutdown should release the persistent vertex buffer");
+	ok &= Check(CountText(log, "CreateShader id=") == 2, "solid renderer should keep one persistent shader pair");
+	ok &= Check(CountText(log, "CreatePipeline id=") == 2, "solid renderer should cache one pipeline per target format");
+	ok &= Check(CountText(log, "CreateBuffer id=") == 1, "solid renderer should reuse one persistent vertex buffer at stable capacity");
+	ok &= Check(CountText(log, "WriteBuffer id=") == 3, "three solid geometry frames should upload vertices");
+	ok &= Check(CountText(log, "Draw list=") == 3, "three solid geometry frames should issue one draw each");
+	ok &= Check(CountText(log, "DestroyPipeline id=") == 2, "solid renderer shutdown should release cached pipelines");
+	ok &= Check(CountText(log, "DestroyShader id=") == 2, "solid renderer shutdown should release shaders");
+	ok &= Check(CountText(log, "DestroyBuffer id=") == 1, "solid renderer shutdown should release the persistent vertex buffer");
 
 	ok &= Check(device.DestroyTexture(rgba_target) == GpuResult::Ok, "RGBA target should destroy");
 	ok &= Check(device.DestroyTexture(bgra_target) == GpuResult::Ok, "BGRA target should destroy");
+
+	{
+		NullGpuDevice image_device;
+		GpuTextureId image_target = CreateTarget(image_device, GpuFormat::RGBA8, size);
+		Image image = MakeTestImage();
+		UiDisplayList image_list;
+		ok &= Check(BuildImageList(image, image_list), "Stage-5 image display list should build");
+		const String image_dump = image_list.Dump();
+		UiRenderer2D renderer(image_device);
+		ok &= Check(renderer.IsReady(), "image renderer should accept RenderNull capabilities");
+		ok &= Check(renderer.Render(image_list, MakeTarget(image_target, GpuFormat::RGBA8, size)),
+		            "ordered solid/image/solid replay should succeed");
+		const UiRenderer2DStats first = renderer.GetStats();
+		ok &= Check(first.image_count == 1 && first.texture_upload_count == 1,
+		            "first image frame should upload exactly one immutable image texture");
+		ok &= Check(first.textured_vertex_count > 0 && first.textured_vertex_count % 3 == 0,
+		            "DrawImage should emit triangle-list UV geometry");
+		ok &= Check(first.batch_count == 3 && first.draw_count == 3,
+		            "solid/image/solid ordering should be preserved as three draw batches");
+		ok &= Check(first.clipped_primitive_count >= 1,
+		            "clipped transformed image should preserve clipping evidence");
+		ok &= Check(first.textured_vertex_buffer_grew && first.textured_vertex_buffer_capacity > 0,
+		            "first image frame should allocate a reusable textured vertex buffer");
+		ok &= Check(image_list.Dump() == image_dump,
+		            "GPU image replay must not mutate the immutable display list");
+
+		ok &= Check(renderer.Render(image_list, MakeTarget(image_target, GpuFormat::RGBA8, size)),
+		            "second image frame should reuse cached resources");
+		const UiRenderer2DStats second = renderer.GetStats();
+		ok &= Check(second.texture_upload_count == 0,
+		            "second image frame should reuse the immutable-image texture cache");
+		ok &= Check(!second.textured_vertex_buffer_grew && second.textured_vertex_buffer_capacity == first.textured_vertex_buffer_capacity,
+		            "second image frame should reuse the textured vertex buffer");
+		ok &= Check(second.batch_count == 3 && second.draw_count == 3,
+		            "ordered image replay should remain deterministic across frames");
+		GpuPipelineDesc sampled_pipeline;
+		bool found_sampled_pipeline = false;
+		for(int id = 1; id <= 4; ++id) {
+			GpuPipelineId candidate; candidate.value = id;
+			if(image_device.GetPipelineDesc(candidate, sampled_pipeline) && sampled_pipeline.sampled_texture_count == 1) {
+				found_sampled_pipeline = sampled_pipeline.vertex_layout == GpuVertexLayout::Position2Uv2Color4F &&
+				                         sampled_pipeline.blend_mode == GpuBlendMode::SourceOver &&
+				                         sampled_pipeline.sampler_filter == GpuSamplerFilter::Linear &&
+				                         sampled_pipeline.sampler_address == GpuSamplerAddressMode::ClampToEdge;
+				break;
+			}
+		}
+		ok &= Check(found_sampled_pipeline,
+		            "image renderer should request the bounded UV + SourceOver + linear-clamp sampled pipeline");
+		renderer.Close();
+		String image_log = image_device.DumpLog();
+		ok &= Check(CountText(image_log, "WriteTexture id=") == 1,
+		            "immutable image cache should upload pixel data once across repeated frames");
+		ok &= Check(CountText(image_log, "SetSampledTexture list=") == 2,
+		            "each image frame should bind its cached sampled texture once");
+		ok &= Check(CountText(image_log, "Draw list=") == 6,
+		            "two ordered solid/image/solid frames should issue six draws");
+		ok &= Check(image_device.DestroyTexture(image_target) == GpuResult::Ok,
+		            "image target should destroy after renderer-owned cache shutdown");
+	}
 
 	if(ok) {
 		Cout() << "RenderGpu2DTest passed" << EOL;
