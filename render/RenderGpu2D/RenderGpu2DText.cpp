@@ -109,8 +109,9 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 
 	const int glyph_width = right - left + 1;
 	const int glyph_height = bottom - top + 1;
-	if(glyph_width + 2 * TextImpl::ATLAS_PADDING > TextImpl::ATLAS_SIZE ||
-	   glyph_height + 2 * TextImpl::ATLAS_PADDING > TextImpl::ATLAS_SIZE)
+	const int padded_width = glyph_width + 2 * TextImpl::ATLAS_PADDING;
+	const int padded_height = glyph_height + 2 * TextImpl::ATLAS_PADDING;
+	if(padded_width > TextImpl::ATLAS_SIZE || padded_height > TextImpl::ATLAS_SIZE)
 		return Fail("UiRenderer2D glyph is larger than the atlas page");
 
 	auto create_page = [&]() -> bool {
@@ -123,40 +124,24 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 		GpuResult result = device->CreateTexture(desc, texture);
 		if(result != GpuResult::Ok)
 			return Fail("UiRenderer2D glyph atlas texture creation failed: " + DumpGpuResult(result));
-
-		Vector<RGBA> zero;
-		zero.SetCount(TextImpl::ATLAS_SIZE * TextImpl::ATLAS_SIZE);
-		std::memset(zero.Begin(), 0, zero.GetCount() * sizeof(RGBA));
-		GpuTextureWriteDesc upload;
-		upload.size = desc.size;
-		upload.row_pitch = (int64)TextImpl::ATLAS_SIZE * (int)sizeof(RGBA);
-		result = device->WriteTexture(texture, upload, zero.Begin(), (int64)zero.GetCount() * sizeof(RGBA));
-		if(result != GpuResult::Ok) {
-			device->DestroyTexture(texture);
-			return Fail("UiRenderer2D glyph atlas initialization failed: " + DumpGpuResult(result));
-		}
-
 		TextImpl::AtlasPage& page = text.pages.Add();
 		page.texture = texture;
-		stats.glyph_atlas_upload_count++;
 		stats.glyph_atlas_page_count = text.pages.GetCount();
 		return true;
 	};
 
 	auto try_pack = [&](TextImpl::AtlasPage& page, Point& position) -> bool {
-		const int total_width = glyph_width + 2 * TextImpl::ATLAS_PADDING;
-		const int total_height = glyph_height + 2 * TextImpl::ATLAS_PADDING;
-		if(page.cursor_x + total_width > TextImpl::ATLAS_SIZE) {
+		if(page.cursor_x + padded_width > TextImpl::ATLAS_SIZE) {
 			page.cursor_x = TextImpl::ATLAS_PADDING;
 			page.cursor_y += page.row_height;
 			page.row_height = 0;
 		}
-		if(page.cursor_y + total_height > TextImpl::ATLAS_SIZE)
+		if(page.cursor_y + padded_height > TextImpl::ATLAS_SIZE)
 			return false;
 		position = Point(page.cursor_x + TextImpl::ATLAS_PADDING,
 		                 page.cursor_y + TextImpl::ATLAS_PADDING);
-		page.cursor_x += total_width;
-		page.row_height = max(page.row_height, total_height);
+		page.cursor_x += padded_width;
+		page.row_height = max(page.row_height, padded_height);
 		return true;
 	};
 
@@ -176,11 +161,12 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 			return Fail("UiRenderer2D could not pack glyph into a fresh atlas page");
 	}
 
-	Vector<RGBA> straight;
-	straight.SetCount(glyph_width * glyph_height);
+	Vector<RGBA> padded;
+	padded.SetCount(padded_width * padded_height);
+	std::memset(padded.Begin(), 0, padded.GetCount() * sizeof(RGBA));
 	for(int y = 0; y < glyph_height; ++y) {
 		const RGBA *source = raster[top + y] + left;
-		RGBA *target = straight.Begin() + y * glyph_width;
+		RGBA *target = padded.Begin() + (y + TextImpl::ATLAS_PADDING) * padded_width + TextImpl::ATLAS_PADDING;
 		for(int x = 0; x < glyph_width; ++x) {
 			const byte alpha = source[x].a;
 			target[x].r = alpha ? 255 : 0;
@@ -191,11 +177,12 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 	}
 
 	GpuTextureWriteDesc upload;
-	upload.origin = atlas_position;
-	upload.size = Size(glyph_width, glyph_height);
-	upload.row_pitch = (int64)glyph_width * (int)sizeof(RGBA);
-	GpuResult result = device->WriteTexture(text.pages[page_index].texture, upload, straight.Begin(),
-	                                        (int64)straight.GetCount() * sizeof(RGBA));
+	upload.origin = Point(atlas_position.x - TextImpl::ATLAS_PADDING,
+	                      atlas_position.y - TextImpl::ATLAS_PADDING);
+	upload.size = Size(padded_width, padded_height);
+	upload.row_pitch = (int64)padded_width * (int)sizeof(RGBA);
+	GpuResult result = device->WriteTexture(text.pages[page_index].texture, upload, padded.Begin(),
+	                                        (int64)padded.GetCount() * sizeof(RGBA));
 	if(result != GpuResult::Ok)
 		return Fail("UiRenderer2D glyph atlas upload failed: " + DumpGpuResult(result));
 
