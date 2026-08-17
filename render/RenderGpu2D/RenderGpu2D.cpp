@@ -3,9 +3,9 @@
 #include <cmath>
 #include <limits>
 
-// Keep the accepted Stage-4/image renderer byte-preserved. TASK-010B replaces
-// only the entry points that must notice DrawText; all no-text renders execute
-// the accepted implementation directly.
+// Keep the accepted Stage-4/image renderer byte-preserved. Stage-5 wrappers
+// only intercept features the accepted base does not know about; vector/SVG
+// content is materialized into ordinary DrawImage intent before reaching it.
 #define BuildGeometry BuildGeometryBase
 #define Render RenderBase
 #define RenderFrame RenderFrameBase
@@ -306,6 +306,10 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			}
 			break;
 		}
+		case UiDisplayOpType::FillPath:
+		case UiDisplayOpType::StrokePath:
+		case UiDisplayOpType::DrawSvg:
+			return Fail("UiRenderer2D internal error: vector operation was not materialized");
 		}
 	}
 	if(!stack.IsEmpty())
@@ -322,6 +326,41 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 
 bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& target)
 {
+	bool has_vector = false;
+	for(int i = 0; i < list.GetCount(); ++i) {
+		const UiDisplayOpType type = list[i].type;
+		if(type == UiDisplayOpType::FillPath || type == UiDisplayOpType::StrokePath ||
+		   type == UiDisplayOpType::DrawSvg) {
+			has_vector = true;
+			break;
+		}
+	}
+	if(has_vector) {
+		error.Clear();
+		if(!ready || !device)
+			return Fail("UiRenderer2D is not ready");
+		if(!target.color_target.IsValid() || target.size.cx <= 0 || target.size.cy <= 0 ||
+		   !IsSupportedColorFormat(target.color_format))
+			return Fail("UiRenderer2D target is invalid or unsupported");
+
+		UiDisplayList materialized;
+		UiRenderer2DStats vector_stats;
+		if(!MaterializeVectorList(list, materialized, vector_stats))
+			return false;
+		if(!Render(materialized, target))
+			return false;
+
+		stats.display_op_count = list.GetCount();
+		stats.vector_op_count = vector_stats.vector_op_count;
+		stats.vector_path_count = vector_stats.vector_path_count;
+		stats.gradient_count = vector_stats.gradient_count;
+		stats.svg_count = vector_stats.svg_count;
+		stats.vector_cache_miss_count = vector_stats.vector_cache_miss_count;
+		stats.vector_cache_entry_count = vector_stats.vector_cache_entry_count;
+		stats.vector_raster_count = vector_stats.vector_raster_count;
+		return true;
+	}
+
 	bool has_text = false;
 	for(int i = 0; i < list.GetCount(); ++i)
 		if(list[i].type == UiDisplayOpType::DrawText) {
@@ -381,6 +420,7 @@ bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& fr
 
 void UiRenderer2D::Close()
 {
+	DestroyVectorExtension();
 	DestroyTextExtension();
 	CloseBase();
 }
