@@ -47,6 +47,13 @@ public:
 	GpuResult Submit(GpuCommandListId list) override;
 
 	String DumpLog() const;
+	bool GetPipelineDesc(GpuPipelineId id, GpuPipelineDesc& out) const {
+		int index = pipelines.Find(id.value);
+		if(!id.IsValid() || index < 0)
+			return false;
+		out = pipelines[index].desc;
+		return true;
+	}
 
 private:
 	struct BufferState : Moveable<BufferState> {
