@@ -1,0 +1,9 @@
+uses
+	RenderCanvas,
+	RenderVector,
+	RenderGpu2D,
+	RenderNull,
+	Painter;
+
+file
+	main.cpp;

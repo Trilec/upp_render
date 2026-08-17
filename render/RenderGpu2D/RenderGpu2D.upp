@@ -1,11 +1,13 @@
 uses
 	Painter,
 	RenderCanvas,
-	RenderRhi;
+	RenderRhi,
+	RenderVector;
 
 file
 	RenderGpu2D.h,
 	RenderGpu2D.cpp,
 	RenderGpu2DBase.inc,
 	RenderGpu2DImage.cpp,
-	RenderGpu2DText.cpp;
+	RenderGpu2DText.cpp,
+	RenderGpu2DVector.cpp;

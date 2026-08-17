@@ -25,6 +25,13 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int glyph_cache_miss_count = 0;
 	int glyph_atlas_page_count = 0;
 	int glyph_atlas_upload_count = 0;
+	int vector_op_count = 0;
+	int vector_path_count = 0;
+	int gradient_count = 0;
+	int svg_count = 0;
+	int vector_cache_miss_count = 0;
+	int vector_cache_entry_count = 0;
+	int vector_raster_count = 0;
 	int texture_upload_count = 0;
 	int triangle_count = 0;
 	int vertex_count = 0;
@@ -40,7 +47,9 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 };
 
 // Backend-neutral 2D renderer. The GpuDevice must outlive this object.
-// Solid primitives, sampled images and U++-rasterized glyph-atlas text share one ordered render-pass command stream.
+// Vector/SVG content is antialiased by the shared U++ Painter authority into
+// cached Images, then flows through the same sampled-image GPU path already
+// used by ordinary DrawImage content. No second GPU texture ownership tree.
 class UiRenderer2D {
 public:
 	explicit UiRenderer2D(GpuDevice& device);
@@ -147,6 +156,28 @@ private:
 		~TextCleanup();
 	};
 
+	struct VectorRaster : Moveable<VectorRaster> {
+		Image image;
+		Rectf local_rect = Rectf(0, 0, 0, 0);
+		bool drawable = false;
+	};
+
+	struct VectorImpl {
+		struct CacheEntry : Moveable<CacheEntry> {
+			UiDisplayOp op;
+			Image image;
+			Rectf local_rect = Rectf(0, 0, 0, 0);
+			int raster_scale = 1;
+		};
+
+		Vector<CacheEntry> cache;
+	};
+
+	struct VectorCleanup {
+		UiRenderer2D *owner = nullptr;
+		~VectorCleanup();
+	};
+
 	GpuDevice *device = nullptr;
 	bool ready = false;
 	String error;
@@ -166,6 +197,8 @@ private:
 	UiRenderer2DStats stats;
 	TextImpl *text_impl = nullptr;
 	TextCleanup text_cleanup;
+	VectorImpl *vector_impl = nullptr;
+	VectorCleanup vector_cleanup;
 
 	static Image Unmultiply(const Image& image);
 	bool EnsureShaders(bool textured);
@@ -173,6 +206,10 @@ private:
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
 	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
+	bool EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out,
+	                        UiRenderer2DStats& vector_stats);
+	bool MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,
+	                           UiRenderer2DStats& vector_stats);
 	bool BuildGeometry(const UiDisplayList& list, Size target_size);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
 	            GpuPipelineId textured_pipeline);
@@ -180,8 +217,10 @@ private:
 
 	TextImpl& Text();
 	void DestroyTextExtension();
+	VectorImpl& VectorCache();
+	void DestroyVectorExtension();
 
-	// Byte-preserved Stage-4/image implementation entry points wrapped by TASK-010B.
+	// Byte-preserved Stage-4/image implementation entry points wrapped by Stage 5.
 	bool BuildGeometryBase(const UiDisplayList& list, Size target_size);
 	bool RenderBase(const UiDisplayList& list, const UiRenderer2DTarget& target);
 	bool RenderFrameBase(const UiDisplayList& list, const GpuFrameInfo& frame,
