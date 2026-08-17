@@ -20,6 +20,11 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int emitted_primitive_count = 0;
 	int clipped_primitive_count = 0;
 	int image_count = 0;
+	int text_run_count = 0;
+	int glyph_count = 0;
+	int glyph_cache_miss_count = 0;
+	int glyph_atlas_page_count = 0;
+	int glyph_atlas_upload_count = 0;
 	int texture_upload_count = 0;
 	int triangle_count = 0;
 	int vertex_count = 0;
@@ -35,7 +40,7 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 };
 
 // Backend-neutral 2D renderer. The GpuDevice must outlive this object.
-// Solid primitives and sampled images share one ordered render-pass command stream.
+// Solid primitives, sampled images and U++-rasterized glyph-atlas text share one ordered render-pass command stream.
 class UiRenderer2D {
 public:
 	explicit UiRenderer2D(GpuDevice& device);
@@ -104,6 +109,21 @@ private:
 		Rectf clip = Rectf(0, 0, 0, 0);
 	};
 
+	struct GlyphDraw : Moveable<GlyphDraw> {
+		GpuTextureId texture;
+		Rectf uv = Rectf(0, 0, 0, 0);
+		Pointf offset = Pointf(0, 0);
+		Size size = Size(0, 0);
+		double advance = 0;
+		bool drawable = false;
+	};
+
+	struct TextImpl;
+	struct TextCleanup {
+		UiRenderer2D *owner = nullptr;
+		~TextCleanup();
+	};
+
 	GpuDevice *device = nullptr;
 	bool ready = false;
 	String error;
@@ -121,16 +141,26 @@ private:
 	Vector<TexturedVertex> textured_vertices;
 	Vector<Batch> batches;
 	UiRenderer2DStats stats;
+	TextImpl *text_impl = nullptr;
+	TextCleanup text_cleanup;
 
 	static Image Unmultiply(const Image& image);
 	bool EnsureShaders(bool textured);
 	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
+	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
 	bool BuildGeometry(const UiDisplayList& list, Size target_size);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
 	            GpuPipelineId textured_pipeline);
 	bool Fail(const String& message);
+
+	TextImpl& Text();
+	void DestroyTextExtension();
+
+	// Byte-preserved Stage-4/image implementation entry points wrapped by TASK-010B.
+	bool BuildGeometryBase(const UiDisplayList& list, Size target_size);
+	void CloseBase();
 };
 
 }
