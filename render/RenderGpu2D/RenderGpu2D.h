@@ -122,6 +122,7 @@ private:
 	Vector<Batch> batches;
 	UiRenderer2DStats stats;
 
+	static Image Unmultiply(const Image& image);
 	bool EnsureShaders(bool textured);
 	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
