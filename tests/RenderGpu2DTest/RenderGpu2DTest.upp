@@ -1,6 +1,7 @@
 uses
 	RenderGpu2D,
-	RenderNull;
+	RenderNull,
+	RenderSoftware;
 
 file
 	main.cpp;

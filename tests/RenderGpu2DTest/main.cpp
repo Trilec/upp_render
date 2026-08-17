@@ -1,5 +1,6 @@
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderNull/RenderNull.h>
+#include <RenderSoftware/RenderSoftware.h>
 
 using namespace Upp;
 
@@ -21,6 +22,25 @@ static int CountText(const String& text, const char *needle)
 		++count;
 		pos += (int)String(needle).GetCount();
 	}
+}
+
+static RGBA MakeRgba(byte r, byte g, byte b, byte a = 255)
+{
+	RGBA color;
+	color.r = r;
+	color.g = g;
+	color.b = b;
+	color.a = a;
+	return color;
+}
+
+static bool ImageDiffersFrom(const Image& image, RGBA reference)
+{
+	for(int y = 0; y < image.GetHeight(); ++y)
+		for(int x = 0; x < image.GetWidth(); ++x)
+			if(image[y][x] != reference)
+				return true;
+	return false;
 }
 
 static bool BuildMixedList(UiDisplayList& out)
@@ -83,6 +103,20 @@ CONSOLE_APP_MAIN
 
 	UiDisplayList mixed;
 	ok &= Check(BuildMixedList(mixed), "mixed Stage-4 display list should build");
+	const String semantic_dump = mixed.Dump();
+
+	const RGBA software_background = MakeRgba(7, 10, 18, 255);
+	ImagePainter software_painter(size);
+	software_painter.DrawRect(Rect(0, 0, size.cx, size.cy), Color(7, 10, 18));
+	SoftwareUiRenderer software_renderer;
+	ok &= Check(software_renderer.Replay(mixed, software_painter),
+	            "Stage-4 display list should replay through the software reference");
+	ok &= Check(software_renderer.GetError().IsEmpty(), "software reference replay should retain no error");
+	Image software_image = software_painter.GetResult();
+	ok &= Check(ImageDiffersFrom(software_image, software_background),
+	            "software reference replay should produce visible primitive output");
+	ok &= Check(mixed.Dump() == semantic_dump,
+	            "software reference replay must not mutate the immutable display list");
 
 	{
 		UiRenderer2D renderer(device);
@@ -102,6 +136,8 @@ CONSOLE_APP_MAIN
 		            "uploaded byte count should match Position2Color4F layout");
 		ok &= Check(first.vertex_buffer_grew && first.vertex_buffer_capacity >= first.uploaded_bytes,
 		            "first render should allocate a reusable vertex buffer");
+		ok &= Check(mixed.Dump() == semantic_dump,
+		            "GPU-contract replay must consume the same immutable display list without mutation");
 
 		ok &= Check(renderer.Render(mixed, MakeTarget(rgba_target, GpuFormat::RGBA8, size)), "second mixed render should succeed");
 		const UiRenderer2DStats second = renderer.GetStats();
