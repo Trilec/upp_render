@@ -30,6 +30,11 @@ static String DumpRect(const Rectf& rect)
 	       StableDouble(rect.right) + " " + StableDouble(rect.bottom);
 }
 
+static String DumpPoint(const Pointf& point)
+{
+	return StableDouble(point.x) + " " + StableDouble(point.y);
+}
+
 static String DumpTransform(const Transform2D& transform)
 {
 	return StableDouble(transform.x.x) + " " + StableDouble(transform.x.y) + " " +
@@ -59,12 +64,30 @@ static int64 StableImageHash(const Image& image)
 	return (int64)hash;
 }
 
+static int64 StableTextHash(const WString& text)
+{
+	uint64 hash = 1469598103934665603ULL;
+	auto mix = [&](byte value) {
+		hash ^= value;
+		hash *= 1099511628211ULL;
+	};
+	for(int i = 0; i < text.GetCount(); ++i) {
+		uint32 value = (uint32)text[i];
+		mix((byte)(value));
+		mix((byte)(value >> 8));
+		mix((byte)(value >> 16));
+		mix((byte)(value >> 24));
+	}
+	return (int64)hash;
+}
+
 bool UiDisplayOp::operator==(const UiDisplayOp& other) const
 {
 	return type == other.type && rect.left == other.rect.left && rect.top == other.rect.top &&
 	       rect.right == other.rect.right && rect.bottom == other.rect.bottom &&
-	       width == other.width && transform == other.transform && color == other.color &&
-	       rounded == other.rounded && image == other.image;
+	       point == other.point && width == other.width && transform == other.transform &&
+	       color == other.color && rounded == other.rounded && image == other.image &&
+	       text == other.text && font == other.font;
 }
 
 UiDisplayList::UiDisplayList()
@@ -120,6 +143,11 @@ String UiDisplayList::Dump() const
 		case UiDisplayOpType::DrawImage:
 			sb << "DrawImage " << DumpRect(op.rect) << " image=" << op.image.GetWidth() << 'x'
 			   << op.image.GetHeight() << " hash=" << StableImageHash(op.image);
+			break;
+		case UiDisplayOpType::DrawText:
+			sb << "DrawText " << DumpPoint(op.point) << " chars=" << op.text.GetCount()
+			   << " hash=" << StableTextHash(op.text) << " font=" << op.font.AsInt64() << ' '
+			   << DumpColor(op.color);
 			break;
 		}
 		if(i + 1 < ops.GetCount())
@@ -247,6 +275,19 @@ void UiDisplayListBuilder::DrawImage(const Rectf& rect, const Image& image)
 	op.type = UiDisplayOpType::DrawImage;
 	op.rect = rect;
 	op.image = image;
+	Append(op);
+}
+
+void UiDisplayListBuilder::DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color)
+{
+	if(!CanRecord())
+		return;
+	UiDisplayOp op;
+	op.type = UiDisplayOpType::DrawText;
+	op.point = point;
+	op.text = text;
+	op.font = font;
+	op.color = color;
 	Append(op);
 }
 

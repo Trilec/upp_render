@@ -49,7 +49,6 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 					--depth;
 				}
 			}
-		}
 	};
 
 	int depth = 0;
@@ -99,6 +98,14 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 		case UiDisplayOpType::DrawImage:
 			if(!op.image.IsEmpty())
 				painter.DrawImage(ToRect(op.rect), op.image);
+			break;
+		case UiDisplayOpType::DrawText:
+			if(!op.text.IsEmpty()) {
+				painter.Begin();
+				painter.Translate(op.point);
+				painter.DrawText(0, 0, op.text, op.font, op.color.ToColor());
+				painter.End();
+			}
 			break;
 		}
 	}

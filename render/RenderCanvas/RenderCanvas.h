@@ -22,6 +22,7 @@ public:
 	virtual void StrokeRect(const Rectf& rect, double width, Rgba8 color) = 0;
 	virtual void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) = 0;
 	virtual void DrawImage(const Rectf& rect, const Image& image) = 0;
+	virtual void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) = 0;
 };
 
 enum class UiDisplayOpType {
@@ -33,16 +34,20 @@ enum class UiDisplayOpType {
 	StrokeRect,
 	FillRoundedRect,
 	DrawImage,
+	DrawText,
 };
 
 struct UiDisplayOp : Moveable<UiDisplayOp> {
 	UiDisplayOpType type = UiDisplayOpType::Save;
 	Rectf rect = Rectf(0, 0, 0, 0);
+	Pointf point = Pointf(0, 0);
 	double width = 0;
 	Transform2D transform;
 	Rgba8 color;
 	struct RoundedRect rounded;
 	Image image;
+	WString text;
+	Font font;
 
 	bool operator==(const UiDisplayOp& other) const;
 	bool operator!=(const UiDisplayOp& other) const { return !(*this == other); }
@@ -84,6 +89,7 @@ public:
 	void StrokeRect(const Rectf& rect, double width, Rgba8 color) override;
 	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) override;
 	void DrawImage(const Rectf& rect, const Image& image) override;
+	void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) override;
 
 	bool Finish(UiDisplayList& out);
 	bool IsFinished() const { return finished; }
