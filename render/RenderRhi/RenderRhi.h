@@ -78,6 +78,11 @@ enum class GpuVertexLayout {
 	Position2Color4F,
 };
 
+enum class GpuBlendMode {
+	Opaque,
+	SourceOver,
+};
+
 enum GpuCapabilityFlags {
 	GpuCapability_None = 0,
 	GpuCapability_Buffers = 1 << 0,
@@ -190,6 +195,7 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	GpuShaderId vertex_shader;
 	GpuShaderId fragment_shader;
 	GpuVertexLayout vertex_layout = GpuVertexLayout::Unknown;
+	GpuBlendMode blend_mode = GpuBlendMode::Opaque;
 	String label;
 };
 
