@@ -3,7 +3,8 @@ uses
 	Draw,
 	Painter,
 	RenderCore,
-	RenderCanvas;
+	RenderCanvas,
+	RenderVector;
 
 file
 	RenderSoftware.h,
