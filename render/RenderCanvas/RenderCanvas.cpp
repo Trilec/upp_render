@@ -37,12 +37,34 @@ static String DumpTransform(const Transform2D& transform)
 	       StableDouble(transform.t.x) + " " + StableDouble(transform.t.y);
 }
 
+static int64 StableImageHash(const Image& image)
+{
+	uint64 hash = 1469598103934665603ULL;
+	auto mix = [&](byte value) {
+		hash ^= value;
+		hash *= 1099511628211ULL;
+	};
+	const Size size = image.GetSize();
+	for(int shift = 0; shift < 32; shift += 8) {
+		mix((byte)((uint32)size.cx >> shift));
+		mix((byte)((uint32)size.cy >> shift));
+	}
+	const RGBA *pixels = image.Begin();
+	for(size_t i = 0; pixels && i < image.GetLength(); ++i) {
+		mix(pixels[i].r);
+		mix(pixels[i].g);
+		mix(pixels[i].b);
+		mix(pixels[i].a);
+	}
+	return (int64)hash;
+}
+
 bool UiDisplayOp::operator==(const UiDisplayOp& other) const
 {
 	return type == other.type && rect.left == other.rect.left && rect.top == other.rect.top &&
 	       rect.right == other.rect.right && rect.bottom == other.rect.bottom &&
 	       width == other.width && transform == other.transform && color == other.color &&
-	       rounded == other.rounded;
+	       rounded == other.rounded && image == other.image;
 }
 
 UiDisplayList::UiDisplayList()
@@ -94,6 +116,10 @@ String UiDisplayList::Dump() const
 		case UiDisplayOpType::FillRoundedRect:
 			sb << "FillRoundedRect " << DumpRect(op.rounded.rect) << ' '
 			   << StableDouble(op.rounded.radius) << ' ' << DumpColor(op.color);
+			break;
+		case UiDisplayOpType::DrawImage:
+			sb << "DrawImage " << DumpRect(op.rect) << " image=" << op.image.GetWidth() << 'x'
+			   << op.image.GetHeight() << " hash=" << StableImageHash(op.image);
 			break;
 		}
 		if(i + 1 < ops.GetCount())
@@ -210,6 +236,17 @@ void UiDisplayListBuilder::FillRoundedRect(const RoundedRect& rect, Rgba8 color)
 	op.type = UiDisplayOpType::FillRoundedRect;
 	op.rounded = rect;
 	op.color = color;
+	Append(op);
+}
+
+void UiDisplayListBuilder::DrawImage(const Rectf& rect, const Image& image)
+{
+	if(!CanRecord())
+		return;
+	UiDisplayOp op;
+	op.type = UiDisplayOpType::DrawImage;
+	op.rect = rect;
+	op.image = image;
 	Append(op);
 }
 
