@@ -27,6 +27,16 @@ struct UiPathCommand : Moveable<UiPathCommand> {
 
 class UiPath : Moveable<UiPath> {
 public:
+	UiPath() = default;
+	UiPath(const UiPath& other) : commands(other.commands, 1) {}
+	UiPath(UiPath&& other) = default;
+	UiPath& operator=(const UiPath& other) {
+		if(this != &other)
+			commands = Vector<UiPathCommand>(other.commands, 1);
+		return *this;
+	}
+	UiPath& operator=(UiPath&& other) = default;
+
 	UiPath& MoveTo(Pointf p);
 	UiPath& LineTo(Pointf p);
 	UiPath& QuadraticTo(Pointf control, Pointf end);
@@ -84,6 +94,25 @@ struct UiPaint : Moveable<UiPaint> {
 	UiGradientSpread spread = UiGradientSpread::Pad;
 	Vector<UiGradientStop> stops;
 
+	UiPaint() = default;
+	UiPaint(const UiPaint& other)
+		: kind(other.kind), color(other.color), p0(other.p0), p1(other.p1),
+		  radius(other.radius), spread(other.spread), stops(other.stops, 1) {}
+	UiPaint(UiPaint&& other) = default;
+	UiPaint& operator=(const UiPaint& other) {
+		if(this != &other) {
+			kind = other.kind;
+			color = other.color;
+			p0 = other.p0;
+			p1 = other.p1;
+			radius = other.radius;
+			spread = other.spread;
+			stops = Vector<UiGradientStop>(other.stops, 1);
+		}
+		return *this;
+	}
+	UiPaint& operator=(UiPaint&& other) = default;
+
 	static UiPaint Solid(Rgba8 color);
 	static UiPaint Linear(Pointf start, Pointf end, Rgba8 start_color, Rgba8 end_color,
 	                      UiGradientSpread spread = UiGradientSpread::Pad);
@@ -117,6 +146,24 @@ struct UiStrokeStyle : Moveable<UiStrokeStyle> {
 	double miter_limit = 10;
 	Vector<double> dash;
 	double dash_offset = 0;
+
+	UiStrokeStyle() = default;
+	UiStrokeStyle(const UiStrokeStyle& other)
+		: width(other.width), cap(other.cap), join(other.join), miter_limit(other.miter_limit),
+		  dash(other.dash, 1), dash_offset(other.dash_offset) {}
+	UiStrokeStyle(UiStrokeStyle&& other) = default;
+	UiStrokeStyle& operator=(const UiStrokeStyle& other) {
+		if(this != &other) {
+			width = other.width;
+			cap = other.cap;
+			join = other.join;
+			miter_limit = other.miter_limit;
+			dash = Vector<double>(other.dash, 1);
+			dash_offset = other.dash_offset;
+		}
+		return *this;
+	}
+	UiStrokeStyle& operator=(UiStrokeStyle&& other) = default;
 
 	bool IsValid(String *reason = nullptr) const;
 	String Dump() const;
