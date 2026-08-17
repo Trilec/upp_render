@@ -164,12 +164,13 @@ private:
 
 	struct VectorImpl {
 		struct CacheEntry : Moveable<CacheEntry> {
+			UiDisplayOp op;
 			Image image;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
 		};
 
-		VectorMap<String, CacheEntry> cache;
+		Vector<CacheEntry> cache;
 	};
 
 	struct VectorCleanup {
