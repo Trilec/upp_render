@@ -100,6 +100,10 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			if(!op.image.IsEmpty())
 				painter.DrawImage(ToRect(op.rect), op.image);
 			break;
+		case UiDisplayOpType::DrawText:
+			if(!op.text.IsEmpty())
+				painter.DrawText((int)op.point.x, (int)op.point.y, op.text, op.font, op.color.ToColor());
+			break;
 		}
 	}
 
