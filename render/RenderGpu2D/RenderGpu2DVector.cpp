@@ -138,15 +138,13 @@ bool UiRenderer2D::EnsureVectorTexture(const UiDisplayOp& op, const Transform2D&
 		return Fail("UiRenderer2D vector texture upload failed: " + DumpGpuResult(result));
 	}
 
-	VectorImpl::CacheEntry entry;
-	entry.texture = texture;
-	entry.local_rect = local_rect;
-	entry.raster_scale = raster_scale;
-	cache.cache.Add(key, pick(entry));
+	VectorImpl::CacheEntry& stored = cache.cache.Add(key);
+	stored.texture = texture;
+	stored.local_rect = local_rect;
+	stored.raster_scale = raster_scale;
 	stats.vector_texture_upload_count++;
 	stats.vector_texture_count = cache.cache.GetCount();
 
-	const VectorImpl::CacheEntry& stored = cache.cache.Top();
 	out.texture = stored.texture;
 	out.local_rect = stored.local_rect;
 	out.drawable = true;
