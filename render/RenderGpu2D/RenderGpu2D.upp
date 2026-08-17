@@ -4,4 +4,5 @@ uses
 
 file
 	RenderGpu2D.h,
-	RenderGpu2D.cpp;
+	RenderGpu2D.cpp,
+	RenderGpu2DImage.cpp;
