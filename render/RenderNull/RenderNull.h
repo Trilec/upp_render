@@ -104,6 +104,7 @@ private:
 		GpuPipelineId pipeline;
 		GpuBufferId vertex_buffer;
 		Vector<GpuTextureId> sampled_textures;
+		Vector<GpuTextureId> referenced_sampled_textures;
 		int draw_count = 0;
 		GpuRenderPassDesc pass_desc;
 	};
