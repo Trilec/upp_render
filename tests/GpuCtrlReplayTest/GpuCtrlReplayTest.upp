@@ -1,7 +1,9 @@
 uses
 	Core,
 	GpuCtrl,
-	RenderCanvas;
+	RenderCanvas,
+	RenderGpu2D,
+	RenderNull;
 
 file
 	main.cpp;
