@@ -100,8 +100,8 @@ CONSOLE_APP_MAIN
 		            "ABBA should rasterize only two distinct glyphs on first use");
 		ok &= Check(first.glyph_atlas_page_count == 1,
 		            "small text run should fit in one persistent atlas page");
-		ok &= Check(first.glyph_atlas_upload_count == 3,
-		            "first text frame should initialize one atlas page and upload two glyph regions");
+		ok &= Check(first.glyph_atlas_upload_count == 2,
+		            "first text frame should upload only two padded glyph regions");
 		ok &= Check(first.textured_vertex_count > 0 && first.textured_vertex_count % 3 == 0,
 		            "glyphs should emit sampled triangle geometry");
 		ok &= Check(first.translucent_vertex_count > 0,
@@ -134,8 +134,8 @@ CONSOLE_APP_MAIN
 	String log = device.DumpLog();
 	ok &= Check(CountText(log, "CreateTexture id=") == 2,
 	            "text test should create only target plus one atlas page texture");
-	ok &= Check(CountText(log, "WriteTexture id=") == 3,
-	            "glyph atlas should have one initialization and two partial glyph uploads");
+	ok &= Check(CountText(log, "WriteTexture id=") == 2,
+	            "glyph atlas should upload only the two distinct padded glyph regions");
 	ok &= Check(CountText(log, "SetSampledTexture list=") == 2,
 	            "each text frame should bind the atlas once");
 	ok &= Check(CountText(log, "Draw list=") == 6,
