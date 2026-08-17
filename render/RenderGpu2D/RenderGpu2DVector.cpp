@@ -36,31 +36,6 @@ static int VectorRasterScale(const Transform2D& transform)
 	return minmax((int)ceil(scale), 1, 8);
 }
 
-static String VectorCacheKey(const UiDisplayOp& op, int raster_scale)
-{
-	String key;
-	key << raster_scale << '|';
-	switch(op.type) {
-	case UiDisplayOpType::FillPath:
-		key << "F|" << (op.fill_rule == UiFillRule::EvenOdd ? 'E' : 'N')
-		    << '|' << op.path.Dump() << '|' << op.paint.Dump();
-		break;
-	case UiDisplayOpType::StrokePath:
-		key << "S|" << op.path.Dump() << '|' << op.paint.Dump() << '|' << op.stroke.Dump();
-		break;
-	case UiDisplayOpType::DrawSvg:
-		// Full source avoids making correctness depend on a finite-width hash.
-		key << "V|" << FormatDoubleFix(op.rect.left, 6) << ',' << FormatDoubleFix(op.rect.top, 6)
-		    << ',' << FormatDoubleFix(op.rect.right, 6) << ',' << FormatDoubleFix(op.rect.bottom, 6)
-		    << '|' << op.svg;
-		break;
-	default:
-		key << "invalid";
-		break;
-	}
-	return key;
-}
-
 }
 
 UiRenderer2D::VectorCleanup::~VectorCleanup()
@@ -97,16 +72,16 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 		return Fail("UiRenderer2D vector content has a non-finite transform");
 
 	const int raster_scale = VectorRasterScale(transform);
-	const String key = VectorCacheKey(op, raster_scale);
 	VectorImpl& cache = VectorCache();
-	const int found = cache.cache.Find(key);
-	if(found >= 0) {
-		const VectorImpl::CacheEntry& entry = cache.cache[found];
-		out.image = entry.image;
-		out.local_rect = entry.local_rect;
-		out.drawable = !entry.image.IsEmpty();
-		vector_stats.vector_cache_entry_count = cache.cache.GetCount();
-		return true;
+	for(int i = 0; i < cache.cache.GetCount(); ++i) {
+		const VectorImpl::CacheEntry& entry = cache.cache[i];
+		if(entry.raster_scale == raster_scale && entry.op == op) {
+			out.image = entry.image;
+			out.local_rect = entry.local_rect;
+			out.drawable = !entry.image.IsEmpty();
+			vector_stats.vector_cache_entry_count = cache.cache.GetCount();
+			return true;
+		}
 	}
 
 	vector_stats.vector_cache_miss_count++;
@@ -115,21 +90,19 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	String raster_error;
 	if(!RasterizeUiVectorOp(op, raster_scale, raster, local_rect, raster_error))
 		return Fail("UiRenderer2D vector rasterization failed: " + raster_error);
-	if(raster.IsEmpty()) {
-		vector_stats.vector_cache_entry_count = cache.cache.GetCount();
-		return true;
-	}
 
-	VectorImpl::CacheEntry& stored = cache.cache.Add(key);
+	VectorImpl::CacheEntry& stored = cache.cache.Add();
+	stored.op = op;
 	stored.image = raster;
 	stored.local_rect = local_rect;
 	stored.raster_scale = raster_scale;
-	vector_stats.vector_raster_count++;
+	if(!raster.IsEmpty())
+		vector_stats.vector_raster_count++;
 	vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 
 	out.image = stored.image;
 	out.local_rect = stored.local_rect;
-	out.drawable = true;
+	out.drawable = !stored.image.IsEmpty();
 	return true;
 }
 
