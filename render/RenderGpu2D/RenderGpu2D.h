@@ -30,8 +30,8 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int gradient_count = 0;
 	int svg_count = 0;
 	int vector_cache_miss_count = 0;
-	int vector_texture_count = 0;
-	int vector_texture_upload_count = 0;
+	int vector_cache_entry_count = 0;
+	int vector_raster_count = 0;
 	int texture_upload_count = 0;
 	int triangle_count = 0;
 	int vertex_count = 0;
@@ -47,8 +47,9 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 };
 
 // Backend-neutral 2D renderer. The GpuDevice must outlive this object.
-// Solid primitives plus sampled images, U++ glyph-atlas text and U++ Painter
-// vector/SVG rasters share one ordered render-pass command stream.
+// Vector/SVG content is antialiased by the shared U++ Painter authority into
+// cached Images, then flows through the same sampled-image GPU path already
+// used by ordinary DrawImage content. No second GPU texture ownership tree.
 class UiRenderer2D {
 public:
 	explicit UiRenderer2D(GpuDevice& device);
@@ -155,15 +156,15 @@ private:
 		~TextCleanup();
 	};
 
-	struct VectorDraw : Moveable<VectorDraw> {
-		GpuTextureId texture;
+	struct VectorRaster : Moveable<VectorRaster> {
+		Image image;
 		Rectf local_rect = Rectf(0, 0, 0, 0);
 		bool drawable = false;
 	};
 
 	struct VectorImpl {
 		struct CacheEntry : Moveable<CacheEntry> {
-			GpuTextureId texture;
+			Image image;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
 		};
@@ -204,7 +205,10 @@ private:
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
 	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
-	bool EnsureVectorTexture(const UiDisplayOp& op, const Transform2D& transform, VectorDraw& out);
+	bool EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out,
+	                        UiRenderer2DStats& vector_stats);
+	bool MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,
+	                           UiRenderer2DStats& vector_stats);
 	bool BuildGeometry(const UiDisplayList& list, Size target_size);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
 	            GpuPipelineId textured_pipeline);
