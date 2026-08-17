@@ -76,11 +76,22 @@ enum class GpuShaderFormat {
 enum class GpuVertexLayout {
 	Unknown,
 	Position2Color4F,
+	Position2Uv2Color4F,
 };
 
 enum class GpuBlendMode {
 	Opaque,
 	SourceOver,
+};
+
+enum class GpuSamplerFilter {
+	Nearest,
+	Linear,
+};
+
+enum class GpuSamplerAddressMode {
+	ClampToEdge,
+	Repeat,
 };
 
 enum GpuCapabilityFlags {
@@ -196,6 +207,11 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	GpuShaderId fragment_shader;
 	GpuVertexLayout vertex_layout = GpuVertexLayout::Unknown;
 	GpuBlendMode blend_mode = GpuBlendMode::Opaque;
+	// Stage-5 starts with one conventional sampled 2D texture slot. Keeping
+	// sampler state on the pipeline avoids exposing backend descriptor objects.
+	int sampled_texture_count = 0;
+	GpuSamplerFilter sampler_filter = GpuSamplerFilter::Linear;
+	GpuSamplerAddressMode sampler_address = GpuSamplerAddressMode::ClampToEdge;
 	String label;
 };
 
@@ -269,6 +285,7 @@ public:
 	virtual GpuResult BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc) = 0;
 	virtual GpuResult SetPipeline(GpuCommandListId list, GpuPipelineId pipeline) = 0;
 	virtual GpuResult SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer) = 0;
+	virtual GpuResult SetSampledTexture(GpuCommandListId, int, GpuTextureId) { return GpuResult::Unsupported; }
 	virtual GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) = 0;
 	virtual GpuResult EndRenderPass(GpuCommandListId list) = 0;
 	virtual GpuResult EndCommands(GpuCommandListId list) = 0;
@@ -287,6 +304,8 @@ String DumpGpuPrimitiveTopology(GpuPrimitiveTopology topology);
 String DumpGpuShaderStage(GpuShaderStage stage);
 String DumpGpuShaderFormat(GpuShaderFormat format);
 String DumpGpuVertexLayout(GpuVertexLayout layout);
+String DumpGpuSamplerFilter(GpuSamplerFilter filter);
+String DumpGpuSamplerAddressMode(GpuSamplerAddressMode mode);
 String DumpGpuCapabilityFlags(int flags);
 String DumpGpuResult(GpuResult result);
 String DumpGpuError(GpuError error);

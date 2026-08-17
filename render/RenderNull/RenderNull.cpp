@@ -33,7 +33,18 @@ static bool IsValidShaderFormat(GpuShaderFormat format)
 
 static bool IsValidVertexLayout(GpuVertexLayout layout)
 {
-	return layout == GpuVertexLayout::Position2Color4F;
+	return layout == GpuVertexLayout::Position2Color4F ||
+	       layout == GpuVertexLayout::Position2Uv2Color4F;
+}
+
+static bool IsValidSamplerFilter(GpuSamplerFilter filter)
+{
+	return filter == GpuSamplerFilter::Nearest || filter == GpuSamplerFilter::Linear;
+}
+
+static bool IsValidSamplerAddressMode(GpuSamplerAddressMode mode)
+{
+	return mode == GpuSamplerAddressMode::ClampToEdge || mode == GpuSamplerAddressMode::Repeat;
 }
 
 static bool IsValidLoadOp(GpuLoadOp op)
@@ -80,6 +91,8 @@ static int BytesPerPixel(GpuFormat format)
 	switch(format) {
 	case GpuFormat::RGBA8:
 	case GpuFormat::BGRA8:
+	case GpuFormat::RGBA8Srgb:
+	case GpuFormat::BGRA8Srgb:
 	case GpuFormat::D24S8:
 		return 4;
 	case GpuFormat::R16F:
@@ -402,6 +415,15 @@ GpuResult NullGpuDevice::DestroyTexture(GpuTextureId id)
 		Fail("DestroyTexture id=" + id.Dump() + " reason=swapchain_backbuffer");
 		return GpuResult::InvalidState;
 	}
+	for(int i = 0; i < command_lists.GetCount(); ++i) {
+		if(command_lists[i].submitted)
+			continue;
+		for(const GpuTextureId& referenced : command_lists[i].referenced_sampled_textures)
+			if(referenced == id) {
+				Fail("DestroyTexture id=" + id.Dump() + " reason=referenced_by_command_list");
+				return GpuResult::InvalidState;
+			}
+	}
 	textures.Remove(index);
 	AppendLog("DestroyTexture id=" + id.Dump());
 	return GpuResult::Ok;
@@ -670,6 +692,17 @@ GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeline
 		Fail("CreatePipeline layout=" + DumpGpuVertexLayout(desc.vertex_layout) + " reason=invalid_vertex_layout");
 		return GpuResult::InvalidArgument;
 	}
+	if(desc.sampled_texture_count < 0 || desc.sampled_texture_count > 1 ||
+	   !IsValidSamplerFilter(desc.sampler_filter) || !IsValidSamplerAddressMode(desc.sampler_address)) {
+		Fail("CreatePipeline sampled_textures=" + AsString(desc.sampled_texture_count) + " reason=invalid_sampled_texture_contract");
+		return GpuResult::InvalidArgument;
+	}
+	if((desc.sampled_texture_count == 0 && desc.vertex_layout != GpuVertexLayout::Position2Color4F) ||
+	   (desc.sampled_texture_count == 1 && desc.vertex_layout != GpuVertexLayout::Position2Uv2Color4F)) {
+		Fail("CreatePipeline layout=" + DumpGpuVertexLayout(desc.vertex_layout) + " sampled_textures=" +
+		     AsString(desc.sampled_texture_count) + " reason=layout_sample_mismatch");
+		return GpuResult::InvalidArgument;
+	}
 	if(!CheckShaderExists(desc.vertex_shader) || !CheckShaderExists(desc.fragment_shader)) {
 		Fail("CreatePipeline vertex=" + desc.vertex_shader.Dump() + " fragment=" + desc.fragment_shader.Dump() + " reason=unknown_shader");
 		return GpuResult::InvalidHandle;
@@ -688,7 +721,9 @@ GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeline
 	out = id;
 	AppendLog("CreatePipeline id=" + id.Dump() + " topology=" + DumpGpuPrimitiveTopology(desc.topology) +
 	          " format=" + DumpGpuFormat(desc.color_format) + " vertex=" + desc.vertex_shader.Dump() +
-	          " fragment=" + desc.fragment_shader.Dump() + " layout=" + DumpGpuVertexLayout(desc.vertex_layout));
+	          " fragment=" + desc.fragment_shader.Dump() + " layout=" + DumpGpuVertexLayout(desc.vertex_layout) +
+	          " sampled_textures=" + AsString(desc.sampled_texture_count) + " filter=" + DumpGpuSamplerFilter(desc.sampler_filter) +
+	          " address=" + DumpGpuSamplerAddressMode(desc.sampler_address));
 	return GpuResult::Ok;
 }
 
@@ -720,6 +755,8 @@ GpuResult NullGpuDevice::BeginCommands(GpuCommandListId& out)
 	state.render_pass_active = false;
 	state.pipeline = GpuPipelineId();
 	state.vertex_buffer = GpuBufferId();
+	state.sampled_textures.Clear();
+	state.referenced_sampled_textures.Clear();
 	state.draw_count = 0;
 	active_command_list = id;
 	out = id;
@@ -774,6 +811,7 @@ GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderP
 	mutable_state.pass_desc = desc;
 	mutable_state.pipeline = GpuPipelineId();
 	mutable_state.vertex_buffer = GpuBufferId();
+	mutable_state.sampled_textures.Clear();
 	mutable_state.draw_count = 0;
 	AppendLog("BeginRenderPass list=" + list.Dump() + " target=" + desc.color_target.Dump() + " color_format=" + DumpGpuFormat(desc.color_format) +
 	          " load=" + DumpGpuLoadOp(desc.color_load) + " store=" + DumpGpuStoreOp(desc.color_store));
@@ -803,6 +841,9 @@ GpuResult NullGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipeli
 		return GpuResult::InvalidArgument;
 	}
 	mutable_state.pipeline = pipeline;
+	mutable_state.sampled_textures.Clear();
+	if(pipeline_state.desc.sampled_texture_count > 0)
+		mutable_state.sampled_textures.SetCount(pipeline_state.desc.sampled_texture_count);
 	AppendLog("SetPipeline list=" + list.Dump() + " pipeline=" + pipeline.Dump());
 	return GpuResult::Ok;
 }
@@ -834,6 +875,56 @@ GpuResult NullGpuDevice::SetVertexBuffer(GpuCommandListId list, GpuBufferId buff
 	return GpuResult::Ok;
 }
 
+GpuResult NullGpuDevice::SetSampledTexture(GpuCommandListId list, int slot, GpuTextureId texture)
+{
+	const CommandState *state = nullptr;
+	String reason;
+	if(!CanUseCommandList(list, state, reason)) {
+		Fail("SetSampledTexture list=" + list.Dump() + " reason=" + reason);
+		return GpuResult::InvalidState;
+	}
+	CommandState& mutable_state = *FindCommandState(list);
+	if(!mutable_state.render_pass_active || !mutable_state.pipeline.IsValid()) {
+		Fail("SetSampledTexture list=" + list.Dump() + " reason=pipeline_and_render_pass_required");
+		return GpuResult::InvalidState;
+	}
+	int pipeline_index = pipelines.Find(mutable_state.pipeline.value);
+	if(pipeline_index < 0) {
+		Fail("SetSampledTexture list=" + list.Dump() + " reason=unknown_pipeline");
+		return GpuResult::InvalidHandle;
+	}
+	const GpuPipelineDesc& pipeline = pipelines[pipeline_index].desc;
+	if(slot < 0 || slot >= pipeline.sampled_texture_count) {
+		Fail("SetSampledTexture list=" + list.Dump() + " slot=" + AsString(slot) + " reason=slot_out_of_range");
+		return GpuResult::InvalidArgument;
+	}
+	int texture_index = textures.Find(texture.value);
+	if(!texture.IsValid() || texture_index < 0) {
+		Fail("SetSampledTexture list=" + list.Dump() + " texture=" + texture.Dump() + " reason=unknown_texture");
+		return GpuResult::InvalidHandle;
+	}
+	const TextureState& texture_state = textures[texture_index];
+	if(texture_state.swapchain_backbuffer || (texture_state.desc.usage & GpuTextureUsage_Sampled) == 0) {
+		Fail("SetSampledTexture list=" + list.Dump() + " texture=" + texture.Dump() + " reason=not_sampled_texture");
+		return GpuResult::InvalidArgument;
+	}
+	if(mutable_state.pass_desc.color_target == texture) {
+		Fail("SetSampledTexture list=" + list.Dump() + " texture=" + texture.Dump() + " reason=color_target_alias");
+		return GpuResult::InvalidState;
+	}
+	mutable_state.sampled_textures[slot] = texture;
+	bool found = false;
+	for(const GpuTextureId& referenced : mutable_state.referenced_sampled_textures)
+		if(referenced == texture) {
+			found = true;
+			break;
+		}
+	if(!found)
+		mutable_state.referenced_sampled_textures.Add(texture);
+	AppendLog("SetSampledTexture list=" + list.Dump() + " slot=" + AsString(slot) + " texture=" + texture.Dump());
+	return GpuResult::Ok;
+}
+
 GpuResult NullGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first_vertex)
 {
 	const CommandState *state = nullptr;
@@ -851,7 +942,8 @@ GpuResult NullGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first
 		Fail("Draw list=" + list.Dump() + " reason=pipeline_required");
 		return GpuResult::InvalidState;
 	}
-	if(!CheckPipelineExists(mutable_state.pipeline)) {
+	int pipeline_index = pipelines.Find(mutable_state.pipeline.value);
+	if(pipeline_index < 0) {
 		Fail("Draw list=" + list.Dump() + " pipeline=" + mutable_state.pipeline.Dump() + " reason=unknown_pipeline");
 		return GpuResult::InvalidHandle;
 	}
@@ -866,6 +958,19 @@ GpuResult NullGpuDevice::Draw(GpuCommandListId list, int vertex_count, int first
 	if(!CheckBufferExists(mutable_state.vertex_buffer)) {
 		Fail("Draw list=" + list.Dump() + " buffer=" + mutable_state.vertex_buffer.Dump() + " reason=unknown_vertex_buffer");
 		return GpuResult::InvalidHandle;
+	}
+	const int required_samples = pipelines[pipeline_index].desc.sampled_texture_count;
+	if(mutable_state.sampled_textures.GetCount() != required_samples) {
+		Fail("Draw list=" + list.Dump() + " reason=sample_binding_count_mismatch");
+		return GpuResult::InvalidState;
+	}
+	for(int i = 0; i < required_samples; ++i) {
+		const GpuTextureId sampled = mutable_state.sampled_textures[i];
+		const TextureState *texture = FindTextureState(sampled);
+		if(!sampled.IsValid() || !texture || (texture->desc.usage & GpuTextureUsage_Sampled) == 0) {
+			Fail("Draw list=" + list.Dump() + " slot=" + AsString(i) + " reason=sampled_texture_required");
+			return GpuResult::InvalidState;
+		}
 	}
 	mutable_state.draw_count += 1;
 	AppendLog("Draw list=" + list.Dump() + " vertices=" + AsString(vertex_count) + " first=" + AsString(first_vertex));
@@ -888,6 +993,7 @@ GpuResult NullGpuDevice::EndRenderPass(GpuCommandListId list)
 	mutable_state.render_pass_active = false;
 	mutable_state.pipeline = GpuPipelineId();
 	mutable_state.vertex_buffer = GpuBufferId();
+	mutable_state.sampled_textures.Clear();
 	AppendLog("EndRenderPass list=" + list.Dump());
 	return GpuResult::Ok;
 }

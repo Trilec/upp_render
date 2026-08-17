@@ -41,6 +41,7 @@ public:
 	GpuResult BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc) override;
 	GpuResult SetPipeline(GpuCommandListId list, GpuPipelineId pipeline) override;
 	GpuResult SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer) override;
+	GpuResult SetSampledTexture(GpuCommandListId list, int slot, GpuTextureId texture) override;
 	GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) override;
 	GpuResult EndRenderPass(GpuCommandListId list) override;
 	GpuResult EndCommands(GpuCommandListId list) override;
@@ -102,6 +103,8 @@ private:
 		bool submitted = false;
 		GpuPipelineId pipeline;
 		GpuBufferId vertex_buffer;
+		Vector<GpuTextureId> sampled_textures;
+		Vector<GpuTextureId> referenced_sampled_textures;
 		int draw_count = 0;
 		GpuRenderPassDesc pass_desc;
 	};
