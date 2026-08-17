@@ -89,6 +89,22 @@ CONSOLE_APP_MAIN
 	ok &= Check(ImageDiffersFrom(output, background), "software text replay should produce visible output");
 	ok &= Check(list.Dump() == dump, "software text replay must not mutate the immutable display list");
 
+	WString unicode;
+	unicode.Cat((wchar)0x00e9);
+	unicode.Cat('A');
+	UiDisplayListBuilder fractional_builder;
+	fractional_builder.DrawText(Pointf(8.5, 9.25), unicode, SansSerif(20).Italic(), Rgba8(245, 220, 170, 255));
+	UiDisplayList fractional;
+	ok &= Check(fractional_builder.Finish(fractional), "fractional Unicode text display list should finish");
+	ok &= Check(fractional.Dump().Find("DrawText 8.5 9.25 chars=2 hash=") >= 0,
+	            "text dump should preserve fractional origin and Unicode content deterministically");
+	ImagePainter fractional_painter(Size(72, 42));
+	fractional_painter.DrawRect(Rect(0, 0, 72, 42), Color(7, 10, 13));
+	ok &= Check(software.Replay(fractional, fractional_painter),
+	            "software reference should replay fractional Unicode text through U++ DrawText authority");
+	ok &= Check(ImageDiffersFrom(fractional_painter.GetResult(), background),
+	            "fractional Unicode software text should produce visible output");
+
 	UiDisplayListBuilder empty_builder;
 	empty_builder.DrawText(Pointf(4, 4), WString(), SansSerif(18), Rgba8(255, 255, 255));
 	UiDisplayList empty;
