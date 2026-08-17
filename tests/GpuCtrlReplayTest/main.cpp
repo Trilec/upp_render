@@ -1,5 +1,7 @@
 #include <Core/Core.h>
 #include <GpuCtrl/GpuCtrlTestHooks.h>
+#include <RenderGpu2D/RenderGpu2D.h>
+#include <RenderNull/RenderNull.h>
 
 using namespace Upp;
 using namespace Upp::GpuCtrlTestHooks;
@@ -11,195 +13,103 @@ static bool Check(bool condition, const char *message)
 	return condition;
 }
 
-static bool SameRect(const Rect& a, const Rect& b)
+static GpuClearColor ToClearColor(Rgba8 color)
 {
-	return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
-}
-
-static bool NearFloat(float actual, float expected)
-{
-	return fabs(actual - expected) <= 0.000001f;
-}
-
-static bool SameColor(const ReplayColor& actual, Rgba8 expected)
-{
-	return NearFloat(actual.red, expected.r / 255.0f) &&
-	       NearFloat(actual.green, expected.g / 255.0f) &&
-	       NearFloat(actual.blue, expected.b / 255.0f) &&
-	       NearFloat(actual.alpha, expected.a / 255.0f);
+	const float s = 1.0f / 255.0f;
+	GpuClearColor out;
+	out.red = color.r * s;
+	out.green = color.g * s;
+	out.blue = color.b * s;
+	out.alpha = color.a * s;
+	return out;
 }
 
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
+	UiDisplayList list;
+	Rgba8 background;
+	String error;
+	ok &= Check(BuildDefaultFrame(Size(200, 120), list, background, error), "default Stage-4 GpuCtrl frame should build");
+	ok &= Check(error.IsEmpty() && list.IsValid(), "default GpuCtrl frame should be a valid immutable display list");
+	ok &= Check(background.r == 20 && background.g == 61 && background.b == 148 && background.a == 255,
+	            "default GpuCtrl clear colour should remain deterministic");
 
-	ReplayResult result;
-	ok &= Check(BuildDefaultFrame(Size(200, 120), result), "default clipped frame should build");
-	ok &= Check(result.error.IsEmpty(), "default clipped frame should have no replay error");
-	ok &= Check(result.fill_rects.GetCount() == 2, "default clipped frame should retain two visible fills");
-	if(result.fill_rects.GetCount() == 2) {
-		ok &= Check(SameRect(result.fill_rects[0].rect, Rect(50, 30, 150, 90)),
-		            "outer FillRect should remain unaffected before ClipRect");
-		ok &= Check(SameRect(result.fill_rects[1].rect, Rect(112, 45, 137, 75)),
-		            "translated inner FillRect should keep its shifted right half");
-		ok &= Check(SameColor(result.fill_rects[0].color, Rgba8(230, 82, 20, 255)) &&
-		            SameColor(result.fill_rects[1].color, Rgba8(36, 190, 110, 255)),
-		            "clipping should preserve all FillRect colour channels");
+	int saves = 0, restores = 0, clips = 0, transforms = 0;
+	int fills = 0, strokes = 0, rounded = 0, translucent = 0;
+	bool has_general_affine = false;
+	for(int i = 0; i < list.GetCount(); ++i) {
+		const UiDisplayOp& op = list[i];
+		switch(op.type) {
+		case UiDisplayOpType::Save: ++saves; break;
+		case UiDisplayOpType::Restore: ++restores; break;
+		case UiDisplayOpType::ClipRect: ++clips; break;
+		case UiDisplayOpType::ConcatTransform:
+			++transforms;
+			has_general_affine = has_general_affine || op.transform.x.y != 0.0 || op.transform.y.x != 0.0 ||
+			                     op.transform.x.x != 1.0 || op.transform.y.y != 1.0;
+			break;
+		case UiDisplayOpType::FillRect:
+			++fills;
+			if(op.color.a < 255) ++translucent;
+			break;
+		case UiDisplayOpType::StrokeRect:
+			++strokes;
+			if(op.color.a < 255) ++translucent;
+			break;
+		case UiDisplayOpType::FillRoundedRect:
+			++rounded;
+			if(op.color.a < 255) ++translucent;
+			break;
+		}
 	}
+	ok &= Check(list.GetCount() == 8, "default GpuCtrl scene should contain eight deterministic operations");
+	ok &= Check(saves == 1 && restores == 1 && clips == 1 && transforms == 1,
+	            "default scene should exercise Save/Restore, clipping, and transform state");
+	ok &= Check(fills == 2 && strokes == 1 && rounded == 1,
+	            "default scene should exercise fill, stroke, and rounded primitives");
+	ok &= Check(has_general_affine, "default scene must exercise a non-translation affine transform");
+	ok &= Check(translucent >= 3, "default scene should exercise translucent source-over primitives");
 
-	UiDisplayListBuilder cumulative_builder;
-	cumulative_builder.FillRect(Rectf(0, 0, 100, 100), Rgba8(200, 40, 30, 255));
-	cumulative_builder.ClipRect(Rectf(10, 10, 90, 90));
-	cumulative_builder.ClipRect(Rectf(30, 20, 80, 70));
-	cumulative_builder.FillRect(Rectf(0, 0, 100, 100), Rgba8(20, 180, 70, 255));
-	UiDisplayList cumulative;
-	ok &= Check(cumulative_builder.Finish(cumulative), "cumulative clip display list should finish");
-	ReplayResult cumulative_result;
-	ok &= Check(ReplayDisplayList(cumulative, cumulative_result), "cumulative ClipRect replay should succeed");
-	ok &= Check(cumulative_result.fill_rects.GetCount() == 2, "cumulative clip replay should keep both visible fills");
-	if(cumulative_result.fill_rects.GetCount() == 2) {
-		ok &= Check(SameRect(cumulative_result.fill_rects[0].rect, Rect(0, 0, 100, 100)),
-		            "FillRect before clips should stay unmodified");
-		ok &= Check(SameRect(cumulative_result.fill_rects[1].rect, Rect(30, 20, 80, 70)),
-		            "multiple ClipRects should intersect for later fills");
+	NullGpuDevice device;
+	GpuTextureDesc target_desc;
+	target_desc.size = Size(200, 120);
+	target_desc.format = GpuFormat::RGBA8;
+	target_desc.usage = GpuTextureUsage_ColorAttachment;
+	GpuTextureId target;
+	ok &= Check(device.CreateTexture(target_desc, target) == GpuResult::Ok, "headless GpuCtrl target should create");
+	{
+		UiRenderer2D renderer(device);
+		ok &= Check(renderer.IsReady(), "production UiRenderer2D should accept the Null validation backend");
+		UiRenderer2DTarget render_target;
+		render_target.color_target = target;
+		render_target.size = target_desc.size;
+		render_target.color_format = target_desc.format;
+		render_target.load_op = GpuLoadOp::Clear;
+		render_target.store_op = GpuStoreOp::Store;
+		render_target.clear_color = ToClearColor(background);
+		ok &= Check(renderer.Render(list, render_target), "live GpuCtrl display list should replay through UiRenderer2D");
+		const UiRenderer2DStats& stats = renderer.GetStats();
+		ok &= Check(stats.display_op_count == 8 && stats.primitive_count == 4,
+		            "renderer should consume the complete control scene without a private replay authority");
+		ok &= Check(stats.draw_count == 1 && stats.batch_count == 1 && stats.vertex_count > 0,
+		            "compatible control primitives should render in one GPU batch");
+		ok &= Check(stats.translucent_vertex_count > 0,
+		            "control-scene alpha should survive into the GPU vertex stream");
+		GpuPipelineId pipeline; pipeline.value = 1;
+		GpuPipelineDesc pipeline_desc;
+		ok &= Check(device.GetPipelineDesc(pipeline, pipeline_desc) && pipeline_desc.blend_mode == GpuBlendMode::SourceOver,
+		            "live control scene should use the explicit source-over pipeline contract");
 	}
+	ok &= Check(device.DestroyTexture(target) == GpuResult::Ok, "headless GpuCtrl target should destroy after renderer shutdown");
 
-	UiDisplayListBuilder clipped_out_builder;
-	clipped_out_builder.ClipRect(Rectf(0, 0, 10, 10));
-	clipped_out_builder.FillRect(Rectf(20, 20, 30, 30), Rgba8(1, 2, 3, 255));
-	UiDisplayList clipped_out;
-	ok &= Check(clipped_out_builder.Finish(clipped_out), "fully clipped display list should finish");
-	ReplayResult clipped_out_result;
-	ok &= Check(ReplayDisplayList(clipped_out, clipped_out_result), "fully clipped FillRect should be a valid no-op");
-	ok &= Check(clipped_out_result.fill_rects.IsEmpty(), "fully clipped FillRect should emit no backend fill");
-
-	UiDisplayListBuilder restore_no_clip_builder;
-	restore_no_clip_builder.Save();
-	restore_no_clip_builder.ClipRect(Rectf(10, 10, 40, 40));
-	restore_no_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(70, 80, 90, 255));
-	restore_no_clip_builder.Restore();
-	restore_no_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(100, 110, 120, 255));
-	UiDisplayList restore_no_clip;
-	ok &= Check(restore_no_clip_builder.Finish(restore_no_clip), "Save/Restore no-clip display list should finish");
-	ReplayResult restore_no_clip_result;
-	ok &= Check(ReplayDisplayList(restore_no_clip, restore_no_clip_result), "Save/Restore should restore the previous no-clip state");
-	ok &= Check(restore_no_clip_result.fill_rects.GetCount() == 2, "Save/Restore no-clip replay should retain two visible fills");
-	if(restore_no_clip_result.fill_rects.GetCount() == 2) {
-		ok &= Check(SameRect(restore_no_clip_result.fill_rects[0].rect, Rect(10, 10, 40, 40)),
-		            "FillRect inside saved clip should be clipped");
-		ok &= Check(SameRect(restore_no_clip_result.fill_rects[1].rect, Rect(0, 0, 50, 50)),
-		            "Restore should remove a clip introduced after Save");
-	}
-
-	UiDisplayListBuilder restore_outer_clip_builder;
-	restore_outer_clip_builder.ClipRect(Rectf(5, 5, 45, 45));
-	restore_outer_clip_builder.Save();
-	restore_outer_clip_builder.ClipRect(Rectf(15, 10, 35, 30));
-	restore_outer_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(130, 140, 150, 255));
-	restore_outer_clip_builder.Restore();
-	restore_outer_clip_builder.FillRect(Rectf(0, 0, 50, 50), Rgba8(160, 170, 180, 255));
-	UiDisplayList restore_outer_clip;
-	ok &= Check(restore_outer_clip_builder.Finish(restore_outer_clip), "nested clip Save/Restore display list should finish");
-	ReplayResult restore_outer_clip_result;
-	ok &= Check(ReplayDisplayList(restore_outer_clip, restore_outer_clip_result), "Restore should reinstate the previous broader clip");
-	ok &= Check(restore_outer_clip_result.fill_rects.GetCount() == 2, "nested clip Save/Restore should retain two visible fills");
-	if(restore_outer_clip_result.fill_rects.GetCount() == 2) {
-		ok &= Check(SameRect(restore_outer_clip_result.fill_rects[0].rect, Rect(15, 10, 35, 30)),
-		            "nested ClipRect should constrain FillRect inside saved state");
-		ok &= Check(SameRect(restore_outer_clip_result.fill_rects[1].rect, Rect(5, 5, 45, 45)),
-		            "Restore should reinstate the earlier broader ClipRect");
-	}
-
-	UiDisplayListBuilder translation_builder;
-	translation_builder.ConcatTransform(Transform2D::Translation(7, -3));
-	translation_builder.FillRect(Rectf(10, 10, 20, 20), Rgba8(10, 20, 30, 255));
-	UiDisplayList translation;
-	ok &= Check(translation_builder.Finish(translation), "translation display list should finish");
-	ReplayResult translation_result;
-	ok &= Check(ReplayDisplayList(translation, translation_result), "translation replay should succeed");
-	ok &= Check(translation_result.fill_rects.GetCount() == 1, "translation replay should retain one fill");
-	if(translation_result.fill_rects.GetCount() == 1)
-		ok &= Check(SameRect(translation_result.fill_rects[0].rect, Rect(17, 7, 27, 17)),
-		            "translation should offset subsequent FillRect geometry");
-
-	UiDisplayListBuilder composed_translation_builder;
-	composed_translation_builder.ConcatTransform(Transform2D::Translation(5, 7));
-	composed_translation_builder.ConcatTransform(Transform2D::Translation(-2, 3));
-	composed_translation_builder.FillRect(Rectf(1, 2, 11, 12), Rgba8(40, 50, 60, 255));
-	UiDisplayList composed_translation;
-	ok &= Check(composed_translation_builder.Finish(composed_translation), "composed translation display list should finish");
-	ReplayResult composed_translation_result;
-	ok &= Check(ReplayDisplayList(composed_translation, composed_translation_result), "composed translations should replay");
-	ok &= Check(composed_translation_result.fill_rects.GetCount() == 1, "composed translations should retain one fill");
-	if(composed_translation_result.fill_rects.GetCount() == 1)
-		ok &= Check(SameRect(composed_translation_result.fill_rects[0].rect, Rect(4, 12, 14, 22)),
-		            "translation-only ConcatTransform operations should compose additively");
-
-	UiDisplayListBuilder restore_translation_builder;
-	restore_translation_builder.ConcatTransform(Transform2D::Translation(4, 5));
-	restore_translation_builder.Save();
-	restore_translation_builder.ConcatTransform(Transform2D::Translation(10, -2));
-	restore_translation_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(70, 80, 90, 255));
-	restore_translation_builder.Restore();
-	restore_translation_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(100, 110, 120, 255));
-	UiDisplayList restore_translation;
-	ok &= Check(restore_translation_builder.Finish(restore_translation), "translation Save/Restore display list should finish");
-	ReplayResult restore_translation_result;
-	ok &= Check(ReplayDisplayList(restore_translation, restore_translation_result), "Save/Restore should scope translation state");
-	ok &= Check(restore_translation_result.fill_rects.GetCount() == 2, "translation Save/Restore should retain two fills");
-	if(restore_translation_result.fill_rects.GetCount() == 2) {
-		ok &= Check(SameRect(restore_translation_result.fill_rects[0].rect, Rect(14, 3, 24, 13)),
-		            "FillRect inside saved translation should use the nested translation");
-		ok &= Check(SameRect(restore_translation_result.fill_rects[1].rect, Rect(4, 5, 14, 15)),
-		            "Restore should reinstate the earlier translation");
-	}
-
-	UiDisplayListBuilder translated_clip_builder;
-	translated_clip_builder.ConcatTransform(Transform2D::Translation(10, 0));
-	translated_clip_builder.ClipRect(Rectf(0, 0, 20, 20));
-	translated_clip_builder.FillRect(Rectf(0, 0, 20, 20), Rgba8(130, 140, 150, 255));
-	UiDisplayList translated_clip;
-	ok &= Check(translated_clip_builder.Finish(translated_clip), "translated clip display list should finish");
-	ReplayResult translated_clip_result;
-	ok &= Check(ReplayDisplayList(translated_clip, translated_clip_result), "translation with ClipRect should replay");
-	ok &= Check(translated_clip_result.fill_rects.GetCount() == 1, "translated clip replay should retain one visible fill");
-	if(translated_clip_result.fill_rects.GetCount() == 1)
-		ok &= Check(SameRect(translated_clip_result.fill_rects[0].rect, Rect(10, 0, 20, 20)),
-		            "ClipRect should remain in target coordinates while FillRect is translated");
-
-	UiDisplayListBuilder scale_builder;
-	scale_builder.ConcatTransform(Transform2D::Scale(2.0));
-	scale_builder.FillRect(Rectf(0, 0, 10, 10), Rgba8(160, 170, 180, 255));
-	UiDisplayList scale;
-	ok &= Check(scale_builder.Finish(scale), "scale display list should record normally");
-	ReplayResult scale_result;
-	ok &= Check(!ReplayDisplayList(scale, scale_result), "S16G replay should reject non-translation transforms");
-	ok &= Check(scale_result.error == "GpuCtrl S16G supports translation-only ConcatTransform operations",
-	            "non-translation transform should report the deterministic S16G error");
-
-	UiDisplayListBuilder unsupported_builder;
-	unsupported_builder.StrokeRect(Rectf(0, 0, 20, 20), 1.0, Rgba8(255, 255, 255, 255));
-	UiDisplayList unsupported;
-	ok &= Check(unsupported_builder.Finish(unsupported), "unsupported-op display list should still record normally");
-	ReplayResult unsupported_result;
-	ok &= Check(!ReplayDisplayList(unsupported, unsupported_result), "GpuCtrl replay should reject unsupported display operations");
-	ok &= Check(unsupported_result.error == "GpuCtrl S16G replay supports Save, Restore, ClipRect, ConcatTransform and FillRect operations only",
-	            "unsupported operation should report the deterministic S16G error");
-
-	UiDisplayList empty;
-	ReplayResult empty_result;
-	ok &= Check(!ReplayDisplayList(empty, empty_result), "empty display list should be rejected by the focused replay path");
-	ok &= Check(empty_result.error == "GpuCtrl S16E frame requires at least one display operation",
-	            "empty list should report the deterministic S16E error");
-
-	UiDisplayListBuilder invalid_builder;
-	invalid_builder.Save();
-	UiDisplayList invalid;
-	ok &= Check(!invalid_builder.Finish(invalid), "unbalanced display list should finish invalid");
-	ReplayResult invalid_result;
-	ok &= Check(!ReplayDisplayList(invalid, invalid_result), "non-empty invalid display list should be rejected");
-	ok &= Check(invalid_result.error == "unbalanced save depth at finish",
-	            "non-empty invalid list should preserve its builder error");
+	UiDisplayList zero_list;
+	Rgba8 zero_background;
+	String zero_error;
+	ok &= Check(BuildDefaultFrame(Size(0, 0), zero_list, zero_background, zero_error),
+	            "zero-size control scene should remain a valid empty display list");
+	ok &= Check(zero_list.IsValid() && zero_list.GetCount() == 0 && zero_error.IsEmpty(),
+	            "zero-size control scene should not invent drawable geometry");
 
 	if(ok) {
 		Cout() << "GpuCtrlReplayTest passed" << EOL;

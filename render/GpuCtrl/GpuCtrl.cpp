@@ -1,195 +1,68 @@
 #include "GpuCtrl.h"
 #include "GpuCtrlTestHooks.h"
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
-#include <RenderCanvas/RenderCanvas.h>
-#include <RenderVulkan/RenderVulkanSurfaceSession.h>
+#include <RenderGpu2D/RenderGpu2D.h>
+#include <RenderVulkan/RenderVulkanRhi.h>
+
+#include <memory>
 
 namespace Upp {
 
 namespace {
 
-struct GpuCtrlFrameColor {
-	float red = 0.0f;
-	float green = 0.0f;
-	float blue = 0.0f;
-	float alpha = 1.0f;
-};
-
-struct GpuCtrlFillRectIntent : Moveable<GpuCtrlFillRectIntent> {
-	Rect rect = Rect(0, 0, 0, 0);
-	GpuCtrlFrameColor color;
-};
-
-struct GpuCtrlFrameIntent {
-	GpuCtrlFrameColor background;
-	Vector<GpuCtrlFillRectIntent> fill_rects;
-};
-
-static GpuCtrlFrameColor ToFrameColor(Rgba8 color)
+static GpuClearColor ToClearColor(Rgba8 color)
 {
 	const float scale = 1.0f / 255.0f;
-	return { color.r * scale, color.g * scale, color.b * scale, color.a * scale };
+	GpuClearColor out;
+	out.red = color.r * scale;
+	out.green = color.g * scale;
+	out.blue = color.b * scale;
+	out.alpha = color.a * scale;
+	return out;
 }
 
-static Rect ToFrameRect(const Rectf& rect)
+static bool BuildDefaultDisplayList(Size size, UiDisplayList& list, Rgba8& background, String& error)
 {
-	return Rect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
-}
-
-static Rect ToTranslatedFrameRect(const Rectf& rect, const Pointf& translation)
-{
-	return Rect((int)(rect.left + translation.x), (int)(rect.top + translation.y),
-	            (int)(rect.right + translation.x), (int)(rect.bottom + translation.y));
-}
-
-static bool IsTranslationOnly(const Transform2D& transform)
-{
-	return transform.x.x == 1.0 && transform.x.y == 0.0 &&
-	       transform.y.x == 0.0 && transform.y.y == 1.0;
-}
-
-struct GpuCtrlReplayState : Moveable<GpuCtrlReplayState> {
-	bool has_clip = false;
-	Rect clip_rect = Rect(0, 0, 0, 0);
-	Pointf translation = Pointf(0, 0);
-};
-
-static bool ReplayFrameList(const UiDisplayList& list, GpuCtrlFrameIntent& frame, String& error)
-{
-	if(list.GetCount() <= 0) {
-		error = "GpuCtrl S16E frame requires at least one display operation";
-		return false;
-	}
-	if(!list.IsValid()) {
-		error = list.GetError();
-		return false;
-	}
-
-	frame.fill_rects.Clear();
-	frame.fill_rects.Reserve(list.GetCount());
-	GpuCtrlReplayState state;
-	Vector<GpuCtrlReplayState> state_stack;
-	for(int i = 0; i < list.GetCount(); ++i) {
-		const UiDisplayOp& op = list[i];
-		switch(op.type) {
-		case UiDisplayOpType::Save: {
-			GpuCtrlReplayState& saved = state_stack.Add();
-			saved.has_clip = state.has_clip;
-			saved.clip_rect = state.clip_rect;
-			saved.translation = state.translation;
-			break;
-		}
-		case UiDisplayOpType::Restore:
-			if(state_stack.IsEmpty()) {
-				error = "GpuCtrl S16F restore without matching save";
-				frame.fill_rects.Clear();
-				return false;
-			}
-			{
-				GpuCtrlReplayState saved = state_stack.Pop();
-				state.has_clip = saved.has_clip;
-				state.clip_rect = saved.clip_rect;
-				state.translation = saved.translation;
-			}
-			break;
-		case UiDisplayOpType::ClipRect: {
-			// Match RenderSoftware: ClipRect is target/device-space state, while
-			// ConcatTransform affects subsequent drawable geometry.
-			Rect next_clip = ToFrameRect(op.rect);
-			if(!state.has_clip) {
-				state.clip_rect = next_clip;
-				state.has_clip = true;
-			}
-			else
-				state.clip_rect = state.clip_rect & next_clip;
-			break;
-		}
-		case UiDisplayOpType::ConcatTransform:
-			if(!IsTranslationOnly(op.transform)) {
-				error = "GpuCtrl S16G supports translation-only ConcatTransform operations";
-				frame.fill_rects.Clear();
-				return false;
-			}
-			state.translation.x += op.transform.t.x;
-			state.translation.y += op.transform.t.y;
-			break;
-		case UiDisplayOpType::FillRect: {
-			Rect draw_rect = ToTranslatedFrameRect(op.rect, state.translation);
-			if(draw_rect.IsEmpty()) {
-				error = "GpuCtrl S16E FillRect display operation is empty";
-				frame.fill_rects.Clear();
-				return false;
-			}
-			if(state.has_clip)
-				draw_rect = draw_rect & state.clip_rect;
-			if(draw_rect.IsEmpty())
-				break;
-
-			GpuCtrlFillRectIntent& fill = frame.fill_rects.Add();
-			fill.rect = draw_rect;
-			fill.color = ToFrameColor(op.color);
-			break;
-		}
-		default:
-			error = "GpuCtrl S16G replay supports Save, Restore, ClipRect, ConcatTransform and FillRect operations only";
-			frame.fill_rects.Clear();
+	background = Rgba8(20, 61, 148, 255);
+	error.Clear();
+	UiDisplayListBuilder builder;
+	if(size.cx <= 0 || size.cy <= 0) {
+		if(!builder.Finish(list)) {
+			error = builder.GetError();
 			return false;
 		}
-	}
-	if(!state_stack.IsEmpty()) {
-		error = "GpuCtrl S16F replay ended with unbalanced save state";
-		frame.fill_rects.Clear();
-		return false;
-	}
-	error.Clear();
-	return true;
-}
-
-static bool BuildDefaultFrameIntent(Size size, GpuCtrlFrameIntent& frame, String& error)
-{
-	frame = GpuCtrlFrameIntent();
-	frame.background = { 0.08f, 0.24f, 0.58f, 1.0f };
-	error.Clear();
-	if(size.cx <= 0 || size.cy <= 0)
 		return true;
+	}
 
-	int rect_width = size.cx / 2;
-	int rect_height = size.cy / 2;
-	if(rect_width < 1)
-		rect_width = 1;
-	if(rect_height < 1)
-		rect_height = 1;
-	int rect_left = (size.cx - rect_width) / 2;
-	int rect_top = (size.cy - rect_height) / 2;
+	const double w = size.cx;
+	const double h = size.cy;
+	const double unit = max(1.0, min(w, h));
 
-	int inner_width = rect_width / 2;
-	int inner_height = rect_height / 2;
-	if(inner_width < 1)
-		inner_width = 1;
-	if(inner_height < 1)
-		inner_height = 1;
-	int inner_left = (size.cx - inner_width) / 2;
-	int inner_top = (size.cy - inner_height) / 2;
-
-	UiDisplayListBuilder builder;
-	builder.FillRect(Rectf(rect_left, rect_top, rect_left + rect_width, rect_top + rect_height),
+	builder.FillRect(Rectf(0.08 * w, 0.10 * h, 0.46 * w, 0.48 * h),
 	                 Rgba8(230, 82, 20, 255));
+	builder.StrokeRect(Rectf(0.12 * w, 0.16 * h, 0.62 * w, 0.70 * h),
+	                   max(1.0, unit * 0.025), Rgba8(40, 205, 118, 220));
 	builder.Save();
-	int translation_x = inner_width / 4;
-	builder.ConcatTransform(Transform2D::Translation(translation_x, 0));
-	int translated_inner_left = inner_left + translation_x;
-	int clip_left = translated_inner_left + inner_width / 2;
-	builder.ClipRect(Rectf(clip_left, inner_top,
-	                       translated_inner_left + inner_width, inner_top + inner_height));
-	builder.FillRect(Rectf(inner_left, inner_top, inner_left + inner_width, inner_top + inner_height),
-	                 Rgba8(36, 190, 110, 255));
+	builder.ClipRect(Rectf(0.24 * w, 0.18 * h, 0.90 * w, 0.88 * h));
+	Transform2D affine;
+	affine.x.x = 0.96;
+	affine.x.y = 0.16;
+	affine.y.x = -0.10;
+	affine.y.y = 0.92;
+	affine.t = Pointf(0.08 * w, 0.03 * h);
+	builder.ConcatTransform(affine);
+	builder.FillRoundedRect(RoundedRect(Rectf(0.30 * w, 0.24 * h, 0.76 * w, 0.72 * h),
+	                                      max(1.0, unit * 0.08)),
+	                        Rgba8(55, 118, 238, 188));
 	builder.Restore();
-	UiDisplayList list;
+	builder.FillRect(Rectf(0.58 * w, 0.56 * h, 0.94 * w, 0.92 * h),
+	                 Rgba8(246, 210, 54, 128));
+
 	if(!builder.Finish(list)) {
 		error = builder.GetError();
 		return false;
 	}
-	return ReplayFrameList(list, frame, error);
+	return true;
 }
 
 class GpuCtrlBackendSession {
@@ -200,107 +73,148 @@ public:
 	virtual void Close() = 0;
 	virtual bool IsReady() const = 0;
 	virtual const String& GetError() const = 0;
-	virtual bool Present(Size requested_size, const GpuCtrlFrameIntent& frame, String& error) = 0;
+	virtual bool Present(Size requested_size, const UiDisplayList& list, Rgba8 background, String& error) = 0;
 };
 
 class VulkanGpuCtrlBackendSession : public GpuCtrlBackendSession {
 public:
-	bool Open(bool request_validation, const GpuNativeWindowDesc& native_window, String& error) override
+	~VulkanGpuCtrlBackendSession() override
 	{
-		if(session.Open(request_validation, native_window)) {
-			error.Clear();
-			return true;
+		Close();
+	}
+
+	bool Open(bool request_validation, const GpuNativeWindowDesc& window, String& out_error) override
+	{
+		Close();
+		error.Clear();
+		native_window = window;
+		if(!session.Open(request_validation, native_window)) {
+			error = session.GetError();
+			out_error = error;
+			return false;
 		}
-		error = session.GetError();
-		return false;
+
+		device.reset(new VulkanGpuDevice(session));
+		if(!device->IsReady()) {
+			String failure = device->GetError();
+			Close();
+			error = failure.IsEmpty() ? String("VulkanGpuDevice initialization failed") : failure;
+			out_error = error;
+			return false;
+		}
+		renderer.reset(new UiRenderer2D(*device));
+		if(!renderer->IsReady()) {
+			String failure = renderer->GetError();
+			Close();
+			error = failure.IsEmpty() ? String("UiRenderer2D initialization failed") : failure;
+			out_error = error;
+			return false;
+		}
+		out_error.Clear();
+		return true;
 	}
 
 	void Close() override
 	{
+		// Reverse the borrowing order: renderer -> logical swapchain/surface ->
+		// adapter -> session. The adapter never owns the Vulkan session objects.
+		renderer.reset();
+		if(device) {
+			if(swapchain.IsValid())
+				device->DestroySwapchain(swapchain);
+			swapchain = GpuSwapchainId();
+			if(surface.IsValid())
+				device->DestroySurface(surface);
+			surface = GpuSurfaceId();
+		}
+		device.reset();
 		session.Close();
+		native_window = GpuNativeWindowDesc();
 		swapchain_request_size = Size(0, 0);
 	}
 
 	bool IsReady() const override
 	{
-		return session.IsReady();
+		return session.IsReady() && device && device->IsReady() && renderer && renderer->IsReady();
 	}
 
 	const String& GetError() const override
 	{
-		return session.GetError();
+		return error;
 	}
 
-	bool Present(Size requested_size, const GpuCtrlFrameIntent& frame, String& error) override
+	bool Present(Size requested_size, const UiDisplayList& list, Rgba8 background, String& out_error) override
 	{
-		error.Clear();
+		out_error.Clear();
 		if(requested_size.cx <= 0 || requested_size.cy <= 0)
 			return true;
-		if(!session.IsReady()) {
-			error = session.GetError();
+		if(!IsReady()) {
+			error = !device ? session.GetError() : device->GetError();
+			if(error.IsEmpty())
+				error = "GpuCtrl Vulkan renderer is not ready";
+			out_error = error;
 			return false;
 		}
-		if(!EnsureSwapchain(requested_size, error))
+		if(!EnsureSwapchain(requested_size, out_error))
 			return false;
-		if(PresentIntent(frame))
+		if(PresentOnce(list, background, out_error))
 			return true;
 
-		error = session.GetFrameReport().error;
 		if(!session.GetFrameReport().out_of_date)
 			return false;
-
-		if(!session.DestroySwapchain()) {
+		if(device->ResizeSwapchain(swapchain, requested_size) != GpuResult::Ok) {
+			error = device->GetError();
 			if(error.IsEmpty())
-				error = session.GetReport().swapchain_error;
-			if(error.IsEmpty())
-				error = "Vulkan swapchain cleanup failed";
+				error = "Vulkan swapchain recreation after out-of-date presentation failed";
+			out_error = error;
 			return false;
 		}
-		swapchain_request_size = Size(0, 0);
-		if(!EnsureSwapchain(requested_size, error))
-			return false;
-		if(PresentIntent(frame)) {
-			error.Clear();
+		swapchain_request_size = requested_size;
+		if(PresentOnce(list, background, out_error)) {
+			out_error.Clear();
 			return true;
 		}
-		error = session.GetFrameReport().error;
 		return false;
 	}
 
 private:
-	bool PresentIntent(const GpuCtrlFrameIntent& frame)
+	bool EnsureSwapchain(Size requested_size, String& out_error)
 	{
-		const GpuCtrlFrameColor& bg = frame.background;
-		if(frame.fill_rects.IsEmpty())
-			return session.PresentClearFrame(bg.red, bg.green, bg.blue, bg.alpha);
-
-		Vector<VulkanFrameRect> rects;
-		rects.Reserve(frame.fill_rects.GetCount());
-		for(const GpuCtrlFillRectIntent& fill : frame.fill_rects) {
-			VulkanFrameRect& out = rects.Add();
-			out.rect = fill.rect;
-			out.red = fill.color.red;
-			out.green = fill.color.green;
-			out.blue = fill.color.blue;
-			out.alpha = fill.color.alpha;
-		}
-		return session.PresentRectsFrame(bg.red, bg.green, bg.blue, bg.alpha, rects);
-	}
-
-	bool EnsureSwapchain(Size requested_size, String& error)
-	{
-		if(session.HasSwapchain() && requested_size != swapchain_request_size) {
-			if(!session.DestroySwapchain()) {
-				error = session.GetReport().swapchain_error;
-				if(error.IsEmpty())
-					error = "Vulkan swapchain cleanup failed";
+		if(!surface.IsValid()) {
+			GpuSurfaceDesc desc;
+			desc.label = "GpuCtrl surface";
+			desc.size = requested_size;
+			desc.native_window = native_window;
+			GpuResult result = device->CreateSurface(desc, surface);
+			if(result != GpuResult::Ok) {
+				error = device->GetError();
+				if(error.IsEmpty()) error = "GpuCtrl logical surface creation failed";
+				out_error = error;
 				return false;
 			}
-			swapchain_request_size = Size(0, 0);
 		}
-		if(!session.HasSwapchain()) {
-			if(!session.CreateSwapchain(requested_size)) {
-				error = session.GetReport().swapchain_error;
+		if(!swapchain.IsValid()) {
+			GpuSwapchainDesc desc;
+			desc.label = "GpuCtrl swapchain";
+			desc.surface = surface;
+			desc.size = requested_size;
+			desc.color_format = GpuFormat::RGBA8;
+			desc.image_count = 2;
+			GpuResult result = device->CreateSwapchain(desc, swapchain);
+			if(result != GpuResult::Ok) {
+				error = device->GetError();
+				if(error.IsEmpty()) error = "GpuCtrl logical swapchain creation failed";
+				out_error = error;
+				return false;
+			}
+			swapchain_request_size = requested_size;
+		}
+		else if(requested_size != swapchain_request_size) {
+			GpuResult result = device->ResizeSwapchain(swapchain, requested_size);
+			if(result != GpuResult::Ok) {
+				error = device->GetError();
+				if(error.IsEmpty()) error = "GpuCtrl logical swapchain resize failed";
+				out_error = error;
 				return false;
 			}
 			swapchain_request_size = requested_size;
@@ -308,8 +222,47 @@ private:
 		return true;
 	}
 
+	bool PresentOnce(const UiDisplayList& list, Rgba8 background, String& out_error)
+	{
+		GpuFrameInfo frame;
+		GpuResult result = device->BeginFrame(swapchain, frame);
+		if(result != GpuResult::Ok) {
+			error = device->GetError();
+			if(error.IsEmpty()) error = "GpuCtrl BeginFrame failed";
+			out_error = error;
+			return false;
+		}
+
+		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
+			String render_error = renderer->GetError();
+			// Release the acquired frame even when rendering fails. RenderFrame's
+			// own failure cleanup consumes any command list it successfully began.
+			device->Present(frame.frame);
+			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
+			out_error = error;
+			return false;
+		}
+
+		result = device->Present(frame.frame);
+		if(result != GpuResult::Ok) {
+			error = device->GetError();
+			if(error.IsEmpty()) error = "GpuCtrl Present failed";
+			out_error = error;
+			return false;
+		}
+		error.Clear();
+		out_error.Clear();
+		return true;
+	}
+
 	VulkanSurfaceSession session;
+	std::unique_ptr<VulkanGpuDevice> device;
+	std::unique_ptr<UiRenderer2D> renderer;
+	GpuNativeWindowDesc native_window;
+	GpuSurfaceId surface;
+	GpuSwapchainId swapchain;
 	Size swapchain_request_size = Size(0, 0);
+	String error;
 };
 
 static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
@@ -319,54 +272,13 @@ static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
 	return One<GpuCtrlBackendSession>();
 }
 
-}
+} // namespace
 
 namespace GpuCtrlTestHooks {
 
-static void CopyReplayResult(const GpuCtrlFrameIntent& frame, ReplayResult& out)
+bool BuildDefaultFrame(Size size, UiDisplayList& list, Rgba8& background, String& error)
 {
-	out.background.red = frame.background.red;
-	out.background.green = frame.background.green;
-	out.background.blue = frame.background.blue;
-	out.background.alpha = frame.background.alpha;
-	out.fill_rects.Clear();
-	out.fill_rects.Reserve(frame.fill_rects.GetCount());
-	for(const GpuCtrlFillRectIntent& fill : frame.fill_rects) {
-		ReplayFillRect& dst = out.fill_rects.Add();
-		dst.rect = fill.rect;
-		dst.color.red = fill.color.red;
-		dst.color.green = fill.color.green;
-		dst.color.blue = fill.color.blue;
-		dst.color.alpha = fill.color.alpha;
-	}
-}
-
-bool ReplayDisplayList(const UiDisplayList& list, ReplayResult& out)
-{
-	GpuCtrlFrameIntent frame;
-	String error;
-	if(!ReplayFrameList(list, frame, error)) {
-		out.fill_rects.Clear();
-		out.error = error;
-		return false;
-	}
-	CopyReplayResult(frame, out);
-	out.error.Clear();
-	return true;
-}
-
-bool BuildDefaultFrame(Size size, ReplayResult& out)
-{
-	GpuCtrlFrameIntent frame;
-	String error;
-	if(!BuildDefaultFrameIntent(size, frame, error)) {
-		out.fill_rects.Clear();
-		out.error = error;
-		return false;
-	}
-	CopyReplayResult(frame, out);
-	out.error.Clear();
-	return true;
+	return BuildDefaultDisplayList(size, list, background, error);
 }
 
 } // namespace GpuCtrlTestHooks
@@ -450,9 +362,6 @@ struct GpuCtrl::Impl {
 
 	String GetGpuError() const
 	{
-		// API errors describe rejected configuration; session errors describe
-		// backend bring-up failures; presentation errors preserve a healthy
-		// session so a later invalidation can recover without a repaint loop.
 		if(!api_error.IsEmpty())
 			return api_error;
 		if(!session_error.IsEmpty())
@@ -475,17 +384,15 @@ struct GpuCtrl::Impl {
 	{
 		if(!IsGpuReady() || !backend)
 			return false;
-		// The Vulkan surface is backed by the child HWND, so its current client
-		// extent is authoritative during resize rather than the owner's logical
-		// layout size, which can lead the native window by one message turn.
 		Size requested_size = GetNativeHostSize();
-		GpuCtrlFrameIntent frame;
+		UiDisplayList list;
+		Rgba8 background;
 		String error;
-		if(!BuildDefaultFrameIntent(requested_size, frame, error)) {
+		if(!BuildDefaultDisplayList(requested_size, list, background, error)) {
 			presentation_error = error;
 			return false;
 		}
-		if(backend->Present(requested_size, frame, error)) {
+		if(backend->Present(requested_size, list, background, error)) {
 			presentation_error.Clear();
 			return true;
 		}
@@ -503,8 +410,6 @@ struct GpuCtrl::Impl {
 	{
 		if(destroying)
 			return;
-		// One automatic attempt happens on first host readiness; explicit retry is
-		// the deterministic path after a failure.
 		init_attempted = false;
 		ClearError();
 		if(host_ready && !gpu_ready)
@@ -563,8 +468,6 @@ struct GpuCtrl::Impl {
 			}
 			SyncHostBounds();
 			if(reason == SHOW && IsGpuReady()) {
-				// SHOW is a fresh presentation opportunity; do not carry a prior
-				// resize-time presentation error into the new visible state.
 				presentation_error.Clear();
 				host.Refresh();
 			}
@@ -594,8 +497,6 @@ struct GpuCtrl::Impl {
 
 	void SyncHostBounds()
 	{
-		// Host sizing stays backend-neutral. A real size change invalidates one
-		// frame; the private backend reconciles its swapchain on that paint.
 		Size sz = owner->GetSize();
 		bool size_changed = sz != last_host_size;
 		if(size_changed)
@@ -615,8 +516,6 @@ struct GpuCtrl::Impl {
 		if(destroying)
 			return;
 		init_attempted = true;
-		// Vulkan is the current backend baseline; other values remain explicit
-		// configuration errors until their real implementations arrive.
 		if(backend_kind != GpuBackendKind::Vulkan) {
 			gpu_ready = false;
 			if(backend_kind == GpuBackendKind::Unknown)
@@ -639,9 +538,9 @@ struct GpuCtrl::Impl {
 			return;
 		}
 
-		String session_error;
-		if(!backend->Open(validation_requested, native_window, session_error)) {
-			SetSessionError(session_error);
+		String open_error;
+		if(!backend->Open(validation_requested, native_window, open_error)) {
+			SetSessionError(open_error);
 			backend.Clear();
 			return;
 		}
@@ -649,7 +548,6 @@ struct GpuCtrl::Impl {
 		gpu_ready = backend->IsReady();
 		if(gpu_ready) {
 			ClearError();
-			// Initial presentation is event driven exactly once after session bring-up.
 			host.Refresh();
 		}
 		else
@@ -658,9 +556,6 @@ struct GpuCtrl::Impl {
 
 	void StopGpuSession()
 	{
-		// Release backend resources before the child HWND disappears.  The child
-		// host is a U++ implementation detail; the surface session is the actual
-		// backend lifetime boundary for now.
 		if(backend)
 			backend->Close();
 		backend.Clear();
@@ -709,8 +604,6 @@ GpuCtrl::GpuCtrl()
 {
 	BackPaint(EXCLUDEPAINT);
 	impl.Create(*this);
-	// Vulkan is the current default so ordinary code can just add the control;
-	// explicit backend selection remains available for tests and future backends.
 	Add(impl->host.SizePos());
 }
 
