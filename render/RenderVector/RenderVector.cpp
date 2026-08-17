@@ -69,18 +69,22 @@ static bool ReplayPath(Painter& painter, const UiPath& path, double scale, Point
 		error = "vector path is empty";
 		return false;
 	}
+	bool have_current = false;
 	for(int i = 0; i < path.GetCount(); ++i) {
 		const UiPathCommand& command = path[i];
 		switch(command.verb) {
 		case UiPathVerb::MoveTo:
 			if(!IsFinitePoint(command.p1)) { error = "path MoveTo is non-finite"; return false; }
 			painter.Move(MapPoint(command.p1, scale, offset));
+			have_current = true;
 			break;
 		case UiPathVerb::LineTo:
+			if(!have_current) { error = "path LineTo before MoveTo"; return false; }
 			if(!IsFinitePoint(command.p1)) { error = "path LineTo is non-finite"; return false; }
 			painter.Line(MapPoint(command.p1, scale, offset));
 			break;
 		case UiPathVerb::QuadraticTo:
+			if(!have_current) { error = "path QuadraticTo before MoveTo"; return false; }
 			if(!IsFinitePoint(command.p1) || !IsFinitePoint(command.p2)) {
 				error = "path QuadraticTo is non-finite";
 				return false;
@@ -89,6 +93,7 @@ static bool ReplayPath(Painter& painter, const UiPath& path, double scale, Point
 			                  MapPoint(command.p2, scale, offset));
 			break;
 		case UiPathVerb::CubicTo:
+			if(!have_current) { error = "path CubicTo before MoveTo"; return false; }
 			if(!IsFinitePoint(command.p1) || !IsFinitePoint(command.p2) || !IsFinitePoint(command.p3)) {
 				error = "path CubicTo is non-finite";
 				return false;
@@ -98,6 +103,7 @@ static bool ReplayPath(Painter& painter, const UiPath& path, double scale, Point
 			              MapPoint(command.p3, scale, offset));
 			break;
 		case UiPathVerb::Close:
+			if(!have_current) { error = "path Close before MoveTo"; return false; }
 			painter.Close();
 			break;
 		}
