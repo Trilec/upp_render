@@ -64,7 +64,29 @@ public:
 
 private:
 	struct Impl;
+	struct SampledImpl;
+	struct SampledCleanup {
+		VulkanGpuDevice *owner = nullptr;
+		~SampledCleanup();
+	};
+
 	std::unique_ptr<Impl> impl;
+	SampledImpl *sampled_impl = nullptr;
+	SampledCleanup sampled_cleanup;
+
+	SampledImpl& Sampled();
+	void DestroySampledExtension();
+
+	// These names are the byte-preserved Stage-3/Stage-4 implementation entry
+	// points. RenderVulkanRhi.cpp wraps only the sampled-image-sensitive methods.
+	int GetLivePipelineCountBase() const;
+	GpuResult DestroyShaderBase(GpuShaderId id);
+	GpuResult CreatePipelineBase(const GpuPipelineDesc& desc, GpuPipelineId& out);
+	GpuResult DestroyPipelineBase(GpuPipelineId id);
+	GpuResult BeginRenderPassBase(GpuCommandListId list, const GpuRenderPassDesc& desc);
+	GpuResult SetPipelineBase(GpuCommandListId list, GpuPipelineId pipeline);
+	GpuResult DrawBase(GpuCommandListId list, int vertex_count, int first_vertex = 0);
+	GpuResult SubmitBase(GpuCommandListId list);
 };
 
 }
