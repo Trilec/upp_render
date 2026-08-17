@@ -101,8 +101,8 @@ CONSOLE_APP_MAIN
 				            "first Vulkan text frame should place four glyphs");
 				ok &= Check(first.glyph_cache_miss_count == 2 && first.glyph_atlas_page_count == 1,
 				            "first Vulkan text frame should cache two distinct glyphs in one atlas page");
-				ok &= Check(first.glyph_atlas_upload_count == 3,
-				            "first Vulkan text frame should initialize one page and upload two glyph regions");
+				ok &= Check(first.glyph_atlas_upload_count == 2,
+				            "first Vulkan text frame should upload only two padded glyph regions");
 				ok &= Check(first.batch_count == 3 && first.draw_count == 3,
 				            "real Vulkan should preserve solid/text/solid draw order");
 				ok &= Check(first.textured_vertex_count > 0,
