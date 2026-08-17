@@ -1,0 +1,8 @@
+uses
+	RenderCanvas,
+	RenderSoftware,
+	RenderVector,
+	Painter;
+
+file
+	main.cpp;
