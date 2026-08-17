@@ -1,6 +1,7 @@
 uses
 	Core,
 	CtrlLib,
+	RenderCanvas,
 	RenderGpu2D,
 	RenderPlatformWin32,
 	RenderRhi,
