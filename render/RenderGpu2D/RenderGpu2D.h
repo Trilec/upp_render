@@ -160,6 +160,9 @@ private:
 
 	// Byte-preserved Stage-4/image implementation entry points wrapped by TASK-010B.
 	bool BuildGeometryBase(const UiDisplayList& list, Size target_size);
+	bool RenderBase(const UiDisplayList& list, const UiRenderer2DTarget& target);
+	bool RenderFrameBase(const UiDisplayList& list, const GpuFrameInfo& frame,
+	                     const GpuClearColor& clear_color);
 	void CloseBase();
 };
 
