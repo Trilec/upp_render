@@ -415,12 +415,15 @@ GpuResult NullGpuDevice::DestroyTexture(GpuTextureId id)
 		Fail("DestroyTexture id=" + id.Dump() + " reason=swapchain_backbuffer");
 		return GpuResult::InvalidState;
 	}
-	for(int i = 0; i < command_lists.GetCount(); ++i)
-		for(const GpuTextureId& bound : command_lists[i].sampled_textures)
-			if(bound == id) {
+	for(int i = 0; i < command_lists.GetCount(); ++i) {
+		if(command_lists[i].submitted)
+			continue;
+		for(const GpuTextureId& referenced : command_lists[i].referenced_sampled_textures)
+			if(referenced == id) {
 				Fail("DestroyTexture id=" + id.Dump() + " reason=referenced_by_command_list");
 				return GpuResult::InvalidState;
 			}
+	}
 	textures.Remove(index);
 	AppendLog("DestroyTexture id=" + id.Dump());
 	return GpuResult::Ok;
@@ -753,6 +756,7 @@ GpuResult NullGpuDevice::BeginCommands(GpuCommandListId& out)
 	state.pipeline = GpuPipelineId();
 	state.vertex_buffer = GpuBufferId();
 	state.sampled_textures.Clear();
+	state.referenced_sampled_textures.Clear();
 	state.draw_count = 0;
 	active_command_list = id;
 	out = id;
@@ -909,6 +913,14 @@ GpuResult NullGpuDevice::SetSampledTexture(GpuCommandListId list, int slot, GpuT
 		return GpuResult::InvalidState;
 	}
 	mutable_state.sampled_textures[slot] = texture;
+	bool found = false;
+	for(const GpuTextureId& referenced : mutable_state.referenced_sampled_textures)
+		if(referenced == texture) {
+			found = true;
+			break;
+		}
+	if(!found)
+		mutable_state.referenced_sampled_textures.Add(texture);
 	AppendLog("SetSampledTexture list=" + list.Dump() + " slot=" + AsString(slot) + " texture=" + texture.Dump());
 	return GpuResult::Ok;
 }
