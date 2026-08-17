@@ -24,7 +24,8 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 
 Proceed directly through Stage 5 — Text, Images and Vector Rendering.
 
-Active implementation task: `TASK-010A3` — implement Vulkan sampled-texture binding and production `UiRenderer2D::DrawImage` on top of the published neutral/software/RHI image foundation.
+Active validation task: `TASK-010A3-W1` — accept the published production sampled-image path on Windows/Vulkan.
+Next implementation task after image acceptance: `TASK-010B` — shaped text + glyph cache/atlas using U++ text/font authority and the accepted sampled-image infrastructure.
 
 ## Stage 3 - Vulkan Backend / Bootstrap
 
@@ -87,29 +88,50 @@ Published scope:
 - focused `RenderSampledRhiTest` covers sRGB upload, sampled pipeline validation, binding, missing-binding failure and lifetime
 - no Vulkan types or descriptor vocabulary leaked into neutral public APIs
 
+### Published TASK-010A3 — production sampled-image rendering
+
+Publication merge: `a11862d138e6b2f06d92067b4b804d8418b69d32`
+
+Published scope:
+
+- production `UiRenderer2D::DrawImage` replay through real sampled GPU textures
+- full affine image geometry with UV interpolation through device-space clipping
+- ordered solid/image batching preserves display-list order; solid-only Stage-4 scenes retain their previous batching path
+- renderer-owned immutable U++ `Image` texture cache keyed by image serial + size
+- U++ premultiplied RGBA is explicitly converted to straight-alpha bytes before sRGB upload, matching the existing SourceOver shader contract
+- sampled image texture format is `RGBA8Srgb`; upload uses the accepted Vulkan texture path and finishes shader-readable
+- separate reusable textured vertex buffer and sampled pipeline cache
+- bounded sampled pipeline remains one texture slot, `Position2Uv2Color4F`, SourceOver, Linear + ClampToEdge
+- backend-private Vulkan sampler, descriptor-set-layout, descriptor-pool and descriptor binding; no Vulkan descriptor vocabulary enters neutral APIs
+- existing accepted Vulkan RHI implementation is preserved byte-for-byte as private `RenderVulkanRhiBase.inc`; the wrapper extends only sampled-sensitive methods rather than duplicating resource/frame ownership
+- sampled descriptor image views reuse accepted command cleanup; descriptor pools live through synchronous submit and are then destroyed
+- focused `RenderGpu2DTest` covers ordered solid/image/solid replay, affine clipping, texture upload/cache reuse, sampled pipeline state, repeat-frame determinism and Stage-4 solid-only regressions
+- new `RenderVulkanImageTest` covers real Vulkan offscreen DrawImage, cached second frame, acquired swapchain DrawImage, present, validation counters and final adapter/Vulkan ownership cleanup
+
 Boundary honesty:
 
-- TASK-010A1/A2 does **not** claim real GPU DrawImage support yet
-- Vulkan sampler/descriptor/image-view binding and production textured `UiRenderer2D` replay are `TASK-010A3`
+- TASK-010A3 is **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+- embedded textured SPIR-V has been source-structure reviewed, but no `spirv-val`/glslang tool was available in the supervisor runtime; the Windows Vulkan test is the runtime authority
+- no Stage-5 image acceptance claim until `TASK-010A3-W1` passes
 
 ### Stage-5 implementation direction
 
-1. `TASK-010A3` — Vulkan sampled descriptors/sampler binding + production GPU DrawImage with ordered solid/image batches and texture cache.
+1. `TASK-010A3-W1` — focused Windows acceptance for image recording, sampled RHI, renderer image replay and real Vulkan image present.
 2. `TASK-010B` — shaped text + glyph cache/atlas using U++ font/text authority; reuse the sampled-image path rather than inventing a second texture system.
 3. `TASK-010C` — vector paths, gradients and anti-aliasing, then icon/SVG geometry integration.
-4. Stage-5 Windows acceptance across neutral/Null/software/Vulkan/live-control paths.
+4. Final Stage-5 Windows acceptance across neutral/Null/software/Vulkan/live-control paths.
 
 Do not replace U++ font/theme authority and do not leak Vulkan types into public neutral APIs. Exact GPU pixel readback remains Stage-8 hardening rather than expanding the Stage-5 public contract.
 
 ## Recovery Log
 
-BASE: `76f456381f5580d1399bc69975218f38c681ff68` / `main`
-TASK: `TASK-010A3` Vulkan sampled textures + production `UiRenderer2D::DrawImage`
-TOUCHED: published A1/A2 — `render/RenderCanvas/RenderCanvas.h`, `render/RenderCanvas/RenderCanvas.cpp`, `render/RenderSoftware/RenderSoftware.cpp`, `render/RenderRhi/RenderRhi.h`, `render/RenderRhi/RenderRhi.cpp`, `render/RenderNull/RenderNull.h`, `render/RenderNull/RenderNull.cpp`, `tests/RenderImageTest/*`, `tests/RenderSampledRhiTest/*`; status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS / 100%; Stage 4 PASS / 100%; Stage 5 A1/A2 PUBLISHED; A3 ACTIVE
-PUBLISHED: Stage-5 A1/A2 `76f456381f5580d1399bc69975218f38c681ff68`
-VALIDATION: A1/A2 source/static + aggregate PR review complete; Windows/platform validation pending; real Vulkan sampled-image path not yet claimed
+BASE: `a11862d138e6b2f06d92067b4b804d8418b69d32` / `main`
+TASK: `TASK-010A3-W1` Windows/Vulkan acceptance of production sampled-image rendering
+TOUCHED: A3 — `render/RenderGpu2D/RenderGpu2D.h`, `render/RenderGpu2D/RenderGpu2D.cpp`, `render/RenderGpu2D/RenderGpu2DImage.cpp`, `render/RenderGpu2D/RenderGpu2D.upp`, `render/RenderVulkan/RenderVulkanRhi.h`, `render/RenderVulkan/RenderVulkanRhi.cpp`, `render/RenderVulkan/RenderVulkanRhiBase.inc`, `render/RenderVulkan/RenderVulkan.upp`, `tests/RenderGpu2DTest/main.cpp`, `tests/RenderVulkanImageTest/*`; status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS / 100%; Stage 4 PASS / 100%; Stage 5 A1/A2 PUBLISHED; A3 IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING
+PUBLISHED: Stage-5 A1/A2 `76f456381f5580d1399bc69975218f38c681ff68`; A3 `a11862d138e6b2f06d92067b4b804d8418b69d32`
+VALIDATION: A1/A2/A3 source/static + aggregate PR review complete; Stage-5 Windows image acceptance pending
 
 ## Next Action
 
-Refresh current `main`, implement `TASK-010A3` on a recovery branch: add Vulkan sampler/descriptor binding without changing ownership authority, extend `UiRenderer2D` with deterministic sampled-image shaders, transformed/clipped UV geometry, ordered solid/image batches and renderer-owned immutable-image texture caching, add focused Null/Vulkan image tests, publish/verify the checkpoint, then give Gary one focused Stage-5 image acceptance before moving immediately into shaped text/glyph atlas work.
+Gary runs `TASK-010A3-W1` against current `main`, confirming `a11862d138e6b2f06d92067b4b804d8418b69d32` is an ancestor. Validate `RenderImageTest`, `RenderSampledRhiTest`, `RenderGpu2DTest`, and the primary `RenderVulkanImageTest`, then run focused Stage-3/4 regressions. Stop on the first genuine compile/runtime/Vulkan-validation/ownership blocker. If clean, accept the Stage-5 image foundation and proceed immediately to `TASK-010B` shaped text/glyph atlas work.
