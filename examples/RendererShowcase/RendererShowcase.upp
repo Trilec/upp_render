@@ -1,0 +1,17 @@
+uses
+	Core,
+	CtrlLib,
+	Painter,
+	Ui,
+	Utilities/PropertyEditor,
+	GpuCtrl,
+	RenderCanvas,
+	RenderSoftware;
+
+file
+	RendererShowcase.h,
+	RendererShowcase.cpp,
+	main.cpp;
+
+mainconfig
+	"" = "GUI";
