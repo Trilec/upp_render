@@ -2,7 +2,6 @@ uses
 	Core,
 	Draw,
 	CtrlCore,
-	CtrlLib,
 	RenderCanvas;
 
 file
