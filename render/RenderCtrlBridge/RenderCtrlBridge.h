@@ -18,14 +18,14 @@ struct CtrlDisplayListRecordReport : Moveable<CtrlDisplayListRecordReport> {
 	bool HasUnsupportedOperation() const { return !unsupported_operation.IsEmpty(); }
 };
 
-// Records resolved U++ control painting through Ctrl::DrawCtrl into the neutral
-// immutable display-list contract. U++ remains the authority for control tree,
-// layout, state, focus and theme resolution; this bridge translates only the
-// resulting Draw operations.
+// Records resolved ordinary U++ control painting into the neutral immutable
+// display-list contract. The bridge walks the public Ctrl tree and invokes each
+// control's real Paint(Draw&) plus public CtrlFrame paint/layout operations in
+// U++ paint order. U++ remains the sole authority for layout, state, focus and
+// theme resolution; this package only translates the resulting Draw commands.
 //
-// The current production implementation is Win32 because Ctrl::DrawCtrl routes
-// recursive control painting through the platform SystemDraw abstraction. Other
-// platforms fail explicitly until an equivalent SystemDraw adapter is supplied.
+// Unsupported Draw semantics fail explicitly instead of being silently dropped.
+// Native child-window controls remain outside the intended root-compositor path.
 bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
                            CtrlDisplayListRecordReport *report = nullptr);
 
