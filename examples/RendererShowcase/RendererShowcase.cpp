@@ -3,23 +3,9 @@
 namespace Upp {
 namespace {
 
-static Rgba8 ToRgba(Color color, int alpha = 255)
-{
-	return Rgba8((byte)color.GetR(), (byte)color.GetG(), (byte)color.GetB(),
-	             (byte)minmax(alpha, 0, 255));
-}
-
-static String SampleSvg()
-{
-	return "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
-	       "<path d='M8 48 L28 10 L56 48 Z' fill='#56a8e8'/>"
-	       "<circle cx='32' cy='39' r='8' fill='#ffffff'/>"
-	       "</svg>";
-}
-
 static void DrawSoftwareError(Draw& w, Size size, const String& error)
 {
-	w.DrawRect(size, Color(248, 248, 250));
+	w.DrawRect(0, 0, size.cx, size.cy, Color(248, 248, 250));
 	w.DrawText(DPI(14), DPI(14), error.IsEmpty() ? String("Software preview unavailable") : error,
 	           SansSerif(DPI(13)), Color(180, 50, 50));
 }
@@ -68,7 +54,7 @@ RendererShowcase::RendererShowcase()
 	context.mode = UiThemeMode::Light;
 	UiTheme::Set(context);
 
-	demo_image = BuildDemoImage();
+	demo_image = BuildRendererShowcaseDemoImage();
 	BuildHeader();
 	BuildInspector();
 
@@ -178,6 +164,28 @@ Value RendererShowcase::PropertyValue(const String& id) const
 	return item ? item->value : Value();
 }
 
+RendererShowcaseSettings RendererShowcase::GetSettings() const
+{
+	RendererShowcaseSettings settings;
+	settings.text = AsString(PropertyValue("text"));
+	settings.font_size = max(8, (int)PropertyValue("font_size"));
+	settings.show_image = (bool)PropertyValue("show_image");
+	settings.show_svg = (bool)PropertyValue("show_svg");
+	settings.accent = Color(PropertyValue("accent"));
+	settings.opacity = minmax((int)PropertyValue("opacity"), 0, 255);
+	settings.radius = max(0, (int)PropertyValue("radius"));
+	settings.scale = (double)PropertyValue("scale");
+	settings.rotation_degrees = (double)PropertyValue("rotation");
+	settings.clip = (bool)PropertyValue("clip");
+	return settings;
+}
+
+bool RendererShowcase::BuildScene(Size size, UiDisplayList& list,
+	                              Rgba8& background, String& error) const
+{
+	return BuildRendererShowcaseScene(size, GetSettings(), demo_image, list, background, error);
+}
+
 void RendererShowcase::SetPreviewMode(const String& mode)
 {
 	model.SetValue("renderer", mode);
@@ -209,108 +217,6 @@ void RendererShowcase::ApplyProjection()
 	else
 		software_preview.Refresh();
 	preview_panel.Refresh();
-}
-
-Image RendererShowcase::BuildDemoImage() const
-{
-	ImageDraw draw(72, 72);
-	draw.DrawRect(0, 0, 72, 72, Color(31, 39, 54));
-	draw.DrawEllipse(8, 8, 56, 56, Color(249, 180, 60));
-	draw.DrawEllipse(20, 20, 32, 32, Color(72, 132, 238));
-	draw.DrawLine(12, 56, 60, 16, 4, Color(245, 247, 252));
-	return draw;
-}
-
-bool RendererShowcase::BuildScene(Size size, UiDisplayList& list,
-	                              Rgba8& background, String& error) const
-{
-	error.Clear();
-	background = Rgba8(17, 24, 36, 255);
-	UiDisplayListBuilder builder;
-	if(size.cx <= 0 || size.cy <= 0)
-		return builder.Finish(list);
-
-	const double w = size.cx;
-	const double h = size.cy;
-	const double unit = max(1.0, min(w, h));
-	const Color accent_color(PropertyValue("accent"));
-	const int opacity = minmax((int)PropertyValue("opacity"), 0, 255);
-	const double radius = max(0.0, (double)(int)PropertyValue("radius"));
-	const double scale = (double)PropertyValue("scale");
-	const double angle = (double)PropertyValue("rotation") * 3.14159265358979323846 / 180.0;
-	const int font_size = max(8, (int)PropertyValue("font_size"));
-	const bool show_image = (bool)PropertyValue("show_image");
-	const bool show_svg = (bool)PropertyValue("show_svg");
-	const bool clip = (bool)PropertyValue("clip");
-	const WString text = AsString(PropertyValue("text")).ToWString();
-
-	const Rgba8 accent = ToRgba(accent_color, opacity);
-	const Rgba8 accent_soft = ToRgba(accent_color, max(50, opacity / 2));
-	const Rgba8 paper(236, 241, 248, 255);
-	const Rgba8 white(250, 252, 255, 245);
-
-	builder.FillRect(Rectf(DPI(14), DPI(14), w - DPI(14), h - DPI(14)),
-	                 Rgba8(27, 37, 52, 255));
-	builder.StrokeRect(Rectf(DPI(20), DPI(20), w - DPI(20), h - DPI(20)),
-	                   max(1.0, unit * 0.004), Rgba8(108, 128, 158, 210));
-
-	// Left composition deliberately combines clip + affine state with ordinary
-	// primitives, rounded geometry, sampled image and text.
-	builder.Save();
-	if(clip)
-		builder.ClipRect(Rectf(w * 0.055, h * 0.18, w * 0.57, h * 0.82));
-	Transform2D transform;
-	transform.x.x = cos(angle) * scale;
-	transform.x.y = sin(angle) * scale;
-	transform.y.x = -sin(angle) * scale;
-	transform.y.y = cos(angle) * scale;
-	transform.t = Pointf(w * 0.31, h * 0.49);
-	builder.ConcatTransform(transform);
-	builder.FillRect(Rectf(-w * 0.22, -h * 0.20, w * 0.19, h * 0.17), accent_soft);
-	builder.StrokeRect(Rectf(-w * 0.19, -h * 0.17, w * 0.18, h * 0.15),
-	                   max(2.0, unit * 0.007), white);
-	struct RoundedRect card(Rectf(-w * 0.16, -h * 0.125, w * 0.17, h * 0.12),
-	                        min(radius, min(w * 0.08, h * 0.08)));
-	builder.FillRoundedRect(card, accent);
-	if(show_image)
-		builder.DrawImage(Rectf(w * 0.055, -h * 0.085, w * 0.145, h * 0.055), demo_image);
-	builder.DrawText(Pointf(-w * 0.135, -h * 0.018), text,
-	                 SansSerif(DPI(font_size)).Bold(), paper);
-	builder.Restore();
-
-	// Right composition exercises the U++ Painter vector authority transported
-	// through the accepted sampled-image GPU path.
-	UiPath blob;
-	blob.MoveTo(Pointf(w * 0.62, h * 0.23));
-	blob.CubicTo(Pointf(w * 0.78, h * 0.12), Pointf(w * 0.94, h * 0.22), Pointf(w * 0.90, h * 0.42));
-	blob.QuadraticTo(Pointf(w * 0.86, h * 0.58), Pointf(w * 0.68, h * 0.54));
-	blob.CubicTo(Pointf(w * 0.58, h * 0.47), Pointf(w * 0.56, h * 0.32), Pointf(w * 0.62, h * 0.23));
-	blob.Close();
-	UiPaint gradient = UiPaint::Linear(Pointf(w * 0.60, h * 0.22), Pointf(w * 0.91, h * 0.53),
-	                                   ToRgba(accent_color, 245), Rgba8(239, 91, 118, 230),
-	                                   UiGradientSpread::Reflect);
-	gradient.AddStop(0.52, Rgba8(104, 218, 176, 235));
-	builder.FillPath(blob, gradient, UiFillRule::NonZero);
-	UiStrokeStyle stroke;
-	stroke.width = max(2.0, unit * 0.006);
-	stroke.cap = UiLineCap::Round;
-	stroke.join = UiLineJoin::Round;
-	stroke.dash << max(4.0, unit * 0.018) << max(3.0, unit * 0.010);
-	builder.StrokePath(blob, UiPaint::Solid(white), stroke);
-
-	builder.FillRect(Rectf(w * 0.63, h * 0.58, w * 0.93, h * 0.84), accent_soft);
-	if(show_svg)
-		builder.DrawSvg(Rectf(w * 0.73, h * 0.61, w * 0.86, h * 0.80), SampleSvg());
-
-	builder.DrawText(Pointf(w * 0.055, h - DPI(30)),
-	                 WString("Same scene · Software / Vulkan"),
-	                 SansSerif(DPI(13)), Rgba8(184, 197, 216, 255));
-
-	if(!builder.Finish(list)) {
-		error = builder.GetError();
-		return false;
-	}
-	return true;
 }
 
 void RendererShowcase::Layout()
