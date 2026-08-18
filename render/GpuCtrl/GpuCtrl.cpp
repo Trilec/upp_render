@@ -1,25 +1,11 @@
 #include "GpuCtrl.h"
 #include "GpuCtrlTestHooks.h"
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
-#include <RenderGpu2D/RenderGpu2D.h>
-#include <RenderVulkan/RenderVulkanRhi.h>
-
-#include <memory>
+#include <RenderPresentation/RenderPresentation.h>
 
 namespace Upp {
 
 namespace {
-
-static GpuClearColor ToClearColor(Rgba8 color)
-{
-	const float scale = 1.0f / 255.0f;
-	GpuClearColor out;
-	out.red = color.r * scale;
-	out.green = color.g * scale;
-	out.blue = color.b * scale;
-	out.alpha = color.a * scale;
-	return out;
-}
 
 static bool BuildDefaultDisplayList(Size size, UiDisplayList& list, Rgba8& background, String& error)
 {
@@ -65,213 +51,6 @@ static bool BuildDefaultDisplayList(Size size, UiDisplayList& list, Rgba8& backg
 	return true;
 }
 
-class GpuCtrlBackendSession {
-public:
-	virtual ~GpuCtrlBackendSession() {}
-
-	virtual bool Open(bool request_validation, const GpuNativeWindowDesc& native_window, String& error) = 0;
-	virtual void Close() = 0;
-	virtual bool IsReady() const = 0;
-	virtual const String& GetError() const = 0;
-	virtual bool Present(Size requested_size, const UiDisplayList& list, Rgba8 background, String& error) = 0;
-};
-
-class VulkanGpuCtrlBackendSession : public GpuCtrlBackendSession {
-public:
-	~VulkanGpuCtrlBackendSession() override
-	{
-		Close();
-	}
-
-	bool Open(bool request_validation, const GpuNativeWindowDesc& window, String& out_error) override
-	{
-		Close();
-		error.Clear();
-		native_window = window;
-		if(!session.Open(request_validation, native_window)) {
-			error = session.GetError();
-			out_error = error;
-			return false;
-		}
-
-		device.reset(new VulkanGpuDevice(session));
-		if(!device->IsReady()) {
-			String failure = device->GetError();
-			Close();
-			error = failure.IsEmpty() ? String("VulkanGpuDevice initialization failed") : failure;
-			out_error = error;
-			return false;
-		}
-		renderer.reset(new UiRenderer2D(*device));
-		if(!renderer->IsReady()) {
-			String failure = renderer->GetError();
-			Close();
-			error = failure.IsEmpty() ? String("UiRenderer2D initialization failed") : failure;
-			out_error = error;
-			return false;
-		}
-		out_error.Clear();
-		return true;
-	}
-
-	void Close() override
-	{
-		// Reverse the borrowing order: renderer -> logical swapchain/surface ->
-		// adapter -> session. The adapter never owns the Vulkan session objects.
-		renderer.reset();
-		if(device) {
-			if(swapchain.IsValid())
-				device->DestroySwapchain(swapchain);
-			swapchain = GpuSwapchainId();
-			if(surface.IsValid())
-				device->DestroySurface(surface);
-			surface = GpuSurfaceId();
-		}
-		device.reset();
-		session.Close();
-		native_window = GpuNativeWindowDesc();
-		swapchain_request_size = Size(0, 0);
-	}
-
-	bool IsReady() const override
-	{
-		return session.IsReady() && device && device->IsReady() && renderer && renderer->IsReady();
-	}
-
-	const String& GetError() const override
-	{
-		return error;
-	}
-
-	bool Present(Size requested_size, const UiDisplayList& list, Rgba8 background, String& out_error) override
-	{
-		out_error.Clear();
-		if(requested_size.cx <= 0 || requested_size.cy <= 0)
-			return true;
-		if(!IsReady()) {
-			error = !device ? session.GetError() : device->GetError();
-			if(error.IsEmpty())
-				error = "GpuCtrl Vulkan renderer is not ready";
-			out_error = error;
-			return false;
-		}
-		if(!EnsureSwapchain(requested_size, out_error))
-			return false;
-		if(PresentOnce(list, background, out_error))
-			return true;
-
-		if(!session.GetFrameReport().out_of_date)
-			return false;
-		if(device->ResizeSwapchain(swapchain, requested_size) != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty())
-				error = "Vulkan swapchain recreation after out-of-date presentation failed";
-			out_error = error;
-			return false;
-		}
-		swapchain_request_size = requested_size;
-		if(PresentOnce(list, background, out_error)) {
-			out_error.Clear();
-			return true;
-		}
-		return false;
-	}
-
-private:
-	bool EnsureSwapchain(Size requested_size, String& out_error)
-	{
-		if(!surface.IsValid()) {
-			GpuSurfaceDesc desc;
-			desc.label = "GpuCtrl surface";
-			desc.size = requested_size;
-			desc.native_window = native_window;
-			GpuResult result = device->CreateSurface(desc, surface);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty()) error = "GpuCtrl logical surface creation failed";
-				out_error = error;
-				return false;
-			}
-		}
-		if(!swapchain.IsValid()) {
-			GpuSwapchainDesc desc;
-			desc.label = "GpuCtrl swapchain";
-			desc.surface = surface;
-			desc.size = requested_size;
-			desc.color_format = GpuFormat::RGBA8;
-			desc.image_count = 2;
-			GpuResult result = device->CreateSwapchain(desc, swapchain);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty()) error = "GpuCtrl logical swapchain creation failed";
-				out_error = error;
-				return false;
-			}
-			swapchain_request_size = requested_size;
-		}
-		else if(requested_size != swapchain_request_size) {
-			GpuResult result = device->ResizeSwapchain(swapchain, requested_size);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty()) error = "GpuCtrl logical swapchain resize failed";
-				out_error = error;
-				return false;
-			}
-			swapchain_request_size = requested_size;
-		}
-		return true;
-	}
-
-	bool PresentOnce(const UiDisplayList& list, Rgba8 background, String& out_error)
-	{
-		GpuFrameInfo frame;
-		GpuResult result = device->BeginFrame(swapchain, frame);
-		if(result != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty()) error = "GpuCtrl BeginFrame failed";
-			out_error = error;
-			return false;
-		}
-
-		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
-			String render_error = renderer->GetError();
-			// Release the acquired frame even when rendering fails. RenderFrame's
-			// own failure cleanup consumes any command list it successfully began.
-			device->Present(frame.frame);
-			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
-			out_error = error;
-			return false;
-		}
-
-		result = device->Present(frame.frame);
-		if(result != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty()) error = "GpuCtrl Present failed";
-			out_error = error;
-			return false;
-		}
-		error.Clear();
-		out_error.Clear();
-		return true;
-	}
-
-	VulkanSurfaceSession session;
-	std::unique_ptr<VulkanGpuDevice> device;
-	std::unique_ptr<UiRenderer2D> renderer;
-	GpuNativeWindowDesc native_window;
-	GpuSurfaceId surface;
-	GpuSwapchainId swapchain;
-	Size swapchain_request_size = Size(0, 0);
-	String error;
-};
-
-static One<GpuCtrlBackendSession> CreateBackendSession(GpuBackendKind kind)
-{
-	if(kind == GpuBackendKind::Vulkan)
-		return new VulkanGpuCtrlBackendSession;
-	return One<GpuCtrlBackendSession>();
-}
-
 } // namespace
 
 namespace GpuCtrlTestHooks {
@@ -283,8 +62,9 @@ bool BuildDefaultFrame(Size size, UiDisplayList& list, Rgba8& background, String
 
 } // namespace GpuCtrlTestHooks
 
-// The public control stays tiny; platform/session ownership lives behind this
-// private implementation so future backends do not leak into the ordinary API.
+// The public control stays tiny. Native-child lifecycle lives here while the
+// backend/session/render/swapchain ownership is shared with root presentation
+// through GpuDisplayPresenter.
 struct GpuCtrl::Impl {
 	class Host : public DHCtrl {
 	public:
@@ -300,7 +80,8 @@ struct GpuCtrl::Impl {
 
 		void State(int reason) override
 		{
-			// CLOSE must reach the implementation before DHCtrl tears the native host down.
+			// CLOSE must reach the implementation before DHCtrl tears down the
+			// native child window that owns the Vulkan surface.
 			if(reason == CLOSE) {
 				if(impl)
 					impl->OnHostState(reason);
@@ -357,7 +138,7 @@ struct GpuCtrl::Impl {
 
 	bool IsGpuReady() const
 	{
-		return gpu_ready && backend && backend->IsReady();
+		return gpu_ready && presenter.IsReady();
 	}
 
 	String GetGpuError() const
@@ -366,7 +147,9 @@ struct GpuCtrl::Impl {
 			return api_error;
 		if(!session_error.IsEmpty())
 			return session_error;
-		return presentation_error;
+		if(!presentation_error.IsEmpty())
+			return presentation_error;
+		return presenter.GetError();
 	}
 
 	Size GetNativeHostSize() const
@@ -382,7 +165,7 @@ struct GpuCtrl::Impl {
 
 	bool OnHostPaint()
 	{
-		if(!IsGpuReady() || !backend)
+		if(!IsGpuReady())
 			return false;
 		Size requested_size = GetNativeHostSize();
 		UiDisplayList list;
@@ -392,11 +175,11 @@ struct GpuCtrl::Impl {
 			presentation_error = error;
 			return false;
 		}
-		if(backend->Present(requested_size, list, background, error)) {
+		if(presenter.Present(requested_size, list, background, error)) {
 			presentation_error.Clear();
 			return true;
 		}
-		presentation_error = error.IsEmpty() ? backend->GetError() : error;
+		presentation_error = error.IsEmpty() ? presenter.GetError() : error;
 		return false;
 	}
 
@@ -420,7 +203,7 @@ struct GpuCtrl::Impl {
 	{
 		if(kind == backend_kind)
 			return;
-		if(IsGpuReady() && kind != backend_kind) {
+		if(IsGpuReady()) {
 			SetApiError("backend change while open is not supported");
 			return;
 		}
@@ -527,38 +310,30 @@ struct GpuCtrl::Impl {
 
 		GpuNativeWindowDesc native_window;
 		String native_error;
-		if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(), native_window, native_error)) {
+		if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(),
+		                                 native_window, native_error)) {
 			SetSessionError(native_error);
 			return;
 		}
 
-		backend = CreateBackendSession(backend_kind);
-		if(!backend) {
-			SetSessionError("backend not supported");
-			return;
-		}
-
 		String open_error;
-		if(!backend->Open(validation_requested, native_window, open_error)) {
-			SetSessionError(open_error);
-			backend.Clear();
+		if(!presenter.Open(backend_kind, validation_requested, native_window, open_error)) {
+			SetSessionError(open_error.IsEmpty() ? presenter.GetError() : open_error);
 			return;
 		}
 
-		gpu_ready = backend->IsReady();
+		gpu_ready = presenter.IsReady();
 		if(gpu_ready) {
 			ClearError();
 			host.Refresh();
 		}
 		else
-			SetSessionError(backend->GetError());
+			SetSessionError(presenter.GetError());
 	}
 
 	void StopGpuSession()
 	{
-		if(backend)
-			backend->Close();
-		backend.Clear();
+		presenter.Close();
 		ClearError();
 		session_error.Clear();
 		presentation_error.Clear();
@@ -587,7 +362,7 @@ struct GpuCtrl::Impl {
 
 	GpuCtrl *owner = nullptr;
 	Host host;
-	One<GpuCtrlBackendSession> backend;
+	GpuDisplayPresenter presenter;
 	GpuBackendKind backend_kind = GpuBackendKind::Vulkan;
 	String api_error;
 	String session_error;
