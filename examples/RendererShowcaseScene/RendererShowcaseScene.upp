@@ -1,0 +1,8 @@
+uses
+	Core,
+	Draw,
+	RenderCanvas;
+
+file
+	RendererShowcaseScene.h,
+	RendererShowcaseScene.cpp;
