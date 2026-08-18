@@ -1,0 +1,10 @@
+uses
+	Core,
+	Draw,
+	CtrlCore,
+	CtrlLib,
+	RenderCanvas;
+
+file
+	RenderCtrlBridge.h,
+	RenderCtrlBridge.cpp;
