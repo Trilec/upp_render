@@ -171,8 +171,16 @@ struct GpuCtrl::Impl {
 		UiDisplayList list;
 		Rgba8 background;
 		String error;
-		if(!BuildDefaultDisplayList(requested_size, list, background, error)) {
-			presentation_error = error;
+		bool built = owner && owner->WhenBuildFrame
+		           ? owner->WhenBuildFrame(requested_size, list, background, error)
+		           : BuildDefaultDisplayList(requested_size, list, background, error);
+		if(!built) {
+			presentation_error = error.IsEmpty() ? String("GpuCtrl frame builder failed") : error;
+			return false;
+		}
+		if(!list.IsValid()) {
+			presentation_error = list.GetError().IsEmpty() ? String("GpuCtrl frame builder returned an invalid display list")
+			                                             : list.GetError();
 			return false;
 		}
 		if(presenter.Present(requested_size, list, background, error)) {
