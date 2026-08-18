@@ -25,7 +25,7 @@ Stage 6 U++ integration is active in parallel so validation latency does not sta
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
-Active Stage-6 implementation: `TASK-011B` — consolidated renderer showcase now source-complete; next production slice is real U++ control/theme recording into the root display list.
+Active Stage-6 implementation: `TASK-011B` — renderer showcase published; next production slice is real resolved U++ control/theme recording into the root display list.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -118,9 +118,9 @@ Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 ### Renderer Showcase / consolidated acceptance
 
-Recovery branch: `recovery/task-011b-renderer-showcase`
+Published on `main`: `094e8807c70fd591bf7e921a5a98ae7069a8b97f`
+Source head: `a8d873c987418a183515885751ea0c742edef3aa`
 PR: `#25`
-Reviewed source head before this status update: `b19f27428ed5c574a8119406ca9fb430604db8eb`
 Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 Reference UI revision inspected while designing the showcase:
@@ -149,13 +149,13 @@ Windows build assembly notes:
 
 ## Recovery Log
 
-BASE: `3ac69f1971b5770b08ab9d06b7be72654dabe521` / `main`
-TASK: `TASK-011B` consolidated renderer showcase, then real U++ control/theme recording into root compositor
-TOUCHED: `examples/RendererShowcase/*`, `examples/RendererShowcaseScene/*`, `tests/RendererShowcaseTest/*`, `docs/ACTIVE_WORK.md`; enabling GpuCtrl seam already published separately
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011B SHOWCASE IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A `a4979f17becfb4af6390314cc316eb1ea31e3c92`; GpuCtrl neutral frame seam `3ac69f1971b5770b08ab9d06b7be72654dabe521`; showcase pending PR #25
-VALIDATION: showcase/shared-scene/package/API/full PR source review complete; Windows compile/runtime pending; Stage-5 and TASK-011A platform gates still pending
+BASE: `094e8807c70fd591bf7e921a5a98ae7069a8b97f` / `main`
+TASK: `TASK-011B` real U++ control/theme recording into root compositor; showcase/platform acceptance in parallel
+TOUCHED: published showcase — `examples/RendererShowcase/*`, `examples/RendererShowcaseScene/*`, `tests/RendererShowcaseTest/*`; next production slice not started in this checkpoint
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011B SHOWCASE IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; ROOT CONTROL RECORDING NEXT
+PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A `a4979f17becfb4af6390314cc316eb1ea31e3c92`; GpuCtrl neutral frame seam `3ac69f1971b5770b08ab9d06b7be72654dabe521`; Renderer Showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`
+VALIDATION: showcase/shared-scene/package/API/full PR source review complete and published; Windows compile/runtime pending; Stage-5 and TASK-011A platform gates still pending
 
 ## Next Action
 
-Publish PR #25 and verify its exact merge on `main`. Then continue TASK-011B from that published tip with the production neutral recording/composition bridge from real resolved U++ control/theme painting into the root `GpuTopWindow` display list. Do not create one native child per ordinary control and do not duplicate U++ layout/input/focus/theme authority. In parallel, use `RendererShowcase` as the broad visual acceptance surface and keep focused tests for diagnosis.
+Refresh `main` and inspect U++'s actual recursive control-paint and Draw extension seams. Implement the smallest production recording bridge that lets resolved ordinary U++/upp_Ui control drawing feed the neutral root display list while U++ continues to own layout/input/focus/state/theme. Do not create native child hosts for ordinary controls and do not build a second theme/control model. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
