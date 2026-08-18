@@ -6,7 +6,8 @@ uses
 	Utilities/PropertyEditor,
 	GpuCtrl,
 	RenderCanvas,
-	RenderSoftware;
+	RenderSoftware,
+	RendererShowcaseScene;
 
 file
 	RendererShowcase.h,
