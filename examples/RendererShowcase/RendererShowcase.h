@@ -4,6 +4,7 @@
 #include <Utilities/PropertyEditor/PropertyEditor.h>
 #include <GpuCtrl/GpuCtrl.h>
 #include <RenderSoftware/RenderSoftware.h>
+#include <RendererShowcaseScene/RendererShowcaseScene.h>
 
 namespace Upp {
 
@@ -28,8 +29,8 @@ private:
 	void SetPreviewMode(const String& mode);
 	void ResetProperties();
 	bool BuildScene(Size size, UiDisplayList& list, Rgba8& background, String& error) const;
+	RendererShowcaseSettings GetSettings() const;
 	Value PropertyValue(const String& id) const;
-	Image BuildDemoImage() const;
 
 	UiTitleCard header;
 	UiBoxLayout header_actions { UiDirection::H };
