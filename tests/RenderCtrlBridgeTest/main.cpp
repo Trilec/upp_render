@@ -96,6 +96,63 @@ public:
 	}
 };
 
+#ifdef PLATFORM_WIN32
+static const Color GLOBAL_STATE_PROBE_COLOR = Color(211, 37, 149);
+
+class GlobalStateProbeCtrl : public Ctrl {
+public:
+	GlobalStateProbeCtrl()
+	{
+		SetRect(0, 0, 3, 3);
+		BackPaint(FULLBACKPAINT);
+		NoWantFocus();
+	}
+
+	void Paint(Draw& w) override
+	{
+		w.DrawRect(0, 0, 1, 1, GLOBAL_STATE_PROBE_COLOR);
+	}
+};
+
+class GlobalStateProbeDraw : public ImageDraw {
+public:
+	GlobalStateProbeDraw()
+		: ImageDraw(3, 3)
+	{
+	}
+
+	bool WasDirect() const { return direct; }
+
+	void DrawRectOp(int x, int y, int cx, int cy, Color color) override
+	{
+		if(x == 0 && y == 0 && cx == 1 && cy == 1 && color == GLOBAL_STATE_PROBE_COLOR)
+			direct = true;
+		SystemDraw::DrawRectOp(x, y, cx, cy, color);
+	}
+
+private:
+	bool direct = false;
+};
+
+static bool ProbeGlobalBackBuffer()
+{
+	GlobalStateProbeCtrl ctrl;
+	GlobalStateProbeDraw draw;
+	ctrl.DrawCtrl(draw, 0, 0);
+	return draw.WasDirect();
+}
+
+class NativeDrawCtrl : public Ctrl {
+public:
+	NativeDrawCtrl() { SetRect(0, 0, 40, 30); }
+	void Paint(Draw& w) override
+	{
+		w.BeginNative();
+		w.EndNative();
+	}
+};
+#endif
+
 static bool HasOp(const UiDisplayList& list, UiDisplayOpType type)
 {
 	for(int i = 0; i < list.GetCount(); i++)
@@ -127,12 +184,18 @@ GUI_APP_MAIN
 {
 	bool ok = true;
 
+#ifdef PLATFORM_WIN32
+	const bool initial_global_backbuffer = ProbeGlobalBackBuffer();
+	Ctrl::GlobalBackBuffer(false);
+	ok &= Check(!ProbeGlobalBackBuffer(), "test precondition should observe disabled global backbuffer mode");
+#endif
+
 	RecordingRoot root;
 	UiDisplayList list;
 	String error;
 	CtrlDisplayListRecordReport report;
 	ok &= Check(RecordCtrlDisplayList(root, list, error, &report),
-	            "recursive U++ control tree should record through public Paint/frame APIs");
+	            "recursive U++ control tree should record through the public DrawCtrl/SystemDraw path");
 	if(!error.IsEmpty())
 		Cout() << "record error: " << error << EOL;
 	ok &= Check(list.IsValid() && list.GetCount() > 0, "recorded control list should be non-empty and valid");
@@ -154,12 +217,32 @@ GUI_APP_MAIN
 	ok &= Check(CountOps(list, UiDisplayOpType::FillPath) >= 4,
 	            "grouped U++ polygon input should remain separate neutral fill-path groups");
 
+#ifdef PLATFORM_WIN32
+	ok &= Check(!ProbeGlobalBackBuffer(),
+	            "recording should restore a previously disabled U++ global backbuffer mode");
+#endif
+
 	const String dump = list.Dump();
 	UiDisplayList second;
 	CtrlDisplayListRecordReport second_report;
 	ok &= Check(RecordCtrlDisplayList(root, second, error, &second_report),
 	            "same resolved control tree should record repeatedly");
 	ok &= Check(second.Dump() == dump, "unchanged control state should produce a deterministic display list");
+
+#ifdef PLATFORM_WIN32
+	Ctrl::GlobalBackBuffer(true);
+	ok &= Check(ProbeGlobalBackBuffer(), "test precondition should observe enabled global backbuffer mode");
+	UiDisplayList direct_list;
+	CtrlDisplayListRecordReport direct_report;
+	error.Clear();
+	ok &= Check(RecordCtrlDisplayList(root, direct_list, error, &direct_report),
+	            "recording should also work when U++ direct backbuffer mode was already enabled");
+	ok &= Check(ProbeGlobalBackBuffer(),
+	            "recording should preserve a previously enabled U++ global backbuffer mode");
+	ok &= Check(direct_list.Dump() == dump,
+	            "U++ global backbuffer state must not change recorded semantic output");
+	Ctrl::GlobalBackBuffer(false);
+#endif
 
 	ImagePainter painter(root.GetSize());
 	painter.DrawRect(Rect(root.GetSize()), Color(3, 4, 5));
@@ -179,6 +262,15 @@ GUI_APP_MAIN
 	            "unsupported operation should be named in deterministic evidence");
 
 #ifdef PLATFORM_WIN32
+	NativeDrawCtrl native_draw;
+	UiDisplayList native_draw_list;
+	CtrlDisplayListRecordReport native_draw_report;
+	error.Clear();
+	ok &= Check(!RecordCtrlDisplayList(native_draw, native_draw_list, error, &native_draw_report),
+	            "native SystemDraw/GDI semantics should not be silently omitted");
+	ok &= Check(error.Find("native") >= 0 && native_draw_report.HasUnsupportedOperation(),
+	            "native drawing boundary should be explicit in evidence");
+
 	DHCtrl native_child;
 	native_child.SetRect(0, 0, 40, 30);
 	UiDisplayList native_list;
@@ -186,8 +278,12 @@ GUI_APP_MAIN
 	error.Clear();
 	ok &= Check(!RecordCtrlDisplayList(native_child, native_list, error, &native_report),
 	            "native child-window controls should not be silently omitted");
-	ok &= Check(error.Find("DHCtrl") >= 0 && native_report.HasUnsupportedOperation(),
-	            "native child-window boundary should be explicit in evidence");
+	ok &= Check(error.Find("ExcludeClip") >= 0 && native_report.HasUnsupportedOperation(),
+	            "native child-window exclusion boundary should be explicit in evidence");
+
+	Ctrl::GlobalBackBuffer(initial_global_backbuffer);
+	ok &= Check(ProbeGlobalBackBuffer() == initial_global_backbuffer,
+	            "focused test should restore the process global backbuffer state it inherited");
 #endif
 
 	if(ok) {
