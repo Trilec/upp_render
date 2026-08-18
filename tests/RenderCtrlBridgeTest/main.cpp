@@ -36,6 +36,20 @@ public:
 		Vector<Point> triangle;
 		triangle << Point(52, 14) << Point(82, 40) << Point(44, 42);
 		w.DrawPolygon(triangle, Color(226, 96, 112), 1, Color(122, 38, 54));
+
+		// One disjunct group has an outer contour plus a hole; the second is a
+		// separate triangle. This protects U++ PolyPolyPolygon grouping semantics.
+		Vector<Point> grouped;
+		grouped << Point(46, 50) << Point(86, 50) << Point(86, 88) << Point(46, 88)
+		        << Point(57, 60) << Point(75, 60) << Point(75, 77) << Point(57, 77)
+		        << Point(98, 58) << Point(128, 84) << Point(94, 88);
+		Vector<int> subpolygons;
+		subpolygons << 4 << 4 << 3;
+		Vector<int> disjuncts;
+		disjuncts << 8 << 3;
+		w.DrawPolyPolyPolygon(grouped, subpolygons, disjuncts,
+		                      Color(108, 176, 232), 1, Color(38, 76, 118));
+
 		w.DrawImage(92, 16, image, Color(72, 132, 238));
 		w.DrawText(8, max(48, sz.cy - 24), "custom child", SansSerif(14).Bold(), Color(35, 42, 55));
 	}
@@ -90,6 +104,15 @@ static bool HasOp(const UiDisplayList& list, UiDisplayOpType type)
 	return false;
 }
 
+static int CountOps(const UiDisplayList& list, UiDisplayOpType type)
+{
+	int count = 0;
+	for(int i = 0; i < list.GetCount(); i++)
+		if(list[i].type == type)
+			count++;
+	return count;
+}
+
 static bool ImageHasVisibleChange(const Image& image, Color background)
 {
 	RGBA reference = background;
@@ -116,7 +139,7 @@ GUI_APP_MAIN
 	ok &= Check(report.rect_count > 0, "control recording should contain resolved rectangles");
 	ok &= Check(report.text_count > 0, "control recording should contain resolved text");
 	ok &= Check(report.image_count > 0, "control recording should contain resolved images");
-	ok &= Check(report.path_count > 0, "control recording should contain line/polygon/ellipse paths");
+	ok &= Check(report.path_count >= 5, "control recording should contain simple and grouped vector paths");
 	ok &= Check(report.clip_count > 0 && report.transform_count > 0,
 	            "recursive child painting should preserve U++ clip and offset state");
 	ok &= Check(!report.HasUnsupportedOperation(), "supported control scene should not hit an unsupported Draw operation");
@@ -128,6 +151,8 @@ GUI_APP_MAIN
 	            "resolved text and image drawing should remain semantic display-list operations");
 	ok &= Check(HasOp(list, UiDisplayOpType::FillPath) && HasOp(list, UiDisplayOpType::StrokePath),
 	            "ellipse/polygon/line drawing should use the existing neutral vector path contract");
+	ok &= Check(CountOps(list, UiDisplayOpType::FillPath) >= 4,
+	            "grouped U++ polygon input should remain separate neutral fill-path groups");
 
 	const String dump = list.Dump();
 	UiDisplayList second;
@@ -152,6 +177,18 @@ GUI_APP_MAIN
 	            "unsupported U++ Draw semantics should fail explicitly");
 	ok &= Check(error.Find("DrawArc") >= 0 && unsupported_report.HasUnsupportedOperation(),
 	            "unsupported operation should be named in deterministic evidence");
+
+#ifdef PLATFORM_WIN32
+	DHCtrl native_child;
+	native_child.SetRect(0, 0, 40, 30);
+	UiDisplayList native_list;
+	CtrlDisplayListRecordReport native_report;
+	error.Clear();
+	ok &= Check(!RecordCtrlDisplayList(native_child, native_list, error, &native_report),
+	            "native child-window controls should not be silently omitted");
+	ok &= Check(error.Find("DHCtrl") >= 0 && native_report.HasUnsupportedOperation(),
+	            "native child-window boundary should be explicit in evidence");
+#endif
 
 	if(ok) {
 		Cout() << "RenderCtrlBridgeTest passed" << EOL;
