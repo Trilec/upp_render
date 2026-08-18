@@ -25,7 +25,7 @@ Stage 6 U++ integration is active in parallel so validation latency does not sta
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
-Active Stage-6 implementation: `TASK-011B` — CtrlCore semantic `DrawCtrl` recording bridge source checkpoint complete; next slice wires that bridge into the root `GpuTopWindow` compositor.
+Active Stage-6 implementation: `TASK-011B` — CtrlCore semantic `DrawCtrl` recording bridge is published; next slice wires that bridge into the root `GpuTopWindow` compositor.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -149,8 +149,9 @@ Windows build assembly notes:
 
 ### TASK-011B — CtrlCore semantic recording bridge
 
-Recovery branch: `recovery/task-011b-ctrl-recording`
-Reviewed source head before this status update: `b328c2c5be9e83b1127a6a2c6f1b06f492276d51`
+Published on `main`: `c4210d80a815950df53df5db9dea45a38edbbfdd`
+Source head: `30ef093f4035eff923594bc6408ae17292a8512f`
+PR: `#27`
 Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 Implemented scope:
@@ -171,13 +172,13 @@ Boundary before root wiring:
 
 ## Recovery Log
 
-BASE: `f83f7b60c0bba89046367d31c5554ac2d62ea217` / `main`
-TASK: `TASK-011B` real U++ control/theme recording into root compositor
-TOUCHED: `render/RenderCtrlBridge/*`, `tests/RenderCtrlBridgeTest/*`, `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: existing main checkpoints through `f83f7b60c0bba89046367d31c5554ac2d62ea217`; Ctrl recording recovery branch source head `b328c2c5be9e83b1127a6a2c6f1b06f492276d51`, main merge pending
-VALIDATION: complete dependency/API/source audit against U++ 2026.1 paint/Draw semantics; manual Ctrl-tree-walker draft rejected; Windows compile/runtime pending
+BASE: `c4210d80a815950df53df5db9dea45a38edbbfdd` / `main`
+TASK: `TASK-011B` root compositor wiring from published CtrlCore semantic recording bridge
+TOUCHED: published recorder — `render/RenderCtrlBridge/*`, `tests/RenderCtrlBridgeTest/*`; recovery status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; ROOT WIRING NEXT
+PUBLISHED: Ctrl recording `c4210d80a815950df53df5db9dea45a38edbbfdd` via PR `#27`; earlier checkpoints unchanged
+VALIDATION: full aggregate PR/dependency/API/source review complete against U++ 2026.1 paint/Draw semantics; remote main and squash commit independently verified; Windows compile/runtime pending
 
 ## Next Action
 
-Publish and verify the CtrlCore `DrawCtrl` recording bridge checkpoint. Then validate `RenderCtrlBridgeTest` on Curt's Windows U++ 2026.1 environment and wire `GpuTopWindow` root frame construction to `RecordCtrlDisplayList()` as the next coherent Stage-6 slice. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
+Validate `RenderCtrlBridgeTest` on Curt's Windows U++ 2026.1 environment. In parallel, inspect the published `GpuTopWindow` root frame hook and implement the smallest coherent wiring that feeds its real resolved U++ control tree through `RecordCtrlDisplayList()` into the existing presenter, preserving fallback behavior and the single-root-surface architecture. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
