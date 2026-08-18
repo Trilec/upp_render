@@ -1,10 +1,6 @@
 #include "RenderCtrlBridge.h"
 
-#include <cmath>
-
 namespace Upp {
-
-#ifdef PLATFORM_WIN32
 namespace {
 
 static Rgba8 ToRgba8(Color color)
@@ -18,6 +14,11 @@ static Rect OffsetRect(const Rect& r, Point p)
 	Rect q = r;
 	q.Offset(p);
 	return q;
+}
+
+static Rectf ToRectf(const Rect& r)
+{
+	return Rectf(r.left, r.top, r.right, r.bottom);
 }
 
 static Image CropImage(const Image& image, const Rect& source)
@@ -35,9 +36,7 @@ static Image CropImage(const Image& image, const Rect& source)
 
 static Transform2D Translation(Point p)
 {
-	Transform2D t;
-	t.t = Pointf(p.x, p.y);
-	return t;
+	return Transform2D::Translation(p.x, p.y);
 }
 
 static UiPath MakeEllipsePath(const Rect& rect)
@@ -61,7 +60,7 @@ static UiPath MakeEllipsePath(const Rect& rect)
 
 static bool ConfigureStroke(int width, UiStrokeStyle& style)
 {
-	if(width == PEN_NULL)
+	if(IsNull(width) || width == PEN_NULL)
 		return false;
 	style.width = width > 0 ? width : 1.0;
 	style.cap = UiLineCap::Butt;
@@ -70,6 +69,7 @@ static bool ConfigureStroke(int width, UiStrokeStyle& style)
 	case PEN_DASH:
 		style.dash << 4.0 << 4.0;
 		break;
+#ifndef PLATFORM_WINCE
 	case PEN_DOT:
 		style.dash << 1.0 << 3.0;
 		break;
@@ -79,16 +79,17 @@ static bool ConfigureStroke(int width, UiStrokeStyle& style)
 	case PEN_DASHDOTDOT:
 		style.dash << 4.0 << 3.0 << 1.0 << 3.0 << 1.0 << 3.0;
 		break;
+#endif
 	default:
 		break;
 	}
 	return true;
 }
 
-class CtrlDisplayListSystemDraw : public SystemDraw {
+class CtrlDisplayListDraw : public Draw {
 public:
-	CtrlDisplayListSystemDraw(UiDisplayListBuilder& target, Size size,
-	                          CtrlDisplayListRecordReport& target_report)
+	CtrlDisplayListDraw(UiDisplayListBuilder& target, Size size,
+	                    CtrlDisplayListRecordReport& target_report)
 		: builder(target), page_size(size), report(target_report)
 	{
 		state.clip = Rect(size);
@@ -96,6 +97,63 @@ public:
 
 	bool Failed() const { return !error.IsEmpty(); }
 	const String& GetError() const { return error; }
+
+	bool Record(Ctrl& ctrl)
+	{
+		if(Failed())
+			return false;
+		if(!ctrl.IsShown() || ctrl.GetSize().IsEmpty())
+			return true;
+
+		Rect view = Rect(ctrl.GetSize());
+		for(int i = 0; i < ctrl.GetFrameCount(); i++) {
+			CtrlFrame& frame = ctrl.GetFrame(i);
+			frame.FramePaint(*this, view);
+			if(Failed())
+				return false;
+			frame.FrameLayout(view);
+		}
+
+		// Frame children live in the outer control coordinate system and paint
+		// before the owner's view, matching CtrlCore's established ordering.
+		for(Ctrl *child = ctrl.GetFirstChild(); child; child = child->GetNext())
+			if(child->IsShown() && child->InFrame()) {
+				Offset(child->GetRect().TopLeft());
+				bool child_ok = Record(*child);
+				End();
+				if(!child_ok)
+					return false;
+			}
+
+		if(!view.IsEmpty()) {
+			Clipoff(view);
+			ctrl.Paint(*this);
+			End();
+			if(Failed())
+				return false;
+		}
+
+		// Ordinary children are positioned relative to the resolved view. U++
+		// remains the sole layout authority; this bridge consumes those rectangles.
+		if(!view.IsEmpty()) {
+			bool visible = Clip(view);
+			if(visible) {
+				for(Ctrl *child = ctrl.GetFirstChild(); child; child = child->GetNext())
+					if(child->IsShown() && child->InView()) {
+						Point offset = child->GetRect().TopLeft() + view.TopLeft();
+						Offset(offset);
+						bool child_ok = Record(*child);
+						End();
+						if(!child_ok) {
+							End();
+							return false;
+						}
+					}
+			}
+			End();
+		}
+		return !Failed();
+	}
 
 	dword GetInfo() const override { return NATIVE; }
 	Size GetPageSize() const override { return page_size; }
@@ -108,13 +166,9 @@ public:
 	}
 	int GetCloffLevel() const override { return stack.GetCount(); }
 
-	void BeginNative() override {}
-	void EndNative() override {}
-
 	void BeginOp() override
 	{
-		stack.Add(state);
-		builder.Save();
+		PushState();
 	}
 
 	void EndOp() override
@@ -123,13 +177,14 @@ public:
 			Fail("unbalanced Draw::End");
 			return;
 		}
+		builder.Restore();
 		state = stack.Top();
 		stack.Drop();
-		builder.Restore();
 	}
 
 	void OffsetOp(Point p) override
 	{
+		PushState();
 		state.offset += p;
 		builder.ConcatTransform(Translation(p));
 		report.transform_count++;
@@ -137,16 +192,18 @@ public:
 
 	bool ClipOp(const Rect& r) override
 	{
+		PushState();
 		state.clip &= OffsetRect(r, state.offset);
-		builder.ClipRect(Rectf(r));
+		builder.ClipRect(ToRectf(r));
 		report.clip_count++;
 		return !state.clip.IsEmpty();
 	}
 
 	bool ClipoffOp(const Rect& r) override
 	{
+		PushState();
 		state.clip &= OffsetRect(r, state.offset);
-		builder.ClipRect(Rectf(r));
+		builder.ClipRect(ToRectf(r));
 		builder.ConcatTransform(Translation(r.TopLeft()));
 		state.offset += r.TopLeft();
 		report.clip_count++;
@@ -163,7 +220,7 @@ public:
 	bool IntersectClipOp(const Rect& r) override
 	{
 		state.clip &= OffsetRect(r, state.offset);
-		builder.ClipRect(Rectf(r));
+		builder.ClipRect(ToRectf(r));
 		report.clip_count++;
 		return !state.clip.IsEmpty();
 	}
@@ -177,6 +234,10 @@ public:
 	{
 		if(cx <= 0 || cy <= 0 || IsNull(color))
 			return;
+		if(color == InvertColor) {
+			Fail("invert rectangle drawing is not supported by the neutral compositor");
+			return;
+		}
 		builder.FillRect(Rectf(x, y, x + cx, y + cy), ToRgba8(color));
 		report.rect_count++;
 	}
@@ -307,13 +368,17 @@ public:
 			return;
 		}
 		if(!dx) {
-			builder.DrawText(Pointf(x, y), WString(text, n), font, ToRgba8(ink));
+			WString value;
+			value.Cat(text, n);
+			builder.DrawText(Pointf(x, y), value, font, ToRgba8(ink));
 			report.text_count++;
 			return;
 		}
 		int advance = 0;
 		for(int i = 0; i < n; i++) {
-			builder.DrawText(Pointf(x + advance, y), WString(text + i, 1), font, ToRgba8(ink));
+			WString glyph;
+			glyph.Cat(text + i, 1);
+			builder.DrawText(Pointf(x + advance, y), glyph, font, ToRgba8(ink));
 			advance += dx[i];
 			report.text_count++;
 		}
@@ -324,6 +389,12 @@ private:
 		Point offset = Point(0, 0);
 		Rect clip;
 	};
+
+	void PushState()
+	{
+		stack.Add(state);
+		builder.Save();
+	}
 
 	void Fail(const String& message)
 	{
@@ -342,7 +413,6 @@ private:
 };
 
 } // namespace
-#endif
 
 bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
                            CtrlDisplayListRecordReport *report)
@@ -352,16 +422,14 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 	CtrlDisplayListRecordReport& result = report ? *report : local_report;
 	result = CtrlDisplayListRecordReport();
 
-#ifdef PLATFORM_WIN32
 	UiDisplayListBuilder builder;
-	CtrlDisplayListSystemDraw draw(builder, ctrl.GetSize(), result);
-	ctrl.DrawCtrl(draw, 0, 0);
-	if(draw.Failed()) {
+	CtrlDisplayListDraw draw(builder, ctrl.GetSize(), result);
+	if(!draw.Record(ctrl)) {
 		error = draw.GetError();
 		return false;
 	}
 	if(draw.GetCloffLevel() != 0) {
-		error = "U++ control drawing left an unbalanced Draw state stack";
+		error = "U++ control recording left an unbalanced Draw state stack";
 		return false;
 	}
 	if(!builder.Finish(out)) {
@@ -373,13 +441,6 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 		return false;
 	}
 	return true;
-#else
-	(void)ctrl;
-	(void)out;
-	result.unsupported_operation = "control recording SystemDraw adapter is not implemented for this platform";
-	error = result.unsupported_operation;
-	return false;
-#endif
 }
 
 }
