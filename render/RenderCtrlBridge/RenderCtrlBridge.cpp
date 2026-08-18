@@ -105,6 +105,10 @@ public:
 		Size size = ctrl.GetSize();
 		if(!ctrl.IsShown() || size.cx <= 0 || size.cy <= 0)
 			return true;
+		if(dynamic_cast<DHCtrl *>(&ctrl)) {
+			Fail("native DHCtrl child surfaces are not recorded into the root neutral display list");
+			return false;
+		}
 
 		// FramePaint needs the same progressively reduced outer rectangle as
 		// CtrlCore. FrameLayout is applied to a local rectangle only; after frames
@@ -252,6 +256,10 @@ public:
 		Image resolved = CropImage(image, src);
 		if(resolved.IsEmpty())
 			return;
+		if(color == InvertColor) {
+			Fail("invert image drawing is not supported by the neutral compositor");
+			return;
+		}
 		if(!IsNull(color))
 			resolved = CachedSetColorKeepAlpha(resolved, color);
 		builder.DrawImage(Rectf(x, y, x + resolved.GetWidth(), y + resolved.GetHeight()), resolved);
@@ -262,6 +270,10 @@ public:
 	{
 		if(IsNull(color))
 			return;
+		if(color == InvertColor) {
+			Fail("invert line drawing is not supported by the neutral compositor");
+			return;
+		}
 		UiStrokeStyle stroke;
 		if(!ConfigureStroke(width, stroke))
 			return;
@@ -282,6 +294,10 @@ public:
 		}
 		if(IsNull(color) || !vertices || !counts || vertex_count <= 0 || count_count <= 0)
 			return;
+		if(color == InvertColor) {
+			Fail("invert polyline drawing is not supported by the neutral compositor");
+			return;
+		}
 		UiStrokeStyle stroke;
 		if(!ConfigureStroke(width, stroke))
 			return;
@@ -300,6 +316,10 @@ public:
 			}
 			index += n;
 		}
+		if(index != vertex_count) {
+			Fail("U++ polyline counts do not consume all vertices");
+			return;
+		}
 		if(!path.IsEmpty()) {
 			builder.StrokePath(path, UiPaint::Solid(ToRgba8(color)), stroke);
 			report.line_count += count_count;
@@ -309,7 +329,7 @@ public:
 
 	void DrawPolyPolyPolygonOp(const Point *vertices, int vertex_count,
 	                           const int *subpolygon_counts, int subpolygon_count_count,
-	                           const int *, int,
+	                           const int *disjunct_polygon_counts, int disjunct_polygon_count_count,
 	                           Color color, int width, Color outline,
 	                           uint64 pattern, Color doxor) override
 	{
@@ -317,32 +337,55 @@ public:
 			Fail("pattern/XOR polygon drawing is not supported by the neutral compositor");
 			return;
 		}
+		if((!IsNull(color) && color == InvertColor) || (!IsNull(outline) && outline == InvertColor)) {
+			Fail("invert polygon drawing is not supported by the neutral compositor");
+			return;
+		}
 		if(!vertices || !subpolygon_counts || vertex_count <= 0 || subpolygon_count_count <= 0)
 			return;
-		UiPath path;
-		int index = 0;
-		for(int i = 0; i < subpolygon_count_count; i++) {
-			const int n = subpolygon_counts[i];
-			if(n < 0 || index + n > vertex_count) {
-				Fail("invalid U++ polygon vertex counts");
+
+		int vertex_index = 0;
+		int subpolygon_index = 0;
+		int group_count = disjunct_polygon_counts && disjunct_polygon_count_count > 0
+		                ? disjunct_polygon_count_count : 1;
+		for(int group = 0; group < group_count; group++) {
+			int group_vertices = disjunct_polygon_counts && disjunct_polygon_count_count > 0
+			                   ? disjunct_polygon_counts[group]
+			                   : vertex_count;
+			if(group_vertices <= 0 || vertex_index + group_vertices > vertex_count) {
+				Fail("invalid U++ disjunct polygon vertex count");
 				return;
 			}
-			if(n > 0) {
-				path.MoveTo(Pointf(vertices[index].x, vertices[index].y));
+
+			UiPath path;
+			int consumed = 0;
+			while(consumed < group_vertices) {
+				if(subpolygon_index >= subpolygon_count_count) {
+					Fail("U++ polygon grouping exhausts subpolygon counts early");
+					return;
+				}
+				int n = subpolygon_counts[subpolygon_index++];
+				if(n <= 0 || consumed + n > group_vertices || vertex_index + n > vertex_count) {
+					Fail("invalid U++ subpolygon vertex count");
+					return;
+				}
+				path.MoveTo(Pointf(vertices[vertex_index].x, vertices[vertex_index].y));
 				for(int j = 1; j < n; j++)
-					path.LineTo(Pointf(vertices[index + j].x, vertices[index + j].y));
+					path.LineTo(Pointf(vertices[vertex_index + j].x, vertices[vertex_index + j].y));
 				path.Close();
+				vertex_index += n;
+				consumed += n;
 			}
-			index += n;
+
+			if(!IsNull(color))
+				builder.FillPath(path, UiPaint::Solid(ToRgba8(color)), UiFillRule::EvenOdd);
+			UiStrokeStyle stroke;
+			if(!IsNull(outline) && ConfigureStroke(width, stroke))
+				builder.StrokePath(path, UiPaint::Solid(ToRgba8(outline)), stroke);
+			report.path_count++;
 		}
-		if(path.IsEmpty())
-			return;
-		if(!IsNull(color))
-			builder.FillPath(path, UiPaint::Solid(ToRgba8(color)), UiFillRule::NonZero);
-		UiStrokeStyle stroke;
-		if(!IsNull(outline) && ConfigureStroke(width, stroke))
-			builder.StrokePath(path, UiPaint::Solid(ToRgba8(outline)), stroke);
-		report.path_count++;
+		if(vertex_index != vertex_count || subpolygon_index != subpolygon_count_count)
+			Fail("U++ polygon grouping does not consume all supplied geometry");
 	}
 
 	void DrawArcOp(const Rect&, Point, Point, int, Color) override
@@ -352,6 +395,10 @@ public:
 
 	void DrawEllipseOp(const Rect& r, Color color, int pen, Color pencolor) override
 	{
+		if((!IsNull(color) && color == InvertColor) || (!IsNull(pencolor) && pencolor == InvertColor)) {
+			Fail("invert ellipse drawing is not supported by the neutral compositor");
+			return;
+		}
 		UiPath ellipse = MakeEllipsePath(r);
 		if(ellipse.IsEmpty())
 			return;
@@ -368,6 +415,10 @@ public:
 	{
 		if(!text || n <= 0 || IsNull(ink))
 			return;
+		if(ink == InvertColor) {
+			Fail("invert text drawing is not supported by the neutral compositor");
+			return;
+		}
 		if(angle != 0) {
 			Fail("rotated DrawText is not yet represented by the neutral control recorder");
 			return;
