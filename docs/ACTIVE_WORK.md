@@ -24,7 +24,8 @@ Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING
 Stage 6 U++ integration is active in parallel so validation latency does not stall implementation.
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
-Active Stage-6 implementation: `TASK-011A` — reusable presentation lifecycle plus one root `GpuTopWindow` surface, followed by neutral U++ control-tree recording/composition.
+Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
+Active Stage-6 implementation continuation: `TASK-011B` — neutral recording/composition bridge from real U++ control/theme output into the root display list.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -87,10 +88,10 @@ Architecture constraints:
 
 ### TASK-011A — first root-composition boundary
 
-Recovery branch: `recovery/task-011a-root-composition`
+Published on `main`: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
+Source branch head: `caa1308258f59d525197867a3ba08d9e00949652`
 PR: `#22`
-Reviewed branch head before status update: `03b82dd4e136bd1d713012ba007ca73d9bd81e69`
-Status: **SOURCE IMPLEMENTATION CHECKPOINT COMPLETE — WINDOWS VALIDATION PENDING**
+Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 Implemented scope:
 - new backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
@@ -103,25 +104,30 @@ Implemented scope:
 - existing `GpuCtrlPresentationTest` remains the regression authority for embedded-control isolation/lifecycle.
 
 Source-review boundary:
-- exactly 10 production/test files before this status update: `RenderPresentation` (3), `GpuTopWindow` (3), root test (2), `GpuCtrl.cpp`, `GpuCtrl.upp`;
+- exactly 10 production/test files plus this status file;
 - no `RenderRhi`, `RenderVulkan`, `RenderGpu2D`, `RenderCanvas`, `RenderSoftware`, or Stage-5 production files changed;
 - U++ `Ctrl::GetHWND()` is a public top-level native-window boundary and `NcCreate`/`PreDestroy`/`WindowProc` are virtual on Win32, so the root binding uses supported U++ lifecycle seams rather than a child-HWND workaround.
 
 Still required before TASK-011A acceptance:
-- Windows Debug/Release compile of `GpuTopWindowPresentationTest`;
-- root Vulkan lifecycle runtime evidence with validation 0/0 and final ownership zero;
-- `GpuCtrlPresentationTest` regression after migration to shared presenter;
-- then continue from the root presentation boundary into actual U++ control-tree/display-list recording rather than hard-coded root scenes.
+- Windows Debug/Release compile and run of `GpuTopWindowPresentationTest`;
+- root Vulkan lifecycle evidence with validation 0/0 and final ownership zero;
+- `GpuCtrlPresentationTest` regression after migration to shared presenter.
+
+TASK-011A is a presentation boundary, not yet full automatic control-tree rendering. The next code slice must record resolved U++ control/theme drawing into the neutral display list rather than hard-code root scenes.
+
+### Showcase / consolidated acceptance direction
+
+Keep focused unit/regression tests for diagnosis, but add one representative visual showcase scene that exercises the complete renderer capability set through the same immutable display list: fills, strokes, rounded rectangles, clipping, affine transforms, alpha, images, text, gradients, vector paths and SVG. Replay the same scene through software and GPU paths. This becomes the developer-facing demo and broad rendering acceptance surface while the narrower tests remain useful for pinpointing failures.
 
 ## Recovery Log
 
-BASE: `bdebb8858d5014d745cd429c78b507b510e0f108` / `main`
-TASK: Stage-5 final validation + `TASK-011A` Stage-6 root composition boundary
-TOUCHED: `render/RenderPresentation/*`, `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`, `render/GpuCtrl/GpuCtrl.cpp`, `render/GpuCtrl/GpuCtrl.upp`, `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A SOURCE CHECKPOINT COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A recovery branch head before status update `03b82dd4e136bd1d713012ba007ca73d9bd81e69`
-VALIDATION: Stage-5 final Windows gate pending; TASK-011A aggregate source/package/lifecycle review complete enough for checkpoint publication, Windows compile/runtime pending
+BASE: `a4979f17becfb4af6390314cc316eb1ea31e3c92` / `main`
+TASK: Stage-5 final validation + `TASK-011B` real U++ control/theme recording into the root GPU compositor
+TOUCHED: TASK-011A published paths — `render/RenderPresentation/*`, `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`, `render/GpuCtrl/GpuCtrl.cpp`, `render/GpuCtrl/GpuCtrl.upp`; status `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011B NEXT
+PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A merge `a4979f17becfb4af6390314cc316eb1ea31e3c92`
+VALIDATION: Stage-5 final Windows gate pending; TASK-011A source/package/lifecycle review complete and published; TASK-011A Windows compile/runtime pending
 
 ## Next Action
 
-Publish TASK-011A checkpoint to `main`, verify the merged diff and recovery status, then continue Stage 6 from that published tip. Next implementation slice is the neutral recording/composition bridge from real U++ control/theme output into the root display list; do not create native child hosts for ordinary controls and do not duplicate theme/layout/input authority.
+STOP HERE until Curt says continue. On resume: refresh `main`, read this file first, then proceed with TASK-011B neutral U++ control/theme recording into the root display list. In parallel, create the consolidated visual renderer showcase/acceptance scene described above. Do not reopen Stage-3/4 architecture and do not create native child hosts for ordinary controls.
