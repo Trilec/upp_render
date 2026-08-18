@@ -1,3 +1,4 @@
+#include <CtrlLib/CtrlLib.h>
 #include <RenderCtrlBridge/RenderCtrlBridge.h>
 #include <RenderSoftware/RenderSoftware.h>
 
@@ -48,6 +49,7 @@ public:
 	RecordingRoot()
 	{
 		SetRect(0, 0, 360, 190);
+		SetFrame(BlackFrame());
 		probe.SetRect(14, 14, 142, 104);
 		label.SetRect(178, 18, 160, 28);
 		button.SetRect(178, 58, 112, 34);
@@ -107,7 +109,7 @@ GUI_APP_MAIN
 	String error;
 	CtrlDisplayListRecordReport report;
 	ok &= Check(RecordCtrlDisplayList(root, list, error, &report),
-	            "recursive U++ control tree should record through the public DrawCtrl path");
+	            "recursive U++ control tree should record through public Paint/frame APIs");
 	if(!error.IsEmpty())
 		Cout() << "record error: " << error << EOL;
 	ok &= Check(list.IsValid() && list.GetCount() > 0, "recorded control list should be non-empty and valid");
