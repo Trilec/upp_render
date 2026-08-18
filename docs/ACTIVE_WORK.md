@@ -21,10 +21,10 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 ## Current Objective
 
 Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING**.
-Proceed in parallel with Stage 6 U++ integration so validation latency does not stall the project.
+Stage 6 U++ integration is active in parallel so validation latency does not stall implementation.
 
-Active validation task to issue: `TASK-010-W1` — final Stage-5 vector/gradient/AA/SVG plus image/text regression acceptance.
-Active implementation task: `TASK-011A` — first production-quality root U++/GPU composition boundary, preserving one root GPU surface rather than one native child per control.
+Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
+Active Stage-6 implementation: `TASK-011A` — reusable presentation lifecycle plus one root `GpuTopWindow` surface, followed by neutral U++ control-tree recording/composition.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -62,40 +62,66 @@ Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 Production design deliberately avoids a second GPU vector/resource authority:
 - vector/SVG ops are rasterized by U++ Painter into cached antialiased `Image` values;
 - raster scale follows the largest singular value of the active affine transform, clamped 1..8;
-- vector cache identity is exact `UiDisplayOp` value equality + raster scale, not an approximate dump/hash;
+- vector cache identity is exact `UiDisplayOp` value equality + raster scale;
 - materialized vector operations become ordinary `DrawImage` operations;
 - the accepted image path owns GPU upload, sRGB conversion, texture cache, descriptors, affine UV clipping, batching and destruction;
 - vector sidecar owns CPU Images only and owns zero Vulkan/GpuTexture resources;
 - mixed vector + text scenes preserve original order and reuse both image and glyph caches;
 - no-vector display lists retain the accepted prior renderer path unchanged.
 
-Coverage added:
-- `RenderGpuVectorTest`: exact first-frame vector raster/image uploads, second-frame zero raster/upload work, mixed vector/text ordering, glyph reuse, RenderNull resource cleanup;
+Coverage:
+- `RenderGpuVectorTest`: first-frame vector raster/image uploads, second-frame zero raster/upload work, mixed vector/text ordering, glyph reuse, RenderNull cleanup;
 - `RenderVulkanVectorTest`: real Vulkan offscreen vector/text rendering, cached repeat, acquired swapchain presentation, zero adapter resources and final ownership diagnostics;
-- `RenderVectorTest` strengthened to exercise Reflect and Repeat gradients plus explicit partial-alpha edge evidence from an opaque curved path proving antialiased raster coverage.
+- `RenderVectorTest`: curves, fill rules, Pad/Reflect/Repeat gradients, stroke styles, SVG and explicit partial-alpha antialias evidence.
 
-Native GPU path tessellation remains a Stage-8 optimization candidate. For v1, U++ Painter is the semantic authority and the accepted sampled image pipeline is the GPU transport.
+Native GPU path tessellation remains a Stage-8 optimization candidate. For v1, U++ Painter is the semantic authority and the accepted sampled-image pipeline is the GPU transport.
 
 ## Stage 6 - U++ Integration
-
-Active now while final Stage-5 platform validation runs.
 
 Architecture constraints:
 - one root GPU/native presentation boundary for a GPU-composited interface; do not create one native child per ordinary control;
 - U++ retains control tree, layout, input, focus, state and theme authority;
 - controls emit resolved neutral drawing intent/display lists;
-- software replay remains available as correctness/fallback path;
-- `GpuCtrl` remains appropriate for explicitly embedded accelerated content, not as the implementation mechanism for every normal control.
+- software replay remains the correctness/fallback path;
+- `GpuCtrl` remains appropriate for explicitly embedded accelerated content, not as the implementation mechanism for every ordinary control.
+
+### TASK-011A — first root-composition boundary
+
+Recovery branch: `recovery/task-011a-root-composition`
+PR: `#22`
+Reviewed branch head before status update: `03b82dd4e136bd1d713012ba007ca73d9bd81e69`
+Status: **SOURCE IMPLEMENTATION CHECKPOINT COMPLETE — WINDOWS VALIDATION PENDING**
+
+Implemented scope:
+- new backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
+- Vulkan-specific ownership remains private to `RenderPresentation.cpp`; public presentation API contains no Vulkan types;
+- `GpuCtrl` is migrated onto `GpuDisplayPresenter`, removing its duplicate private Vulkan/session/swapchain/render lifecycle while retaining DHCtrl native-child hosting for explicitly embedded GPU content;
+- new `GpuTopWindow` binds `GpuDisplayPresenter` directly to the real top-level U++ HWND and creates no native child host;
+- `GpuTopWindow::BuildGpuFrame()` is the first root neutral-display-list composition hook; U++ remains window/input/layout authority;
+- root WM_PAINT presents one neutral frame through one Vulkan surface/swapchain; normal TopWindow handling remains the fallback when GPU is not ready;
+- `GpuTopWindowPresentationTest` checks one live surface/device/swapchain, no idle recreation, same-size refresh without recreation, resize recreation, hide/show stability and zero Vulkan ownership after close;
+- existing `GpuCtrlPresentationTest` remains the regression authority for embedded-control isolation/lifecycle.
+
+Source-review boundary:
+- exactly 10 production/test files before this status update: `RenderPresentation` (3), `GpuTopWindow` (3), root test (2), `GpuCtrl.cpp`, `GpuCtrl.upp`;
+- no `RenderRhi`, `RenderVulkan`, `RenderGpu2D`, `RenderCanvas`, `RenderSoftware`, or Stage-5 production files changed;
+- U++ `Ctrl::GetHWND()` is a public top-level native-window boundary and `NcCreate`/`PreDestroy`/`WindowProc` are virtual on Win32, so the root binding uses supported U++ lifecycle seams rather than a child-HWND workaround.
+
+Still required before TASK-011A acceptance:
+- Windows Debug/Release compile of `GpuTopWindowPresentationTest`;
+- root Vulkan lifecycle runtime evidence with validation 0/0 and final ownership zero;
+- `GpuCtrlPresentationTest` regression after migration to shared presenter;
+- then continue from the root presentation boundary into actual U++ control-tree/display-list recording rather than hard-coded root scenes.
 
 ## Recovery Log
 
-BASE: `0d37b2472c4d49e6908f6acbf5f85cc523193006` / `main`
+BASE: `bdebb8858d5014d745cd429c78b507b510e0f108` / `main`
 TASK: Stage-5 final validation + `TASK-011A` Stage-6 root composition boundary
-TOUCHED: Stage-5 B — RenderGpu2D vector wrapper/cache + RenderGpuVectorTest/RenderVulkanVectorTest + strengthened RenderVectorTest; status `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Stage 6 inspection/implementation ACTIVE
-PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`
-VALIDATION: source/dependency/full PR review complete; final Windows/Vulkan Stage-5 gate pending
+TOUCHED: `render/RenderPresentation/*`, `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`, `render/GpuCtrl/GpuCtrl.cpp`, `render/GpuCtrl/GpuCtrl.upp`, `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A SOURCE CHECKPOINT COMPLETE / PLATFORM VALIDATION PENDING
+PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A recovery branch head before status update `03b82dd4e136bd1d713012ba007ca73d9bd81e69`
+VALIDATION: Stage-5 final Windows gate pending; TASK-011A aggregate source/package/lifecycle review complete enough for checkpoint publication, Windows compile/runtime pending
 
 ## Next Action
 
-Issue one bounded Stage-5 Windows/Vulkan acceptance task to Gary, but do not wait for it. Refresh `main`, inspect `docs/UI_GPU_RENDERING_ARCHITECTURE.md`, `docs/ARCHITECTURE.md`, current `GpuCtrl`/presentation tests and examples, then implement `TASK-011A` as a coherent root U++/GPU composition slice with neutral display-list input, software fallback/reference and one presentation surface.
+Publish TASK-011A checkpoint to `main`, verify the merged diff and recovery status, then continue Stage 6 from that published tip. Next implementation slice is the neutral recording/composition bridge from real U++ control/theme output into the root display list; do not create native child hosts for ordinary controls and do not duplicate theme/layout/input authority.
