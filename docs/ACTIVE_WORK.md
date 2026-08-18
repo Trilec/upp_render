@@ -25,7 +25,7 @@ Stage 6 U++ integration is active in parallel so validation latency does not sta
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
-Active Stage-6 implementation: `TASK-011B` — CtrlCore semantic recording bridge source checkpoint complete; next slice wires that bridge into the root `GpuTopWindow` compositor.
+Active Stage-6 implementation: `TASK-011B` — CtrlCore semantic `DrawCtrl` recording bridge source checkpoint complete; next slice wires that bridge into the root `GpuTopWindow` compositor.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -150,21 +150,23 @@ Windows build assembly notes:
 ### TASK-011B — CtrlCore semantic recording bridge
 
 Recovery branch: `recovery/task-011b-ctrl-recording`
-Reviewed source head before this status update: `1e368ba4187a31b7e833cc1e9e6fbc42607f621d`
-Status: **SOURCE IMPLEMENTATION CHECKPOINT COMPLETE — PLATFORM VALIDATION PENDING**
+Reviewed source head before this status update: `b328c2c5be9e83b1127a6a2c6f1b06f492276d51`
+Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 Implemented scope:
 - new `render/RenderCtrlBridge` production package depends on `CtrlCore` + `RenderCanvas`, not CtrlLib, Ui, Vulkan or platform APIs;
-- public `RecordCtrlDisplayList()` walks the public U++ Ctrl tree and calls each real control's `Paint(Draw&)` plus public CtrlFrame paint/layout operations in U++ frame/owner/view-child order;
-- resolved `Ctrl::GetView()` remains the authoritative layout geometry; the bridge does not own or duplicate a control/layout/theme model;
-- neutral Draw adapter maps U++ Begin/End, Offset, Clip/Clipoff/intersect, rectangles, images including U++ tint semantics, text, lines/polylines, polygons and ellipses into existing immutable UiDisplayList operations;
-- Offset/Clip/Clipoff correctly open Draw state and are paired with End, matching U++ Draw semantics;
-- unsupported exclusion clips, invert/XOR/pattern drawing, arcs and rotated text fail explicitly instead of being silently dropped;
-- no HDC, private CtrlPaint access, `Ctrl::globalbackbuffer` mutation or native-child-per-control mechanism is used;
-- `tests/RenderCtrlBridgeTest` uses a real CtrlFrame plus real CtrlLib Label/Button and a custom painted child, checks recursive clip/offset state, text/image/vector intent, deterministic repeat and software replay, and verifies deterministic unsupported-op failure.
+- public `RecordCtrlDisplayList()` supplies a recording Win32 `SystemDraw` to public `Ctrl::DrawCtrl()`, so U++'s own private `CtrlPaint` path remains the recursive control/frame/layout/theme authority;
+- no duplicate Ctrl-tree traversal, private `CtrlPaint` access, HDC-backed target, native-child-per-control mechanism or second theme/layout model is introduced;
+- U++ 2026.1 normally routes Win32 painting through `BackDraw`; the bridge uses a harmless `FULLBACKPAINT` probe to observe the otherwise write-only `GlobalBackBuffer` state, enables direct drawing only when needed, and restores the exact inherited state under the GUI lock;
+- neutral `SystemDraw` translation maps U++ Begin/End, Offset, Clip/Clipoff/intersect, rectangles, images including U++ tint semantics, text, lines/polylines, disjunct polygons with EvenOdd fill, and ellipses into existing immutable `UiDisplayList` operations;
+- Offset/Clip/Clipoff open neutral Save state and are paired with U++ End semantics; polygon grouping/counts are validated before recording;
+- unsupported exclusion clips, native SystemDraw/GDI access, invert/XOR/pattern drawing, arcs and rotated text fail explicitly instead of being silently dropped;
+- `tests/RenderCtrlBridgeTest` uses a real CtrlFrame plus real CtrlLib Label/Button and a custom painted child, checks recursive clip/offset state, text/image/vector intent, disjunct polygon grouping, deterministic repeat and software replay;
+- focused Win32 evidence checks both inherited `GlobalBackBuffer(false)` and `GlobalBackBuffer(true)` states are preserved, and checks explicit failure for native drawing, native child-window exclusion and DrawArc.
 
 Boundary before root wiring:
-- this checkpoint records ordinary semantic control painting only; caret/native child-window composition and currently unsupported Draw operations remain explicit boundaries;
+- this checkpoint records ordinary resolved Win32 U++ semantic control painting only;
+- exclusion clips/native child surfaces, raw native drawing, arcs and rotated DrawText remain explicit unsupported boundaries;
 - `GpuTopWindow` has not yet been changed to consume this bridge in this checkpoint.
 
 ## Recovery Log
@@ -172,10 +174,10 @@ Boundary before root wiring:
 BASE: `f83f7b60c0bba89046367d31c5554ac2d62ea217` / `main`
 TASK: `TASK-011B` real U++ control/theme recording into root compositor
 TOUCHED: `render/RenderCtrlBridge/*`, `tests/RenderCtrlBridgeTest/*`, `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING SOURCE CHECKPOINT COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: existing main checkpoints through `f83f7b60c0bba89046367d31c5554ac2d62ea217`; Ctrl recording recovery branch source head `1e368ba4187a31b7e833cc1e9e6fbc42607f621d`, main merge pending
-VALIDATION: full dependency/API/source audit performed; HDC/BackDraw draft rejected before publication; Windows compile/runtime pending
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
+PUBLISHED: existing main checkpoints through `f83f7b60c0bba89046367d31c5554ac2d62ea217`; Ctrl recording recovery branch source head `b328c2c5be9e83b1127a6a2c6f1b06f492276d51`, main merge pending
+VALIDATION: complete dependency/API/source audit against U++ 2026.1 paint/Draw semantics; manual Ctrl-tree-walker draft rejected; Windows compile/runtime pending
 
 ## Next Action
 
-Publish and verify the CtrlCore recording bridge checkpoint. Then wire `GpuTopWindow` default root frame construction to `RecordCtrlDisplayList()` without changing window/input/layout/theme ownership, add a focused root control-tree GPU presentation test, and publish that as the next coherent checkpoint. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
+Publish and verify the CtrlCore `DrawCtrl` recording bridge checkpoint. Then validate `RenderCtrlBridgeTest` on Curt's Windows U++ 2026.1 environment and wire `GpuTopWindow` root frame construction to `RecordCtrlDisplayList()` as the next coherent Stage-6 slice. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
