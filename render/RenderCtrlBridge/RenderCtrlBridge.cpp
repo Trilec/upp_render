@@ -1,6 +1,8 @@
 #include "RenderCtrlBridge.h"
 
 namespace Upp {
+
+#ifdef PLATFORM_WIN32
 namespace {
 
 static Rgba8 ToRgba8(Color color)
@@ -86,10 +88,80 @@ static bool ConfigureStroke(int width, UiStrokeStyle& style)
 	return true;
 }
 
-class CtrlDisplayListDraw : public Draw {
+// CtrlCore does not expose a getter for GlobalBackBuffer(). A FULLBACKPAINT
+// probe lets us observe the current setting without touching private state:
+// when global-backbuffer mode is enabled, DrawCtrl paints directly into the
+// supplied SystemDraw; otherwise FULLBACKPAINT is rendered through BackDraw and
+// copied with BitBlt, bypassing this DrawRectOp override.
+static const Color DIRECT_PAINT_PROBE_COLOR = Color(17, 203, 91);
+
+class DirectPaintProbeCtrl : public Ctrl {
 public:
-	CtrlDisplayListDraw(UiDisplayListBuilder& target, Size size,
-	                    CtrlDisplayListRecordReport& target_report)
+	DirectPaintProbeCtrl()
+	{
+		SetRect(0, 0, 3, 3);
+		BackPaint(FULLBACKPAINT);
+		NoWantFocus();
+	}
+
+	void Paint(Draw& w) override
+	{
+		w.DrawRect(0, 0, 1, 1, DIRECT_PAINT_PROBE_COLOR);
+	}
+};
+
+class DirectPaintProbeDraw : public ImageDraw {
+public:
+	DirectPaintProbeDraw()
+		: ImageDraw(3, 3)
+	{
+	}
+
+	bool WasDirect() const { return direct; }
+
+	void DrawRectOp(int x, int y, int cx, int cy, Color color) override
+	{
+		if(x == 0 && y == 0 && cx == 1 && cy == 1 && color == DIRECT_PAINT_PROBE_COLOR)
+			direct = true;
+		SystemDraw::DrawRectOp(x, y, cx, cy, color);
+	}
+
+private:
+	bool direct = false;
+};
+
+static bool IsGlobalBackBufferEnabled()
+{
+	DirectPaintProbeCtrl ctrl;
+	DirectPaintProbeDraw draw;
+	ctrl.DrawCtrl(draw, 0, 0);
+	return draw.WasDirect();
+}
+
+class ScopedDirectCtrlPainting {
+public:
+	ScopedDirectCtrlPainting()
+	{
+		if(!IsGlobalBackBufferEnabled()) {
+			Ctrl::GlobalBackBuffer(true);
+			enabled_by_scope = true;
+		}
+	}
+
+	~ScopedDirectCtrlPainting()
+	{
+		if(enabled_by_scope)
+			Ctrl::GlobalBackBuffer(false);
+	}
+
+private:
+	bool enabled_by_scope = false;
+};
+
+class CtrlDisplayListSystemDraw : public SystemDraw {
+public:
+	CtrlDisplayListSystemDraw(UiDisplayListBuilder& target, Size size,
+	                          CtrlDisplayListRecordReport& target_report)
 		: builder(target), page_size(size), report(target_report)
 	{
 		state.clip = Rect(size);
@@ -97,72 +169,6 @@ public:
 
 	bool Failed() const { return !error.IsEmpty(); }
 	const String& GetError() const { return error; }
-
-	bool Record(Ctrl& ctrl)
-	{
-		if(Failed())
-			return false;
-		Size size = ctrl.GetSize();
-		if(!ctrl.IsShown() || size.cx <= 0 || size.cy <= 0)
-			return true;
-		if(dynamic_cast<DHCtrl *>(&ctrl)) {
-			Fail("native DHCtrl child surfaces are not recorded into the root neutral display list");
-			return false;
-		}
-
-		// FramePaint needs the same progressively reduced outer rectangle as
-		// CtrlCore. FrameLayout is applied to a local rectangle only; after frames
-		// are painted, GetView() remains the authoritative resolved layout geometry.
-		Rect frame_view(size);
-		for(int i = 0; i < ctrl.GetFrameCount(); i++) {
-			CtrlFrame& frame = ctrl.GetFrame(i);
-			frame.FramePaint(*this, frame_view);
-			if(Failed())
-				return false;
-			frame.FrameLayout(frame_view);
-		}
-		Rect view = ctrl.GetView();
-
-		// Frame children live in the outer control coordinate system and paint
-		// before the owner's view, matching CtrlCore's established ordering.
-		for(Ctrl *child = ctrl.GetFirstChild(); child; child = child->GetNext())
-			if(child->IsShown() && child->InFrame()) {
-				Offset(child->GetRect().TopLeft());
-				bool child_ok = Record(*child);
-				End();
-				if(!child_ok)
-					return false;
-			}
-
-		if(!view.IsEmpty()) {
-			Clipoff(view);
-			ctrl.Paint(*this);
-			End();
-			if(Failed())
-				return false;
-		}
-
-		// Ordinary children are positioned relative to the resolved view. U++
-		// remains the sole layout authority; this bridge consumes those rectangles.
-		if(!view.IsEmpty()) {
-			bool visible = Clip(view);
-			if(visible) {
-				for(Ctrl *child = ctrl.GetFirstChild(); child; child = child->GetNext())
-					if(child->IsShown() && child->InView()) {
-						Point offset = child->GetRect().TopLeft() + view.TopLeft();
-						Offset(offset);
-						bool child_ok = Record(*child);
-						End();
-						if(!child_ok) {
-							End();
-							return false;
-						}
-					}
-			}
-			End();
-		}
-		return !Failed();
-	}
 
 	dword GetInfo() const override { return NATIVE; }
 	Size GetPageSize() const override { return page_size; }
@@ -174,6 +180,13 @@ public:
 		return r;
 	}
 	int GetCloffLevel() const override { return stack.GetCount(); }
+
+	void BeginNative() override
+	{
+		Fail("native SystemDraw/GDI drawing is not supported by the neutral control recorder");
+	}
+
+	void EndNative() override {}
 
 	void BeginOp() override
 	{
@@ -222,7 +235,7 @@ public:
 
 	bool ExcludeClipOp(const Rect&) override
 	{
-		Fail("ExcludeClip is not representable by the current rectangular neutral clip contract");
+		Fail("ExcludeClip (including native child-window cutouts) is not representable by the current rectangular neutral clip contract");
 		return false;
 	}
 
@@ -469,6 +482,7 @@ private:
 };
 
 } // namespace
+#endif
 
 bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
                            CtrlDisplayListRecordReport *report)
@@ -478,14 +492,20 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 	CtrlDisplayListRecordReport& result = report ? *report : local_report;
 	result = CtrlDisplayListRecordReport();
 
+#ifdef PLATFORM_WIN32
+	GuiLock gui_lock;
 	UiDisplayListBuilder builder;
-	CtrlDisplayListDraw draw(builder, ctrl.GetSize(), result);
-	if(!draw.Record(ctrl)) {
+	CtrlDisplayListSystemDraw draw(builder, ctrl.GetSize(), result);
+	{
+		ScopedDirectCtrlPainting direct_paint;
+		ctrl.DrawCtrl(draw, 0, 0);
+	}
+	if(draw.Failed()) {
 		error = draw.GetError();
 		return false;
 	}
 	if(draw.GetCloffLevel() != 0) {
-		error = "U++ control recording left an unbalanced Draw state stack";
+		error = "U++ control drawing left an unbalanced Draw state stack";
 		return false;
 	}
 	if(!builder.Finish(out)) {
@@ -497,6 +517,13 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 		return false;
 	}
 	return true;
+#else
+	(void)ctrl;
+	(void)out;
+	result.unsupported_operation = "control recording SystemDraw adapter is not implemented for this platform";
+	error = result.unsupported_operation;
+	return false;
+#endif
 }
 
 }
