@@ -25,7 +25,7 @@ Stage 6 U++ integration is active in parallel so validation latency does not sta
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
-Active Stage-6 implementation continuation: `TASK-011B` — neutral recording/composition bridge from real U++ control/theme output into the root display list.
+Active Stage-6 implementation: `TASK-011B` — consolidated renderer showcase now source-complete; next production slice is real U++ control/theme recording into the root display list.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -89,45 +89,73 @@ Architecture constraints:
 ### TASK-011A — first root-composition boundary
 
 Published on `main`: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
-Source branch head: `caa1308258f59d525197867a3ba08d9e00949652`
 PR: `#22`
 Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 Implemented scope:
-- new backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
+- backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
 - Vulkan-specific ownership remains private to `RenderPresentation.cpp`; public presentation API contains no Vulkan types;
-- `GpuCtrl` is migrated onto `GpuDisplayPresenter`, removing its duplicate private Vulkan/session/swapchain/render lifecycle while retaining DHCtrl native-child hosting for explicitly embedded GPU content;
-- new `GpuTopWindow` binds `GpuDisplayPresenter` directly to the real top-level U++ HWND and creates no native child host;
+- `GpuCtrl` uses `GpuDisplayPresenter`, removing its duplicate private Vulkan/session/swapchain/render lifecycle while retaining DHCtrl hosting for explicitly embedded GPU content;
+- `GpuTopWindow` binds `GpuDisplayPresenter` directly to the real top-level U++ HWND and creates no native child host;
 - `GpuTopWindow::BuildGpuFrame()` is the first root neutral-display-list composition hook; U++ remains window/input/layout authority;
-- root WM_PAINT presents one neutral frame through one Vulkan surface/swapchain; normal TopWindow handling remains the fallback when GPU is not ready;
-- `GpuTopWindowPresentationTest` checks one live surface/device/swapchain, no idle recreation, same-size refresh without recreation, resize recreation, hide/show stability and zero Vulkan ownership after close;
-- existing `GpuCtrlPresentationTest` remains the regression authority for embedded-control isolation/lifecycle.
-
-Source-review boundary:
-- exactly 10 production/test files plus this status file;
-- no `RenderRhi`, `RenderVulkan`, `RenderGpu2D`, `RenderCanvas`, `RenderSoftware`, or Stage-5 production files changed;
-- U++ `Ctrl::GetHWND()` is a public top-level native-window boundary and `NcCreate`/`PreDestroy`/`WindowProc` are virtual on Win32, so the root binding uses supported U++ lifecycle seams rather than a child-HWND workaround.
+- root WM_PAINT presents one neutral frame through one Vulkan surface/swapchain; ordinary TopWindow handling remains fallback while GPU is unavailable;
+- `GpuTopWindowPresentationTest` covers one live surface/device/swapchain, idle stability, refresh, resize, hide/show and zero final Vulkan ownership.
 
 Still required before TASK-011A acceptance:
-- Windows Debug/Release compile and run of `GpuTopWindowPresentationTest`;
+- Windows Debug/Release compile/run of `GpuTopWindowPresentationTest`;
 - root Vulkan lifecycle evidence with validation 0/0 and final ownership zero;
-- `GpuCtrlPresentationTest` regression after migration to shared presenter.
+- `GpuCtrlPresentationTest` regression after shared-presenter migration.
 
-TASK-011A is a presentation boundary, not yet full automatic control-tree rendering. The next code slice must record resolved U++ control/theme drawing into the neutral display list rather than hard-code root scenes.
+### TASK-011B — embedded neutral frame source
 
-### Showcase / consolidated acceptance direction
+Published on `main`: `3ac69f1971b5770b08ab9d06b7be72654dabe521`
+Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
-Keep focused unit/regression tests for diagnosis, but add one representative visual showcase scene that exercises the complete renderer capability set through the same immutable display list: fills, strokes, rounded rectangles, clipping, affine transforms, alpha, images, text, gradients, vector paths and SVG. Replay the same scene through software and GPU paths. This becomes the developer-facing demo and broad rendering acceptance surface while the narrower tests remain useful for pinpointing failures.
+- `GpuCtrl::WhenBuildFrame` optionally accepts a caller-produced immutable neutral `UiDisplayList` plus background;
+- callback owns drawing intent only; native host, presentation session, surface/swapchain and renderer ownership stay in `GpuCtrl` / `GpuDisplayPresenter`;
+- unset callback preserves the existing default reference scene exactly;
+- invalid callback output is rejected before presentation.
+
+### Renderer Showcase / consolidated acceptance
+
+Recovery branch: `recovery/task-011b-renderer-showcase`
+PR: `#25`
+Reviewed source head before this status update: `b19f27428ed5c574a8119406ca9fb430604db8eb`
+Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+
+Reference UI revision inspected while designing the showcase:
+- `Trilec/upp_Ui` `main`: `b3375564dff21c124374472aabfd79d62ef0d51e`
+- visual/layout reference: `examples/UiLabelDemo`
+- PropertyEditor rules: `Utilities/PropertyEditor/DESIGN.md` and `README.md`
+
+Implemented design:
+- `examples/RendererShowcaseScene` is the single scene authority and depends only on Core/Draw/RenderCanvas;
+- the shared scene records fills, rectangle strokes, rounded geometry, Save/Restore, clipping, affine transform, source alpha, sampled image, text, reflected multi-stop gradient vector fill, dashed round vector stroke and SVG;
+- `examples/RendererShowcase` is a deliberately light developer-facing window inspired by the UiLabel demo: `UiTitleCard` header/title line, status + GPU/Software/Reset/Exit buttons, large preview area, right PropertyEditor rail;
+- PropertyEditor remains the single authored interactive state with `Renderer`, `Content`, `Appearance` and `Geometry` groups;
+- live controls are intentionally bounded: renderer mode, text/font size, image/SVG visibility, accent colour, opacity, corner radius, scale, rotation and clipping;
+- GPU preview uses `GpuCtrl::WhenBuildFrame`; software preview uses `SoftwareUiRenderer`; both call the exact same `BuildRendererShowcaseScene()` function;
+- `tests/RendererShowcaseTest` consumes that same shared scene, checks every broad capability op, deterministic dump, software visible output/immutability, and an alternate interactive property projection;
+- focused tests remain in place for failure diagnosis; this showcase/test is the broad capability and developer-facing acceptance surface.
+
+Dependency boundary:
+- no `Ui` or PropertyEditor dependency was added to RenderCore/RenderCanvas/RenderGpu2D/RenderRhi/RenderVulkan;
+- only the interactive example depends on the external `upp_Ui` repository;
+- console showcase test and shared scene remain renderer-repo-only.
+
+Windows build assembly notes:
+- `RendererShowcaseTest`: include `tests,render,examples,E:\upp-18468\uppsrc`;
+- interactive `RendererShowcase`: include `examples,render,E:\apps\github\upp_Ui,E:\upp-18468\uppsrc` so `Ui` and `Utilities/PropertyEditor` resolve from the live UI repo.
 
 ## Recovery Log
 
-BASE: `a4979f17becfb4af6390314cc316eb1ea31e3c92` / `main`
-TASK: Stage-5 final validation + `TASK-011B` real U++ control/theme recording into the root GPU compositor
-TOUCHED: TASK-011A published paths — `render/RenderPresentation/*`, `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`, `render/GpuCtrl/GpuCtrl.cpp`, `render/GpuCtrl/GpuCtrl.upp`; status `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011B NEXT
-PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A merge `a4979f17becfb4af6390314cc316eb1ea31e3c92`
-VALIDATION: Stage-5 final Windows gate pending; TASK-011A source/package/lifecycle review complete and published; TASK-011A Windows compile/runtime pending
+BASE: `3ac69f1971b5770b08ab9d06b7be72654dabe521` / `main`
+TASK: `TASK-011B` consolidated renderer showcase, then real U++ control/theme recording into root compositor
+TOUCHED: `examples/RendererShowcase/*`, `examples/RendererShowcaseScene/*`, `tests/RendererShowcaseTest/*`, `docs/ACTIVE_WORK.md`; enabling GpuCtrl seam already published separately
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011B SHOWCASE IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
+PUBLISHED: TASK-010C-A `e6367d8e72eea4803a3585680674c79784f52bef`; TASK-010C-B `0d37b2472c4d49e6908f6acbf5f85cc523193006`; TASK-011A `a4979f17becfb4af6390314cc316eb1ea31e3c92`; GpuCtrl neutral frame seam `3ac69f1971b5770b08ab9d06b7be72654dabe521`; showcase pending PR #25
+VALIDATION: showcase/shared-scene/package/API/full PR source review complete; Windows compile/runtime pending; Stage-5 and TASK-011A platform gates still pending
 
 ## Next Action
 
-STOP HERE until Curt says continue. On resume: refresh `main`, read this file first, then proceed with TASK-011B neutral U++ control/theme recording into the root display list. In parallel, create the consolidated visual renderer showcase/acceptance scene described above. Do not reopen Stage-3/4 architecture and do not create native child hosts for ordinary controls.
+Publish PR #25 and verify its exact merge on `main`. Then continue TASK-011B from that published tip with the production neutral recording/composition bridge from real resolved U++ control/theme painting into the root `GpuTopWindow` display list. Do not create one native child per ordinary control and do not duplicate U++ layout/input/focus/theme authority. In parallel, use `RendererShowcase` as the broad visual acceptance surface and keep focused tests for diagnosis.
