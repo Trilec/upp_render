@@ -2,10 +2,9 @@ uses
 	Core,
 	CtrlLib,
 	RenderCanvas,
-	RenderGpu2D,
 	RenderPlatformWin32,
-	RenderRhi,
-	RenderVulkan;
+	RenderPresentation,
+	RenderRhi;
 
 file
 	GpuCtrl.h,
