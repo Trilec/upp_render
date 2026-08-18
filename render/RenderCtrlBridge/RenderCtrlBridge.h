@@ -1,6 +1,6 @@
 #pragma once
 
-#include <CtrlLib/CtrlLib.h>
+#include <CtrlCore/CtrlCore.h>
 #include <RenderCanvas/RenderCanvas.h>
 
 namespace Upp {
