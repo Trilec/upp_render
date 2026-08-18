@@ -102,17 +102,22 @@ public:
 	{
 		if(Failed())
 			return false;
-		if(!ctrl.IsShown() || ctrl.GetSize().IsEmpty())
+		Size size = ctrl.GetSize();
+		if(!ctrl.IsShown() || size.cx <= 0 || size.cy <= 0)
 			return true;
 
-		Rect view = Rect(ctrl.GetSize());
+		// FramePaint needs the same progressively reduced outer rectangle as
+		// CtrlCore. FrameLayout is applied to a local rectangle only; after frames
+		// are painted, GetView() remains the authoritative resolved layout geometry.
+		Rect frame_view(size);
 		for(int i = 0; i < ctrl.GetFrameCount(); i++) {
 			CtrlFrame& frame = ctrl.GetFrame(i);
-			frame.FramePaint(*this, view);
+			frame.FramePaint(*this, frame_view);
 			if(Failed())
 				return false;
-			frame.FrameLayout(view);
+			frame.FrameLayout(frame_view);
 		}
+		Rect view = ctrl.GetView();
 
 		// Frame children live in the outer control coordinate system and paint
 		// before the owner's view, matching CtrlCore's established ordering.
