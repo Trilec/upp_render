@@ -256,7 +256,7 @@ public:
 	{
 		if(cx <= 0 || cy <= 0 || IsNull(color))
 			return;
-		if(color == InvertColor) {
+		if(color == InvertColor()) {
 			Fail("invert rectangle drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -269,7 +269,7 @@ public:
 		Image resolved = CropImage(image, src);
 		if(resolved.IsEmpty())
 			return;
-		if(color == InvertColor) {
+		if(color == InvertColor()) {
 			Fail("invert image drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -283,7 +283,7 @@ public:
 	{
 		if(IsNull(color))
 			return;
-		if(color == InvertColor) {
+		if(color == InvertColor()) {
 			Fail("invert line drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -307,7 +307,7 @@ public:
 		}
 		if(IsNull(color) || !vertices || !counts || vertex_count <= 0 || count_count <= 0)
 			return;
-		if(color == InvertColor) {
+		if(color == InvertColor()) {
 			Fail("invert polyline drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -350,7 +350,7 @@ public:
 			Fail("pattern/XOR polygon drawing is not supported by the neutral compositor");
 			return;
 		}
-		if((!IsNull(color) && color == InvertColor) || (!IsNull(outline) && outline == InvertColor)) {
+		if((!IsNull(color) && color == InvertColor()) || (!IsNull(outline) && outline == InvertColor())) {
 			Fail("invert polygon drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -408,7 +408,7 @@ public:
 
 	void DrawEllipseOp(const Rect& r, Color color, int pen, Color pencolor) override
 	{
-		if((!IsNull(color) && color == InvertColor) || (!IsNull(pencolor) && pencolor == InvertColor)) {
+		if((!IsNull(color) && color == InvertColor()) || (!IsNull(pencolor) && pencolor == InvertColor())) {
 			Fail("invert ellipse drawing is not supported by the neutral compositor");
 			return;
 		}
@@ -428,7 +428,7 @@ public:
 	{
 		if(!text || n <= 0 || IsNull(ink))
 			return;
-		if(ink == InvertColor) {
+		if(ink == InvertColor()) {
 			Fail("invert text drawing is not supported by the neutral compositor");
 			return;
 		}
