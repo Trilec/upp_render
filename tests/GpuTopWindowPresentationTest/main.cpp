@@ -21,6 +21,25 @@ static void PumpEvents(int count)
 	}
 }
 
+class ProbeCtrl : public Ctrl {
+public:
+	int GetPaintCount() const
+	{
+		return paint_count;
+	}
+
+	void Paint(Draw& w) override
+	{
+		++paint_count;
+		w.DrawRect(GetSize(), Color(44, 90, 156));
+		w.DrawText(10, 10, "Recorded child", StdFont(), Color(238, 245, 255));
+		w.DrawLine(10, 38, max(11, GetSize().cx - 10), 38, 2, Color(240, 176, 72));
+	}
+
+private:
+	int paint_count = 0;
+};
+
 class RootPresentationWindow : public GpuTopWindow {
 public:
 	RootPresentationWindow()
@@ -28,6 +47,12 @@ public:
 		Title("GpuTopWindowPresentationTest");
 		SetRect(120, 120, 720, 420);
 		SetValidation(true);
+
+		label.SetLabel("Recorded U++ Label");
+		button.SetLabel("Recorded U++ Button");
+		Add(label.LeftPos(24, 250).TopPos(28, 28));
+		Add(button.LeftPos(24, 190).TopPos(72, 34));
+		Add(probe.LeftPos(250, 260).TopPos(72, 120));
 	}
 
 	int GetFrameBuildCount() const
@@ -35,45 +60,98 @@ public:
 		return frame_build_count;
 	}
 
+	int GetRootPaintCount() const
+	{
+		return root_paint_count;
+	}
+
+	int GetProbePaintCount() const
+	{
+		return probe.GetPaintCount();
+	}
+
+	bool SawRecordedText() const
+	{
+		return saw_recorded_text;
+	}
+
+	bool SawRecordedGeometry() const
+	{
+		return saw_recorded_geometry;
+	}
+
 protected:
+	void Paint(Draw& w) override
+	{
+		++root_paint_count;
+		TopWindow::Paint(w);
+	}
+
 	bool BuildGpuFrame(Size size, UiDisplayList& list,
 	                   Rgba8& background, String& error) override
 	{
 		++frame_build_count;
-		background = Rgba8(18, 30, 52, 255);
-		error.Clear();
-		UiDisplayListBuilder builder;
-		if(size.cx > 0 && size.cy > 0) {
-			const double w = size.cx;
-			const double h = size.cy;
-			const double unit = max(1.0, min(w, h));
-			builder.FillRect(Rectf(0.08 * w, 0.10 * h, 0.44 * w, 0.48 * h),
-			                 Rgba8(224, 88, 36, 255));
-			builder.StrokeRect(Rectf(0.12 * w, 0.16 * h, 0.70 * w, 0.76 * h),
-			                   max(1.0, unit * 0.02), Rgba8(70, 220, 148, 220));
-			builder.Save();
-			builder.ClipRect(Rectf(0.34 * w, 0.20 * h, 0.92 * w, 0.90 * h));
-			Transform2D transform;
-			transform.x.x = 0.94;
-			transform.x.y = 0.10;
-			transform.y.x = -0.08;
-			transform.y.y = 0.96;
-			transform.t = Pointf(0.04 * w, 0.02 * h);
-			builder.ConcatTransform(transform);
-			struct RoundedRect rounded(Rectf(0.42 * w, 0.30 * h, 0.86 * w, 0.78 * h),
-			                           max(2.0, unit * 0.06));
-			builder.FillRoundedRect(rounded, Rgba8(72, 128, 238, 190));
-			builder.Restore();
-		}
-		if(!builder.Finish(list)) {
-			error = builder.GetError();
+		if(!GpuTopWindow::BuildGpuFrame(size, list, background, error))
 			return false;
+		for(int i = 0; i < list.GetCount(); ++i) {
+			const UiDisplayOpType type = list[i].type;
+			if(type == UiDisplayOpType::DrawText)
+				saw_recorded_text = true;
+			if(type == UiDisplayOpType::FillRect || type == UiDisplayOpType::StrokeRect ||
+			   type == UiDisplayOpType::FillPath || type == UiDisplayOpType::StrokePath ||
+			   type == UiDisplayOpType::DrawImage)
+				saw_recorded_geometry = true;
 		}
 		return true;
 	}
 
 private:
+	Label label;
+	Button button;
+	ProbeCtrl probe;
 	int frame_build_count = 0;
+	int root_paint_count = 0;
+	bool saw_recorded_text = false;
+	bool saw_recorded_geometry = false;
+};
+
+class FallbackPresentationWindow : public GpuTopWindow {
+public:
+	FallbackPresentationWindow()
+	{
+		Title("GpuTopWindowFallbackTest");
+		SetRect(160, 160, 480, 260);
+		SetValidation(true);
+	}
+
+	int GetFailedBuildCount() const
+	{
+		return failed_build_count;
+	}
+
+	int GetSoftwarePaintCount() const
+	{
+		return software_paint_count;
+	}
+
+protected:
+	void Paint(Draw& w) override
+	{
+		++software_paint_count;
+		TopWindow::Paint(w);
+		w.DrawText(20, 20, "Software fallback", StdFont(), Color(36, 72, 112));
+	}
+
+	bool BuildGpuFrame(Size, UiDisplayList&, Rgba8&, String& error) override
+	{
+		++failed_build_count;
+		error = "intentional root frame failure";
+		return false;
+	}
+
+private:
+	int failed_build_count = 0;
+	int software_paint_count = 0;
 };
 
 } // namespace
@@ -95,7 +173,7 @@ GUI_APP_MAIN
 		for(int i = 0; i < 500; ++i) {
 			Ctrl::ProcessEvents();
 			active = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
-			if(win.IsGpuReady() && active.swapchain_live_count == 1)
+			if(win.IsGpuReady() && active.swapchain_live_count == 1 && win.GetFrameBuildCount() > 0)
 				break;
 			Ctrl::GuiSleep(2);
 		}
@@ -103,12 +181,22 @@ GUI_APP_MAIN
 		ok &= Check(win.IsGpuReady(), "root TopWindow Vulkan presenter should become ready");
 		ok &= Check(win.GetGpuError().IsEmpty(), "root presenter should have no error");
 		ok &= Check(win.GetFrameBuildCount() > 0, "root WM_PAINT should build and present a neutral frame");
+		ok &= Check(win.GetRootPaintCount() > 0,
+		            "default root frame should record TopWindow painting through DrawCtrl");
+		ok &= Check(win.GetProbePaintCount() > 0,
+		            "default root frame should recursively record child control painting");
+		ok &= Check(win.SawRecordedText(),
+		            "default root display list should contain resolved U++ text intent");
+		ok &= Check(win.SawRecordedGeometry(),
+		            "default root display list should contain resolved U++ geometry intent");
 		ok &= Check(active.surface_live_count == 1 && active.device_live_count == 1 &&
 		            active.swapchain_live_count == 1,
 		            "root GPU window should own exactly one presentation surface/device/swapchain");
 
 		const uint64_t stable_swapchain_creates = active.swapchain_create_count;
 		const int stable_frame_builds = win.GetFrameBuildCount();
+		const int stable_root_paints = win.GetRootPaintCount();
+		const int stable_probe_paints = win.GetProbePaintCount();
 		PumpEvents(100);
 		auto stable = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(stable.swapchain_create_count == stable_swapchain_creates,
@@ -121,6 +209,9 @@ GUI_APP_MAIN
 		auto refreshed = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(win.GetFrameBuildCount() > stable_frame_builds,
 		            "explicit root refresh should build another frame");
+		ok &= Check(win.GetRootPaintCount() > stable_root_paints &&
+		            win.GetProbePaintCount() > stable_probe_paints,
+		            "explicit root refresh should re-record root and child painting");
 		ok &= Check(refreshed.swapchain_create_count == stable_swapchain_creates,
 		            "same-size root refresh must not recreate the swapchain");
 		ok &= Check(win.GetGpuError().IsEmpty(), "explicit root refresh should remain error-free");
@@ -146,6 +237,31 @@ GUI_APP_MAIN
 
 		win.Close();
 		PumpEvents(20);
+	}
+
+	{
+		FallbackPresentationWindow win;
+		win.Open();
+		ok &= Check(win.IsOpen(), "fallback root window should open");
+		if(win.IsOpen()) {
+			for(int i = 0; i < 500 && !win.IsGpuReady(); ++i) {
+				Ctrl::ProcessEvents();
+				Ctrl::GuiSleep(2);
+			}
+			ok &= Check(win.IsGpuReady(), "fallback test should initialize the GPU presenter");
+			const int failed_before = win.GetFailedBuildCount();
+			const int software_before = win.GetSoftwarePaintCount();
+			win.RequestGpuRefresh();
+			PumpEvents(80);
+			ok &= Check(win.GetFailedBuildCount() > failed_before,
+			            "failed root frame should still attempt the GPU frame builder");
+			ok &= Check(win.GetSoftwarePaintCount() > software_before,
+			            "failed root frame should fall through to normal U++ software painting");
+			ok &= Check(win.GetGpuError().Find("intentional root frame failure") >= 0,
+			            "failed root frame should retain diagnostic error evidence");
+			win.Close();
+			PumpEvents(20);
+		}
 	}
 
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();

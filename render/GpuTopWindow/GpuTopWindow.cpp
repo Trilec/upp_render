@@ -1,5 +1,7 @@
 #include "GpuTopWindow.h"
 
+#include <RenderCtrlBridge/RenderCtrlBridge.h>
+
 #ifdef PLATFORM_WIN32
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
 #endif
@@ -238,9 +240,9 @@ bool GpuTopWindow::BuildGpuFrame(Size, UiDisplayList& list,
 {
 	background = Rgba8(32, 32, 32, 255);
 	error.Clear();
-	UiDisplayListBuilder builder;
-	if(!builder.Finish(list)) {
-		error = builder.GetError();
+	if(!RecordCtrlDisplayList(*this, list, error)) {
+		if(error.IsEmpty())
+			error = "root U++ control recording failed";
 		return false;
 	}
 	return true;
@@ -268,12 +270,9 @@ LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 	if(message == WM_PAINT && impl && impl->IsGpuReady()) {
 		HWND hwnd = GetHWND();
-		if(hwnd && IsWindow(hwnd)) {
+		if(hwnd && IsWindow(hwnd) && impl->PresentRoot(hwnd)) {
 			PAINTSTRUCT ps;
-			HDC dc = BeginPaint(hwnd, &ps);
-			bool gpu_painted = impl->PresentRoot(hwnd);
-			if(!gpu_painted)
-				FillRect(dc, &ps.rcPaint, GetSysColorBrush(COLOR_WINDOW));
+			BeginPaint(hwnd, &ps);
 			EndPaint(hwnd, &ps);
 			return 0;
 		}

@@ -5,9 +5,10 @@
 
 namespace Upp {
 
-// Top-level U++ window whose client area can be presented through one GPU
-// surface. U++ remains the window/input/layout authority; subclasses provide
-// resolved neutral drawing intent through BuildGpuFrame().
+// Top-level U++ window whose client area is presented through one GPU surface.
+// U++ remains the window/input/layout/state/theme authority. By default the
+// resolved control tree is recorded into the neutral display list; subclasses
+// may still override BuildGpuFrame() for deliberately custom frame sources.
 //
 // This is intentionally different from GpuCtrl: no native child host is
 // created. The presenter binds directly to the TopWindow's own native window.
@@ -26,7 +27,9 @@ public:
 
 protected:
 	// Build one immutable frame for the current root client size. The default
-	// implementation emits an empty list and clears to a neutral background.
+	// implementation records this window's resolved U++ control tree through
+	// RecordCtrlDisplayList(). Overrides can provide custom neutral intent while
+	// leaving native-window and presentation ownership unchanged.
 	virtual bool BuildGpuFrame(Size size, UiDisplayList& list,
 	                           Rgba8& background, String& error);
 

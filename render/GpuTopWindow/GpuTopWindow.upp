@@ -2,6 +2,7 @@ uses
 	Core,
 	CtrlLib,
 	RenderCanvas,
+	RenderCtrlBridge,
 	RenderPlatformWin32,
 	RenderPresentation,
 	RenderRhi;
