@@ -33,7 +33,7 @@ Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING
 Stage 6 U++ integration is active, with the shared presenter, root presentation boundary, CtrlCore recorder and root compositor wiring now accepted.
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
-Remaining Stage-6 validation: the separately published `GpuCtrl::WhenBuildFrame` embedded neutral-frame source and Renderer Showcase/consolidated acceptance surface. The TASK-011C acceptance did not directly exercise those specific callback/showcase paths, so they remain explicit validation work rather than being inferred as accepted.
+Remaining Stage-6 validation: focused Windows/Vulkan acceptance of the published `GpuCtrl::WhenBuildFrame` embedded neutral-frame source, followed by Renderer Showcase/consolidated acceptance. The callback-specific test package is now published; acceptance is not inferred until that package passes on Windows.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -122,6 +122,8 @@ Windows acceptance evidence:
 ### TASK-011B — embedded neutral frame source
 
 Published on `main`: `3ac69f1971b5770b08ab9d06b7be72654dabe521`
+Focused acceptance package on `main`: `947a06038bddb6fd116b00aff1ac697a79eab55b`
+PR: `#29`
 Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 
 - `GpuCtrl::WhenBuildFrame` optionally accepts a caller-produced immutable neutral `UiDisplayList` plus background;
@@ -129,7 +131,17 @@ Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 - unset callback preserves the existing default reference scene exactly;
 - invalid callback output is rejected before presentation.
 
-This remains a separate validation boundary: the TASK-011C-W1 run validated the shared `GpuCtrl` presentation lifecycle, but the current `GpuCtrlPresentationTest` does not exercise the `WhenBuildFrame` callback contract itself.
+Focused acceptance coverage now published in `tests/GpuCtrlFrameSourceTest`:
+- live Vulkan `GpuCtrl` invokes `WhenBuildFrame` and passes the current native-host/control size;
+- same-size refresh invokes the callback again without recreating the swapchain;
+- resize propagates the new size and recreates the presentation swapchain while retaining one live surface/device/swapchain;
+- callback failure preserves caller diagnostic text without tearing down the GPU session;
+- invalid `UiDisplayList` output is rejected at the `GpuCtrl` boundary before presentation with deterministic builder error evidence;
+- a later valid frame recovers cleanly after both callback failure and invalid-list rejection;
+- close requires final Vulkan ownership to return to zero;
+- existing `GpuCtrlReplayTest` remains the unset/default-scene authority and `GpuCtrlPresentationTest` remains the shared lifecycle authority.
+
+Static review complete; Windows Debug/Release compile/runtime evidence for `GpuCtrlFrameSourceTest` is the remaining acceptance boundary.
 
 ### Renderer Showcase / consolidated acceptance
 
@@ -213,13 +225,13 @@ Windows acceptance evidence:
 
 ## Recovery Log
 
-BASE: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf` / `main`
-TASK: remaining Stage-6 validation/closure after accepted root compositor path
-TOUCHED: accepted root path — `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`; recovery status — `docs/ACTIVE_WORK.md`
+BASE: `947a06038bddb6fd116b00aff1ac697a79eab55b` / `main`
+TASK: `TASK-011B-FS1` Windows/Vulkan acceptance of the published `GpuCtrl::WhenBuildFrame` focused test
+TOUCHED: `tests/GpuCtrlFrameSourceTest/GpuCtrlFrameSourceTest.upp`, `tests/GpuCtrlFrameSourceTest/main.cpp`; recovery status — `docs/ACTIVE_WORK.md`
 STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: TASK-011A `a4979f17becfb4af6390314cc316eb1ea31e3c92`; root compositor wiring `21ca529525455408356c38c4d5a2b8361cf950fd` via PR `#28`; acceptance evidence at `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`; earlier checkpoints unchanged
-VALIDATION: TASK-011C-W1 root Debug `4/4`, Release `2/2`; GpuCtrl presentation Debug/Release PASS; recorder Debug/Release PASS; RenderCanvas/RenderVector/RenderText Debug PASS; no validation messages/asserts/crashes/FAIL output; root Vulkan ownership zero; clean worktree
+PUBLISHED: embedded frame-source implementation `3ac69f1971b5770b08ab9d06b7be72654dabe521`; focused callback acceptance package `947a06038bddb6fd116b00aff1ac697a79eab55b` via PR `#29`; accepted root checkpoints unchanged
+VALIDATION: focused callback package source/API/dependency review complete; no production code changed; Windows Debug/Release compile/runtime pending
 
 ## Next Action
 
-Close the remaining published validation boundaries without redesign: run the focused `GpuCtrl::WhenBuildFrame` callback acceptance and Renderer Showcase/consolidated acceptance, while the existing Stage-5 final vector/Vulkan acceptance remains tracked separately. Do not reopen the accepted root compositor architecture unless new failing evidence requires it.
+Run `GpuCtrlFrameSourceTest` Debug/Release on Windows with Vulkan validation enabled, then run `GpuCtrlReplayTest` and `GpuCtrlPresentationTest` regressions to protect unset/default behavior and shared presenter lifecycle. If clean, accept the embedded `GpuCtrl::WhenBuildFrame` boundary and proceed directly to Renderer Showcase/consolidated acceptance. Stage-5 final vector/Vulkan acceptance remains tracked separately.
