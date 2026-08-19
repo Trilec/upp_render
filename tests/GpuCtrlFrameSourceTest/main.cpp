@@ -1,5 +1,6 @@
 #include <CtrlLib/CtrlLib.h>
 #include <GpuCtrl/GpuCtrl.h>
+#include <RenderCanvas/RenderCanvas.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 
 using namespace Upp;
