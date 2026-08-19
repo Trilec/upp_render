@@ -17,6 +17,9 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 - Stage-5 text Windows acceptance HEAD: `91f1fe3cad91b5afe00de4afd6398b773e8f4715`
 - TASK-010B-W1: **PASS** — text/software/Null Debug+Release PASS; Vulkan text Debug 4/4 + Release 2/2; GPU2D/image/GpuCtrl regressions PASS; validation 0/0; adapter resources 0; Vulkan ownership `0/0/0/0/0/0`
 - TASK-010B-W1 mechanical source corrections: `6f322ad4ecc4b2364d020a00bb3676695cbc9cab`
+- TASK-011B CtrlCore semantic recording bridge: **PASS / accepted**
+- TASK-011B implementation: `c4210d80a815950df53df5db9dea45a38edbbfdd`
+- TASK-011B Windows acceptance HEAD: `d386ba1aa954ea8d16a58a35170fa9f722be1e78`
 
 ## Current Objective
 
@@ -25,7 +28,7 @@ Stage 6 U++ integration is active in parallel so validation latency does not sta
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Active Stage-6 validation: `TASK-011A-W1` — shared presenter + root `GpuTopWindow` Windows/Vulkan acceptance.
-Active Stage-6 implementation: `TASK-011B` — CtrlCore semantic `DrawCtrl` recording bridge is published; next slice wires that bridge into the root `GpuTopWindow` compositor.
+Active Stage-6 implementation: root compositor wiring — feed the accepted CtrlCore semantic recorder into the root `GpuTopWindow` presentation path while preserving U++ authority, fallback behavior and the single-root-surface architecture.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -152,7 +155,7 @@ Windows build assembly notes:
 Published on `main`: `c4210d80a815950df53df5db9dea45a38edbbfdd`
 Source head: `30ef093f4035eff923594bc6408ae17292a8512f`
 PR: `#27`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+Status: **PASS / accepted**
 
 Implemented scope:
 - new `render/RenderCtrlBridge` production package depends on `CtrlCore` + `RenderCanvas`, not CtrlLib, Ui, Vulkan or platform APIs;
@@ -165,20 +168,30 @@ Implemented scope:
 - `tests/RenderCtrlBridgeTest` uses a real CtrlFrame plus real CtrlLib Label/Button and a custom painted child, checks recursive clip/offset state, text/image/vector intent, disjunct polygon grouping, deterministic repeat and software replay;
 - focused Win32 evidence checks both inherited `GlobalBackBuffer(false)` and `GlobalBackBuffer(true)` states are preserved, and checks explicit failure for native drawing, native child-window exclusion and DrawArc.
 
-Boundary before root wiring:
+Windows acceptance at `d386ba1aa954ea8d16a58a35170fa9f722be1e78`:
+- required implementation ancestor `c4210d80a815950df53df5db9dea45a38edbbfdd` verified;
+- Debug compile PASS and focused runs PASS `4/4`;
+- Release compile PASS and focused runs PASS `2/2`;
+- `RenderCanvasTest`, `RenderVectorTest` and `RenderTextTest` regressions PASS;
+- final worktree clean and `git diff HEAD --check` PASS;
+- no edits, commits or pushes were made during validation;
+- first build invocation used an invalid build-method path; retry with available `CLANGx64_Vulkan.bm` passed, so this is not a product failure;
+- no media-plugin tests were run; they are outside this focused recorder acceptance.
+
+Accepted boundary before root wiring:
 - this checkpoint records ordinary resolved Win32 U++ semantic control painting only;
 - exclusion clips/native child surfaces, raw native drawing, arcs and rotated DrawText remain explicit unsupported boundaries;
 - `GpuTopWindow` has not yet been changed to consume this bridge in this checkpoint.
 
 ## Recovery Log
 
-BASE: `c4210d80a815950df53df5db9dea45a38edbbfdd` / `main`
-TASK: `TASK-011B` root compositor wiring from published CtrlCore semantic recording bridge
-TOUCHED: published recorder — `render/RenderCtrlBridge/*`, `tests/RenderCtrlBridgeTest/*`; recovery status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; ROOT WIRING NEXT
-PUBLISHED: Ctrl recording `c4210d80a815950df53df5db9dea45a38edbbfdd` via PR `#27`; earlier checkpoints unchanged
-VALIDATION: full aggregate PR/dependency/API/source review complete against U++ 2026.1 paint/Draw semantics; remote main and squash commit independently verified; Windows compile/runtime pending
+BASE: `d386ba1aa954ea8d16a58a35170fa9f722be1e78` / `main`
+TASK: root compositor wiring from accepted CtrlCore semantic recording bridge
+TOUCHED: accepted recorder — `render/RenderCtrlBridge/*`, `tests/RenderCtrlBridgeTest/*`; recovery status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING PASS / ACCEPTED; ROOT WIRING NEXT
+PUBLISHED: Ctrl recording `c4210d80a815950df53df5db9dea45a38edbbfdd` via PR `#27`; Windows acceptance at `d386ba1aa954ea8d16a58a35170fa9f722be1e78`; earlier checkpoints unchanged
+VALIDATION: `RenderCtrlBridgeTest` Debug compile + `4/4`, Release compile + `2/2`, `RenderCanvasTest`, `RenderVectorTest`, `RenderTextTest`, clean worktree and diff check all PASS on Windows U++ 2026.1 using `CLANGx64_Vulkan.bm`; no media-plugin tests run
 
 ## Next Action
 
-Validate `RenderCtrlBridgeTest` on Curt's Windows U++ 2026.1 environment. In parallel, inspect the published `GpuTopWindow` root frame hook and implement the smallest coherent wiring that feeds its real resolved U++ control tree through `RecordCtrlDisplayList()` into the existing presenter, preserving fallback behavior and the single-root-surface architecture. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
+Inspect the current `GpuTopWindow` root frame hook and implement the smallest coherent wiring that feeds its real resolved U++ control tree through accepted `RecordCtrlDisplayList()` into the existing presenter, preserving fallback behavior and the single-root-surface architecture. Keep `RendererShowcase` as the broad visual acceptance surface and focused tests for diagnosis.
