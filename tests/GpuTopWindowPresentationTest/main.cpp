@@ -48,11 +48,14 @@ public:
 		SetRect(120, 120, 720, 420);
 		SetValidation(true);
 
+		label.SetRect(24, 28, 250, 28);
+		button.SetRect(24, 72, 190, 34);
+		probe.SetRect(250, 72, 260, 120);
 		label.SetLabel("Recorded U++ Label");
 		button.SetLabel("Recorded U++ Button");
-		Add(label.LeftPos(24, 250).TopPos(28, 28));
-		Add(button.LeftPos(24, 190).TopPos(72, 34));
-		Add(probe.LeftPos(250, 260).TopPos(72, 120));
+		Add(label);
+		Add(button);
+		Add(probe);
 	}
 
 	int GetFrameBuildCount() const
