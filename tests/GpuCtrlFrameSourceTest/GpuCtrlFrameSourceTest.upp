@@ -2,6 +2,7 @@ uses
 	Core,
 	CtrlLib,
 	GpuCtrl,
+	RenderCanvas,
 	RenderVulkan;
 
 file
