@@ -17,18 +17,23 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 - Stage-5 text Windows acceptance HEAD: `91f1fe3cad91b5afe00de4afd6398b773e8f4715`
 - TASK-010B-W1: **PASS** — text/software/Null Debug+Release PASS; Vulkan text Debug 4/4 + Release 2/2; GPU2D/image/GpuCtrl regressions PASS; validation 0/0; adapter resources 0; Vulkan ownership `0/0/0/0/0/0`
 - TASK-010B-W1 mechanical source corrections: `6f322ad4ecc4b2364d020a00bb3676695cbc9cab`
+- TASK-011A shared presenter/root presentation boundary: **PASS / accepted**
+- TASK-011A implementation: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
+- TASK-011A Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
 - TASK-011B CtrlCore semantic recording bridge: **PASS / accepted**
 - TASK-011B implementation: `c4210d80a815950df53df5db9dea45a38edbbfdd`
 - TASK-011B Windows acceptance HEAD: `d386ba1aa954ea8d16a58a35170fa9f722be1e78`
+- TASK-011C root compositor wiring: **PASS / accepted**
+- TASK-011C implementation: `21ca529525455408356c38c4d5a2b8361cf950fd`
+- TASK-011C Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
 
 ## Current Objective
 
 Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING**.
-Stage 6 U++ integration is active in parallel so validation latency does not stall implementation.
+Stage 6 U++ integration is active, with the shared presenter, root presentation boundary, CtrlCore recorder and root compositor wiring now accepted.
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
-Active Stage-6 validation: shared presenter/root lifecycle plus the new root compositor wiring.
-Active Stage-6 implementation: root compositor wiring is published as `TASK-011C`; Windows/Vulkan compile/runtime acceptance is now the remaining boundary before this slice can be accepted.
+Remaining Stage-6 validation: the separately published `GpuCtrl::WhenBuildFrame` embedded neutral-frame source and Renderer Showcase/consolidated acceptance surface. The TASK-011C acceptance did not directly exercise those specific callback/showcase paths, so they remain explicit validation work rather than being inferred as accepted.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -93,7 +98,8 @@ Architecture constraints:
 
 Published on `main`: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
 PR: `#22`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+Status: **PASS / accepted**
+Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
 
 Implemented scope:
 - backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
@@ -104,10 +110,14 @@ Implemented scope:
 - root WM_PAINT presents one neutral frame through one Vulkan surface/swapchain;
 - `GpuTopWindowPresentationTest` covers live surface/device/swapchain ownership, idle stability, refresh, resize, hide/show and zero final Vulkan ownership.
 
-Still required before TASK-011A acceptance:
-- Windows Debug/Release compile/run of the current `GpuTopWindowPresentationTest`;
-- root Vulkan lifecycle evidence with validation 0/0 and final ownership zero;
-- `GpuCtrlPresentationTest` regression after shared-presenter migration.
+Windows acceptance evidence:
+- current `GpuTopWindowPresentationTest` Debug compile PASS and runs PASS `4/4`;
+- Release compile PASS and runs PASS `2/2`;
+- `GpuCtrlPresentationTest` Debug PASS and Release PASS after the shared-presenter migration;
+- validation was requested in the root and embedded Vulkan presentation tests and no validation messages occurred;
+- no assertions, crashes or `FAIL` output occurred;
+- root test final Vulkan ownership passed at zero;
+- final worktree clean and diff check passed.
 
 ### TASK-011B — embedded neutral frame source
 
@@ -118,6 +128,8 @@ Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
 - callback owns drawing intent only; native host, presentation session, surface/swapchain and renderer ownership stay in `GpuCtrl` / `GpuDisplayPresenter`;
 - unset callback preserves the existing default reference scene exactly;
 - invalid callback output is rejected before presentation.
+
+This remains a separate validation boundary: the TASK-011C-W1 run validated the shared `GpuCtrl` presentation lifecycle, but the current `GpuCtrlPresentationTest` does not exercise the `WhenBuildFrame` callback contract itself.
 
 ### Renderer Showcase / consolidated acceptance
 
@@ -175,7 +187,8 @@ Accepted boundary:
 Published on `main`: `21ca529525455408356c38c4d5a2b8361cf950fd`
 Source head: `dbc7f27f2888ba637d949dadc25edcd9074a3537`
 PR: `#28`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+Status: **PASS / accepted**
+Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
 
 Implemented scope:
 - `GpuTopWindow` now depends directly on `RenderCtrlBridge` and the base `BuildGpuFrame()` records `*this` through accepted `RecordCtrlDisplayList()`;
@@ -186,21 +199,27 @@ Implemented scope:
 - the production hot path adds only the accepted semantic recording call on actual root repaints; no new persistent cache or duplicate state is introduced;
 - `GpuTopWindowPresentationTest` now exercises the base recorder with a real Label, Button and custom child, verifies root/child paint execution plus semantic text/geometry evidence, re-records on explicit refresh, preserves one surface/device/swapchain lifecycle, and checks an intentional frame-build failure falls through to U++ software painting while retaining diagnostic error evidence.
 
-Static review boundary:
-- aggregate PR diff and dependency direction reviewed;
-- U++ 2026.1 `Ctrl::DrawCtrl` / recursive `CtrlPaint` behavior rechecked; root recording invokes control painting, not `GpuTopWindow::WindowProc`, so the wiring does not create WM_PAINT recursion;
-- `GpuTopWindow -> RenderCtrlBridge -> CtrlCore/RenderCanvas` remains acyclic;
-- Windows/Vulkan compile/runtime evidence is still required before acceptance.
+Windows acceptance evidence:
+- implementation ancestor `21ca529525455408356c38c4d5a2b8361cf950fd` verified at acceptance HEAD;
+- `GpuTopWindowPresentationTest` Debug compile PASS, runs PASS `4/4`;
+- Release compile PASS, runs PASS `2/2`;
+- `GpuCtrlPresentationTest` Debug/Release PASS;
+- `RenderCtrlBridgeTest` Debug/Release PASS;
+- `RenderCanvasTest`, `RenderVectorTest` and `RenderTextTest` Debug PASS;
+- no assertions, validation messages, crashes or `FAIL` output;
+- root test final Vulkan ownership passed at zero;
+- final worktree clean and diff check passed;
+- no edits, commits or pushes were made during validation.
 
 ## Recovery Log
 
-BASE: `21ca529525455408356c38c4d5a2b8361cf950fd` / `main`
-TASK: `TASK-011C-W1` Windows/Vulkan acceptance of published root compositor wiring
-TOUCHED: `render/GpuTopWindow/GpuTopWindow.h`, `render/GpuTopWindow/GpuTopWindow.cpp`, `render/GpuTopWindow/GpuTopWindow.upp`, `tests/GpuTopWindowPresentationTest/main.cpp`; recovery status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; CTRL RECORDING PASS / ACCEPTED; ROOT COMPOSITOR WIRING IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: root compositor wiring `21ca529525455408356c38c4d5a2b8361cf950fd` via PR `#28`; accepted recorder `c4210d80a815950df53df5db9dea45a38edbbfdd`; earlier checkpoints unchanged
-VALIDATION: aggregate source/API/dependency/fallback review complete; exact U++ 2026.1 DrawCtrl/CtrlPaint path rechecked; no local Windows compile/runtime capability in supervisor environment; platform acceptance pending
+BASE: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf` / `main`
+TASK: remaining Stage-6 validation/closure after accepted root compositor path
+TOUCHED: accepted root path — `render/GpuTopWindow/*`, `tests/GpuTopWindowPresentationTest/*`; recovery status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
+PUBLISHED: TASK-011A `a4979f17becfb4af6390314cc316eb1ea31e3c92`; root compositor wiring `21ca529525455408356c38c4d5a2b8361cf950fd` via PR `#28`; acceptance evidence at `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`; earlier checkpoints unchanged
+VALIDATION: TASK-011C-W1 root Debug `4/4`, Release `2/2`; GpuCtrl presentation Debug/Release PASS; recorder Debug/Release PASS; RenderCanvas/RenderVector/RenderText Debug PASS; no validation messages/asserts/crashes/FAIL output; root Vulkan ownership zero; clean worktree
 
 ## Next Action
 
-Run focused Windows Debug/Release acceptance of `GpuTopWindowPresentationTest` at a HEAD containing `21ca529525455408356c38c4d5a2b8361cf950fd`, then run `GpuCtrlPresentationTest` plus accepted recorder/render regressions. Require one root surface/device/swapchain, successful real-control recording, software fallback evidence, validation 0/0 where reported, zero final Vulkan ownership and a clean worktree. If that passes, accept TASK-011C and use the resulting evidence to close the remaining TASK-011A root-presentation validation boundary.
+Close the remaining published validation boundaries without redesign: run the focused `GpuCtrl::WhenBuildFrame` callback acceptance and Renderer Showcase/consolidated acceptance, while the existing Stage-5 final vector/Vulkan acceptance remains tracked separately. Do not reopen the accepted root compositor architecture unless new failing evidence requires it.
