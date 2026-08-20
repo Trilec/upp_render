@@ -1,5 +1,7 @@
 #include "RendererShowcaseScene.h"
 
+#include <CtrlLib/CtrlLib.h>
+
 #include <cmath>
 
 namespace Upp {
