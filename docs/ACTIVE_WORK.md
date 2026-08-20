@@ -20,6 +20,10 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 - TASK-011A shared presenter/root presentation boundary: **PASS / accepted**
 - TASK-011A implementation: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
 - TASK-011A Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
+- TASK-011B embedded neutral frame source: **PASS / accepted**
+- TASK-011B frame-source implementation: `3ac69f1971b5770b08ab9d06b7be72654dabe521`
+- TASK-011B focused acceptance package: `947a06038bddb6fd116b00aff1ac697a79eab55b`
+- TASK-011B frame-source Windows acceptance HEAD: `e3ad497b0bb0d001287eddd2d90e0fae861e00c7`
 - TASK-011B CtrlCore semantic recording bridge: **PASS / accepted**
 - TASK-011B implementation: `c4210d80a815950df53df5db9dea45a38edbbfdd`
 - TASK-011B Windows acceptance HEAD: `d386ba1aa954ea8d16a58a35170fa9f722be1e78`
@@ -30,10 +34,10 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 ## Current Objective
 
 Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING**.
-Stage 6 U++ integration is active, with the shared presenter, root presentation boundary, CtrlCore recorder and root compositor wiring now accepted.
+Stage 6 U++ integration has accepted the shared presenter, root presentation boundary, embedded neutral frame source, CtrlCore recorder and root compositor wiring.
 
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
-Remaining Stage-6 validation: focused Windows/Vulkan acceptance of the published `GpuCtrl::WhenBuildFrame` embedded neutral-frame source, followed by Renderer Showcase/consolidated acceptance. The callback-specific test package is now published; acceptance is not inferred until that package passes on Windows.
+Remaining Stage-6 validation: Renderer Showcase / consolidated acceptance only.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
@@ -124,14 +128,15 @@ Windows acceptance evidence:
 Published on `main`: `3ac69f1971b5770b08ab9d06b7be72654dabe521`
 Focused acceptance package on `main`: `947a06038bddb6fd116b00aff1ac697a79eab55b`
 PR: `#29`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+Status: **PASS / accepted**
+Windows acceptance HEAD: `e3ad497b0bb0d001287eddd2d90e0fae861e00c7`
 
 - `GpuCtrl::WhenBuildFrame` optionally accepts a caller-produced immutable neutral `UiDisplayList` plus background;
 - callback owns drawing intent only; native host, presentation session, surface/swapchain and renderer ownership stay in `GpuCtrl` / `GpuDisplayPresenter`;
 - unset callback preserves the existing default reference scene exactly;
 - invalid callback output is rejected before presentation.
 
-Focused acceptance coverage now published in `tests/GpuCtrlFrameSourceTest`:
+Focused acceptance coverage in `tests/GpuCtrlFrameSourceTest`:
 - live Vulkan `GpuCtrl` invokes `WhenBuildFrame` and passes the current native-host/control size;
 - same-size refresh invokes the callback again without recreating the swapchain;
 - resize propagates the new size and recreates the presentation swapchain while retaining one live surface/device/swapchain;
@@ -141,7 +146,18 @@ Focused acceptance coverage now published in `tests/GpuCtrlFrameSourceTest`:
 - close requires final Vulkan ownership to return to zero;
 - existing `GpuCtrlReplayTest` remains the unset/default-scene authority and `GpuCtrlPresentationTest` remains the shared lifecycle authority.
 
-Static review complete; Windows Debug/Release compile/runtime evidence for `GpuCtrlFrameSourceTest` is the remaining acceptance boundary.
+Windows acceptance evidence:
+- required focused-test ancestor `947a06038bddb6fd116b00aff1ac697a79eab55b` verified at acceptance HEAD;
+- `GpuCtrlFrameSourceTest` Debug compile PASS, runs PASS `4/4`;
+- Release compile PASS, runs PASS `2/2`;
+- `GpuCtrlReplayTest` Debug/Release PASS;
+- `GpuCtrlPresentationTest` Debug/Release PASS;
+- no Vulkan validation messages, assertions, crashes or `FAIL` output;
+- final Vulkan ownership returned to zero as asserted by the tests;
+- final worktree clean and diff checks passed;
+- no edits, commits or pushes were made during validation.
+
+Accepted boundary: caller-owned neutral embedded frame sourcing, default-scene preservation, invalid-output rejection, failure recovery and shared presentation lifecycle are accepted.
 
 ### Renderer Showcase / consolidated acceptance
 
@@ -155,13 +171,19 @@ Reference UI revision inspected while designing the showcase:
 - visual/layout reference: `examples/UiLabelDemo`
 - PropertyEditor rules: `Utilities/PropertyEditor/DESIGN.md` and `README.md`
 
+Current compatibility review:
+- current `Trilec/upp_Ui` `main` inspected at `1c239c68c504919e60859955db4faf9ea537d181`;
+- `UiTitleCard` still exposes the title/subtitle/title-line/content-cell/inset API used by the showcase;
+- `UiStack`, `UiBoxLayout`, `UiButton` and PropertyEditor model/event APIs used by the showcase remain source-compatible;
+- no compatibility patch is justified before Windows validation.
+
 Implemented design:
 - `examples/RendererShowcaseScene` is the single scene authority and depends only on Core/Draw/RenderCanvas;
 - the shared scene records fills, rectangle strokes, rounded geometry, Save/Restore, clipping, affine transform, source alpha, sampled image, text, reflected multi-stop gradient vector fill, dashed round vector stroke and SVG;
 - `examples/RendererShowcase` is a deliberately light developer-facing window inspired by the UiLabel demo: `UiTitleCard` header/title line, status + GPU/Software/Reset/Exit buttons, large preview area, right PropertyEditor rail;
 - PropertyEditor remains the single authored interactive state with `Renderer`, `Content`, `Appearance` and `Geometry` groups;
 - live controls are intentionally bounded: renderer mode, text/font size, image/SVG visibility, accent colour, opacity, corner radius, scale, rotation and clipping;
-- GPU preview uses `GpuCtrl::WhenBuildFrame`; software preview uses `SoftwareUiRenderer`; both call the exact same `BuildRendererShowcaseScene()` function;
+- GPU preview uses accepted `GpuCtrl::WhenBuildFrame`; software preview uses `SoftwareUiRenderer`; both call the exact same `BuildRendererShowcaseScene()` function;
 - `tests/RendererShowcaseTest` consumes that same shared scene, checks every broad capability op, deterministic dump, software visible output/immutability, and an alternate interactive property projection;
 - focused tests remain in place for failure diagnosis; this showcase/test is the broad capability and developer-facing acceptance surface.
 
@@ -173,6 +195,13 @@ Dependency boundary:
 Windows build assembly notes:
 - `RendererShowcaseTest`: include `tests,render,examples,E:\upp-18468\uppsrc`;
 - interactive `RendererShowcase`: include `examples,render,E:\apps\github\upp_Ui,E:\upp-18468\uppsrc` so `Ui` and `Utilities/PropertyEditor` resolve from the live UI repo.
+
+Acceptance boundary:
+- no additional production/test code is required by source review;
+- run `RendererShowcaseTest` Debug/Release as the broad deterministic scene/software gate;
+- build `RendererShowcase` Debug/Release against current `upp_Ui` main;
+- manually smoke the live window: GPU preview, Software preview, property edits, reset, resize and return to GPU must remain stable and visibly update the shared scene;
+- no Vulkan validation errors or crashes are acceptable during the live GPU smoke.
 
 ### TASK-011B — CtrlCore semantic recording bridge
 
@@ -225,13 +254,13 @@ Windows acceptance evidence:
 
 ## Recovery Log
 
-BASE: `947a06038bddb6fd116b00aff1ac697a79eab55b` / `main`
-TASK: `TASK-011B-FS1` Windows/Vulkan acceptance of the published `GpuCtrl::WhenBuildFrame` focused test
-TOUCHED: `tests/GpuCtrlFrameSourceTest/GpuCtrlFrameSourceTest.upp`, `tests/GpuCtrlFrameSourceTest/main.cpp`; recovery status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: embedded frame-source implementation `3ac69f1971b5770b08ab9d06b7be72654dabe521`; focused callback acceptance package `947a06038bddb6fd116b00aff1ac697a79eab55b` via PR `#29`; accepted root checkpoints unchanged
-VALIDATION: focused callback package source/API/dependency review complete; no production code changed; Windows Debug/Release compile/runtime pending
+BASE: `e3ad497b0bb0d001287eddd2d90e0fae861e00c7` / `main`
+TASK: Renderer Showcase / consolidated Windows acceptance
+TOUCHED: showcase validation surface — `examples/RendererShowcase/*`, `examples/RendererShowcaseScene/*`, `tests/RendererShowcaseTest/*`; recovery status — `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
+PUBLISHED: frame-source implementation `3ac69f1971b5770b08ab9d06b7be72654dabe521`; focused callback package `947a06038bddb6fd116b00aff1ac697a79eab55b`; showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; accepted root checkpoints unchanged
+VALIDATION: TASK-011B-FS1 Debug `4/4`, Release `2/2`; GpuCtrlReplay Debug/Release PASS; GpuCtrlPresentation Debug/Release PASS; no validation/assert/crash/FAIL output; final Vulkan ownership zero; showcase source/package and current `upp_Ui` API compatibility review complete
 
 ## Next Action
 
-Run `GpuCtrlFrameSourceTest` Debug/Release on Windows with Vulkan validation enabled, then run `GpuCtrlReplayTest` and `GpuCtrlPresentationTest` regressions to protect unset/default behavior and shared presenter lifecycle. If clean, accept the embedded `GpuCtrl::WhenBuildFrame` boundary and proceed directly to Renderer Showcase/consolidated acceptance. Stage-5 final vector/Vulkan acceptance remains tracked separately.
+Run Renderer Showcase consolidated Windows acceptance: `RendererShowcaseTest` Debug/Release, interactive `RendererShowcase` Debug/Release build against current `upp_Ui` main, and a bounded manual live smoke covering GPU/Software switching, representative property changes, reset, resize and return to GPU. If clean, accept the Stage-6 showcase boundary. Stage-5 final vector/Vulkan acceptance remains tracked separately.
