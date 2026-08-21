@@ -39,6 +39,8 @@ Stage 6 U++ integration has accepted the shared presenter, root presentation bou
 Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
 Remaining Stage-6 validation: Renderer Showcase / consolidated acceptance only.
 
+The Renderer Showcase live GPU smoke exposed a real Vulkan framebuffer-orientation defect that earlier structural/resource tests did not detect. The entire GPU scene was vertically inverted, not merely sampled texture content. Root cause is the combination of UiRenderer2D's conventional +Y-up NDC mapping with a positive-height Vulkan viewport. Production correction `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8` normalizes Vulkan to the neutral/U++ top-left framebuffer orientation with a negative-height viewport. Targeted Windows/Vulkan regression plus visual revalidation is required before showcase acceptance can close.
+
 ## Stage 5 - Text, Images and Vector Rendering
 
 ### Images — accepted
@@ -164,7 +166,7 @@ Accepted boundary: caller-owned neutral embedded frame sourcing, default-scene p
 Published on `main`: `094e8807c70fd591bf7e921a5a98ae7069a8b97f`
 Source head: `a8d873c987418a183515885751ea0c742edef3aa`
 PR: `#25`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+Status: **FAIL — VISUAL BLOCKER FIX PUBLISHED / REVALIDATION PENDING**
 
 Reference UI revision inspected while designing the showcase:
 - `Trilec/upp_Ui` `main`: `b3375564dff21c124374472aabfd79d62ef0d51e`
@@ -190,12 +192,25 @@ Mechanical Windows fixes published during acceptance:
 - `77bce046cef7c1e746b4e5ae63c5b49f82272d4a` replaces stale `upp_AnimationEasing` in `GitHubOut.var` with the actual `E:/apps/github/upp_animation` dependency used by current `upp_Ui`;
 - both fixes are mechanical build/dependency corrections; no renderer/showcase behavior or test expectations changed.
 
-Windows acceptance progress:
+Windows acceptance progress before visual blocker:
 - `RendererShowcaseTest` Debug build PASS and runs PASS `2/2`;
 - `RendererShowcaseTest` Release build PASS and run PASS `1/1`;
-- interactive `RendererShowcase` Debug build/link PASS against current `upp_Ui` plus `upp_animation`;
-- automated broad showcase acceptance is therefore PASS;
-- interactive Debug smoke, interactive Release build/smoke, `GpuCtrlFrameSourceTest` Debug regression and final cleanliness remain pending.
+- interactive `RendererShowcase` Debug build/link PASS;
+- interactive `RendererShowcase` Release build/link PASS and launch/close PASS;
+- `GpuCtrlFrameSourceTest` Debug PASS;
+- Windows UI Automation could not reliably drive U++ custom child controls, so manual visual evidence remains authoritative for the live smoke.
+
+Visual blocker and diagnosis:
+- manager screenshot shows the footer authored at the bottom rendered at the top, the upper-right gradient/vector composition rendered lower, and the lower-right SVG composition rendered upper;
+- therefore the whole GPU framebuffer is vertically inverted; this is not a glyph/SVG-specific or sampled-UV-only defect;
+- `UiRenderer2D` maps U++ y=0 to NDC +1 and bottom to NDC -1, while the Vulkan backend previously used a positive-height viewport, which maps NDC +1 to framebuffer bottom;
+- earlier Vulkan image/text/vector tests validated rendering, ordering, caching, resources and validation diagnostics but did not read back asymmetric pixels/orientation, so this presentation defect escaped those gates;
+- do not fix this by flipping glyph/image UVs: that would mask sampled content while leaving solid/vector scene placement inverted.
+
+Published production correction:
+- `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8` — `VulkanGpuDevice::BeginRenderPass()` now overrides the base positive viewport with Vulkan 1.3 negative-height viewport semantics (`y = height`, `height = -height`);
+- the correction is Vulkan-backend-only and applies uniformly to solid, sampled image, glyph and vector/SVG-raster paths;
+- no neutral display-list, UiRenderer2D transform, U++ text/vector authority or UV convention was changed.
 
 Dependency boundary:
 - no `Ui` or PropertyEditor dependency was added to RenderCore/RenderCanvas/RenderGpu2D/RenderRhi/RenderVulkan;
@@ -253,13 +268,13 @@ Windows acceptance evidence:
 
 ## Recovery Log
 
-BASE: `77bce046cef7c1e746b4e5ae63c5b49f82272d4a` / `main`
-TASK: Renderer Showcase / consolidated Windows acceptance — resume after automated gates
-TOUCHED: `examples/RendererShowcaseScene/RendererShowcaseScene.cpp`, `examples/RendererShowcaseScene/RendererShowcaseScene.upp`, `GitHubOut.var`, showcase validation surface, `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; Renderer Showcase automated acceptance PASS / INTERACTIVE PLATFORM VALIDATION PENDING
-PUBLISHED: showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; `ImageDraw`/CtrlLib fix `758e8126b073abb7b6659b5b153781346a24f170`; animation dependency-path fix `77bce046cef7c1e746b4e5ae63c5b49f82272d4a`; earlier accepted checkpoints unchanged
-VALIDATION: `RendererShowcaseTest` Debug build PASS + `2/2`; Release build PASS + `1/1`; interactive Debug build/link PASS; run used `upp_Ui` HEAD `0c195977f3bb0b45d9edf28f6b326dcd5ba89ed1`; interactive Debug/Release runtime smoke and callback regression still pending
+BASE: `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8` / `main`
+TASK: Renderer Showcase Vulkan framebuffer orientation fix — targeted Windows revalidation
+TOUCHED: `render/RenderVulkan/RenderVulkanRhi.cpp`; prior showcase/build fixes; `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 historical acceptance retained but Vulkan viewport orientation correction requires targeted regression; Stage-5 images/text PASS pending orientation regression; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A/B/C accepted; Renderer Showcase FAIL — visual blocker fix published / revalidation pending
+PUBLISHED: showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; `ImageDraw`/CtrlLib fix `758e8126b073abb7b6659b5b153781346a24f170`; animation dependency-path fix `77bce046cef7c1e746b4e5ae63c5b49f82272d4a`; Vulkan framebuffer orientation fix `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8`; earlier accepted checkpoints unchanged
+VALIDATION: pre-fix showcase tests Debug `2/2` + Release `1/1`; interactive Debug/Release builds PASS; Release launch/close PASS; GpuCtrlFrameSourceTest Debug PASS; screenshot proves pre-fix GPU framebuffer vertical inversion; post-fix Windows/Vulkan validation pending
 
 ## Next Action
 
-Refresh `upp_render` to the published baseline, confirm the two local mechanical edits are now identical to `main` and return the worktree to clean without losing unrelated work. Resume only the remaining Renderer Showcase acceptance: Debug interactive smoke (GPU/Software switching, representative property edits, reset, resize, repeated switching, exit), Release interactive build/smoke, `GpuCtrlFrameSourceTest` Debug regression, and final cleanliness. If clean, accept the Stage-6 showcase boundary. Stage-5 final vector/Vulkan acceptance remains tracked separately.
+Run targeted Windows validation of `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8`: rebuild the live Renderer Showcase and confirm authored vertical orientation (footer at bottom; upper gradient/vector composition remains upper-right; lower SVG remains lower-right; glyphs/image upright), compare GPU to Software where practical, then run focused Vulkan image/text/vector plus GPU2D and GpuCtrl frame-source regressions with validation enabled. If clean, accept the showcase visual boundary and continue to the remaining Stage-5 final vector/Vulkan acceptance.
