@@ -172,36 +172,35 @@ Reference UI revision inspected while designing the showcase:
 - PropertyEditor rules: `Utilities/PropertyEditor/DESIGN.md` and `README.md`
 
 Current compatibility review:
-- current `Trilec/upp_Ui` `main` inspected at `1c239c68c504919e60859955db4faf9ea537d181`;
+- current `Trilec/upp_Ui` API compatibility was rechecked past `1c239c68c504919e60859955db4faf9ea537d181`;
+- the Windows acceptance run used `upp_Ui` HEAD `0c195977f3bb0b45d9edf28f6b326dcd5ba89ed1`, with the compatibility ancestor present;
 - `UiTitleCard` still exposes the title/subtitle/title-line/content-cell/inset API used by the showcase;
-- `UiStack`, `UiBoxLayout`, `UiButton` and PropertyEditor model/event APIs used by the showcase remain source-compatible;
-- no compatibility patch is justified before Windows validation.
+- `UiStack`, `UiBoxLayout`, `UiButton` and PropertyEditor model/event APIs used by the showcase remain source-compatible.
 
 Implemented design:
-- `examples/RendererShowcaseScene` is the single scene authority and depends only on Core/Draw/RenderCanvas;
+- `examples/RendererShowcaseScene` is the single scene authority;
 - the shared scene records fills, rectangle strokes, rounded geometry, Save/Restore, clipping, affine transform, source alpha, sampled image, text, reflected multi-stop gradient vector fill, dashed round vector stroke and SVG;
 - `examples/RendererShowcase` is a deliberately light developer-facing window inspired by the UiLabel demo: `UiTitleCard` header/title line, status + GPU/Software/Reset/Exit buttons, large preview area, right PropertyEditor rail;
 - PropertyEditor remains the single authored interactive state with `Renderer`, `Content`, `Appearance` and `Geometry` groups;
-- live controls are intentionally bounded: renderer mode, text/font size, image/SVG visibility, accent colour, opacity, corner radius, scale, rotation and clipping;
 - GPU preview uses accepted `GpuCtrl::WhenBuildFrame`; software preview uses `SoftwareUiRenderer`; both call the exact same `BuildRendererShowcaseScene()` function;
-- `tests/RendererShowcaseTest` consumes that same shared scene, checks every broad capability op, deterministic dump, software visible output/immutability, and an alternate interactive property projection;
-- focused tests remain in place for failure diagnosis; this showcase/test is the broad capability and developer-facing acceptance surface.
+- `tests/RendererShowcaseTest` consumes that same shared scene, checks every broad capability op, deterministic dump, software visible output/immutability, and an alternate interactive property projection.
+
+Mechanical Windows fixes published during acceptance:
+- `758e8126b073abb7b6659b5b153781346a24f170` adds the explicit `CtrlLib` include/package dependency required for concrete `ImageDraw` construction;
+- `77bce046cef7c1e746b4e5ae63c5b49f82272d4a` replaces stale `upp_AnimationEasing` in `GitHubOut.var` with the actual `E:/apps/github/upp_animation` dependency used by current `upp_Ui`;
+- both fixes are mechanical build/dependency corrections; no renderer/showcase behavior or test expectations changed.
+
+Windows acceptance progress:
+- `RendererShowcaseTest` Debug build PASS and runs PASS `2/2`;
+- `RendererShowcaseTest` Release build PASS and run PASS `1/1`;
+- interactive `RendererShowcase` Debug build/link PASS against current `upp_Ui` plus `upp_animation`;
+- automated broad showcase acceptance is therefore PASS;
+- interactive Debug smoke, interactive Release build/smoke, `GpuCtrlFrameSourceTest` Debug regression and final cleanliness remain pending.
 
 Dependency boundary:
 - no `Ui` or PropertyEditor dependency was added to RenderCore/RenderCanvas/RenderGpu2D/RenderRhi/RenderVulkan;
 - only the interactive example depends on the external `upp_Ui` repository;
 - console showcase test and shared scene remain renderer-repo-only.
-
-Windows build assembly notes:
-- `RendererShowcaseTest`: include `tests,render,examples,E:\upp-18468\uppsrc`;
-- interactive `RendererShowcase`: include `examples,render,E:\apps\github\upp_Ui,E:\upp-18468\uppsrc` so `Ui` and `Utilities/PropertyEditor` resolve from the live UI repo.
-
-Acceptance boundary:
-- no additional production/test code is required by source review;
-- run `RendererShowcaseTest` Debug/Release as the broad deterministic scene/software gate;
-- build `RendererShowcase` Debug/Release against current `upp_Ui` main;
-- manually smoke the live window: GPU preview, Software preview, property edits, reset, resize and return to GPU must remain stable and visibly update the shared scene;
-- no Vulkan validation errors or crashes are acceptable during the live GPU smoke.
 
 ### TASK-011B — CtrlCore semantic recording bridge
 
@@ -254,13 +253,13 @@ Windows acceptance evidence:
 
 ## Recovery Log
 
-BASE: `e3ad497b0bb0d001287eddd2d90e0fae861e00c7` / `main`
-TASK: Renderer Showcase / consolidated Windows acceptance
-TOUCHED: showcase validation surface — `examples/RendererShowcase/*`, `examples/RendererShowcaseScene/*`, `tests/RendererShowcaseTest/*`; recovery status — `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; Renderer Showcase IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING
-PUBLISHED: frame-source implementation `3ac69f1971b5770b08ab9d06b7be72654dabe521`; focused callback package `947a06038bddb6fd116b00aff1ac697a79eab55b`; showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; accepted root checkpoints unchanged
-VALIDATION: TASK-011B-FS1 Debug `4/4`, Release `2/2`; GpuCtrlReplay Debug/Release PASS; GpuCtrlPresentation Debug/Release PASS; no validation/assert/crash/FAIL output; final Vulkan ownership zero; showcase source/package and current `upp_Ui` API compatibility review complete
+BASE: `77bce046cef7c1e746b4e5ae63c5b49f82272d4a` / `main`
+TASK: Renderer Showcase / consolidated Windows acceptance — resume after automated gates
+TOUCHED: `examples/RendererShowcaseScene/RendererShowcaseScene.cpp`, `examples/RendererShowcaseScene/RendererShowcaseScene.upp`, `GitHubOut.var`, showcase validation surface, `docs/ACTIVE_WORK.md`
+STATUS: Stage 3 PASS; Stage 4 PASS; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A PASS / ACCEPTED; embedded `GpuCtrl::WhenBuildFrame` PASS / ACCEPTED; CtrlCore recorder PASS / ACCEPTED; TASK-011C ROOT COMPOSITOR PASS / ACCEPTED; Renderer Showcase automated acceptance PASS / INTERACTIVE PLATFORM VALIDATION PENDING
+PUBLISHED: showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; `ImageDraw`/CtrlLib fix `758e8126b073abb7b6659b5b153781346a24f170`; animation dependency-path fix `77bce046cef7c1e746b4e5ae63c5b49f82272d4a`; earlier accepted checkpoints unchanged
+VALIDATION: `RendererShowcaseTest` Debug build PASS + `2/2`; Release build PASS + `1/1`; interactive Debug build/link PASS; run used `upp_Ui` HEAD `0c195977f3bb0b45d9edf28f6b326dcd5ba89ed1`; interactive Debug/Release runtime smoke and callback regression still pending
 
 ## Next Action
 
-Run Renderer Showcase consolidated Windows acceptance: `RendererShowcaseTest` Debug/Release, interactive `RendererShowcase` Debug/Release build against current `upp_Ui` main, and a bounded manual live smoke covering GPU/Software switching, representative property changes, reset, resize and return to GPU. If clean, accept the Stage-6 showcase boundary. Stage-5 final vector/Vulkan acceptance remains tracked separately.
+Refresh `upp_render` to the published baseline, confirm the two local mechanical edits are now identical to `main` and return the worktree to clean without losing unrelated work. Resume only the remaining Renderer Showcase acceptance: Debug interactive smoke (GPU/Software switching, representative property edits, reset, resize, repeated switching, exit), Release interactive build/smoke, `GpuCtrlFrameSourceTest` Debug regression, and final cleanliness. If clean, accept the Stage-6 showcase boundary. Stage-5 final vector/Vulkan acceptance remains tracked separately.
