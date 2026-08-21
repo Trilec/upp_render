@@ -467,7 +467,28 @@ GpuResult VulkanGpuDevice::DestroyPipeline(GpuPipelineId id)
 GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc)
 {
 	GpuResult result = BeginRenderPassBase(list, desc);
-	if(result == GpuResult::Ok && sampled_impl) {
+	if(result != GpuResult::Ok)
+		return result;
+
+	// UiRenderer2D converts U++'s top-left framebuffer coordinates to
+	// conventional +Y-up NDC. Vulkan's positive-height viewport would map
+	// NDC +1 to the framebuffer bottom and invert the entire UI. Vulkan 1.3
+	// supports negative-height viewports, so normalize the backend here rather
+	// than teaching images, text, SVG or neutral display-list code about Vulkan.
+	const int ci = impl->commands.Find(list.value);
+	const int ti = impl->textures.Find(desc.color_target.value);
+	if(ci >= 0 && ti >= 0) {
+		const Size size = impl->textures[ti].desc.size;
+		VkViewport viewport {};
+		viewport.y = (float)size.cy;
+		viewport.width = (float)size.cx;
+		viewport.height = -(float)size.cy;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		impl->cmd_set_viewport(impl->commands[ci].buffer, 0, 1, &viewport);
+	}
+
+	if(sampled_impl) {
 		SampledImpl::CommandState *state = sampled_impl->FindCommand(list);
 		if(state) {
 			state->pipeline = GpuPipelineId();
