@@ -1,112 +1,86 @@
-# GpuCtrl Usage
+# GpuRender usage
 
-## Minimal Use
+## Add one package
+
+For ordinary application use add package `GpuRender` and include:
 
 ```cpp
-#include <CtrlLib/CtrlLib.h>
-#include <GpuCtrl/GpuCtrl.h>
-
-using namespace Upp;
-
-GUI_APP_MAIN
-{
-	TopWindow win;
-	GpuCtrl gpu;
-	win.Add(gpu.SizePos());
-	win.Title("GpuCtrl sample").SetRect(100, 100, 800, 500);
-	win.Open();
-	if(!win.IsOpen())
-		return;
-	win.Run();
-}
+#include <GpuRender/GpuRender.h>
 ```
 
-That is the ordinary starting point. No HWND code. No Vulkan code. No swapchain ceremony.
+Do not add `RenderVulkan`, `RenderRhi` or presentation packages directly unless you are working on the renderer/backend itself.
 
-## Explicit Validation
-
-Validation is optional and must be set before the window opens.
+## Embedded `GpuCtrl`
 
 ```cpp
 GpuCtrl gpu;
-gpu.SetValidation(true);
+gpu.SetGpuPaint([](GpuPainter& w) {
+    Size sz = w.GetSize();
+    w.Clear(Color(25, 30, 40));
+    w.FillRect(Rectf(20, 20, sz.cx - 20, sz.cy - 20), Color(70, 120, 220));
+});
+
+TopWindow win;
+win.Add(gpu.SizePos());
 ```
 
-Use the `--validation` flag in developer builds when you want loader and validation diagnostics.
-
-## Readiness And Errors
-
-`IsNativeHostReady()` is an advanced diagnostic for host-window lifecycle checks.
-
-`IsGpuReady()` means the embedded surface-level GPU session is open and ready.
-
-`GetGpuError()` returns the most recent API rejection or session failure.
-
-Suggested usage:
+Subclassing is also supported:
 
 ```cpp
-if(gpu.IsGpuReady())
-	Cout() << "GPU session ready" << EOL;
-else if(!gpu.GetGpuError().IsEmpty())
-	Cout() << "GPU error: " << gpu.GetGpuError() << EOL;
-```
-
-## Backend Selection
-
-The current implementation defaults to Vulkan so ordinary code can just embed the control.
-
-Explicit backend selection remains available for testing and future backends:
-
-```cpp
-gpu.SetBackend(GpuBackendKind::Vulkan);
-```
-
-Other backend values are currently treated as unsupported.
-
-## Retry
-
-Initialization makes one automatic attempt when the native host becomes ready.
-
-After a failure, retry is deterministic and explicit:
-
-```cpp
-gpu.RetryGpuInit();
-```
-
-This keeps repeated layout or visibility notifications from redoing expensive startup work by accident.
-
-## Resize And Lifecycle
-
-`GpuCtrl` handles host sizing and child-window lifecycle automatically.
-
-The Vulkan backend now owns a private swapchain for the child window and presents
-the accepted S14 clear frame on ordinary paint invalidation. A real size change
-reconciles the swapchain on the next paint; zero-size states do not spin or poll.
-
-`RequestGpuRefresh()` requests one host repaint. It does not start a render loop.
-If presentation is unavailable, the child uses normal GDI fallback painting and
-keeps the presentation error available through `GetGpuError()`. A later resize,
-show or explicit refresh may recover without recreating the whole control.
-
-## Planned Render Callback
-
-Future shape, not currently compilable:
-
-```cpp
-gpu.WhenRender = [&](GpuPainter& painter) {
-	painter.Clear(Black());
+class Preview : public GpuCtrl {
+    void GpuPaint(GpuPainter& w) override {
+        w.Clear(Black());
+    }
 };
 ```
 
-## Multiple Controls
+`GpuPainter` records neutral intent. It is not a Vulkan command wrapper.
 
-Independent `GpuCtrl` instances are supported. Each owns its own native host and session state.
+### Refresh
 
-Later work may share GPU device resources, but that is a backend optimization, not a requirement for using the control.
+Call `RequestGpuRefresh()` when application state changes and the control should repaint. There is no implicit busy render loop.
 
-## Current Limitation
+### Diagnostics
 
-`GpuCtrl` currently presents only the fixed S14 clear colour. There is still no
-public painter callback, general 2D renderer, text/image pipeline, or shared GPU
-device context. Those remain later renderer milestones; the hosting and
-presentation lifecycle is now live.
+- `IsGpuReady()` — presentation backend is ready.
+- `GetGpuError()` — most recent configuration/presentation error.
+- `RetryGpuInit()` — explicit retry after failed initialization.
+- `SetValidation(true)` — request backend validation before opening.
+
+`IsNativeHostReady()` is an advanced host-lifecycle diagnostic rather than normal drawing API.
+
+## Advanced frame ownership
+
+`WhenBuildFrame` remains available when a caller deliberately needs to produce an immutable `UiDisplayList` itself:
+
+```cpp
+gpu.WhenBuildFrame = [&](Size size, UiDisplayList& list,
+                         Rgba8& background, String& error) {
+    UiDisplayListBuilder b;
+    background = Rgba8(20, 20, 20, 255);
+    b.FillRect(Rectf(10, 10, size.cx - 10, size.cy - 10), Rgba8(80, 130, 220, 255));
+    if(!b.Finish(list)) {
+        error = b.GetError();
+        return false;
+    }
+    return true;
+};
+```
+
+When this advanced callback is set it intentionally takes precedence over the `GpuPainter` path.
+
+## `GpuWindow`
+
+Use `GpuWindow` for a top-level window whose client area is entirely custom GPU content. Override `GpuPaint()` or assign `WhenGpuPaint`.
+
+## `GpuTopWindow`
+
+Use `GpuTopWindow` when ordinary U++ controls should remain the logical UI and be composited through a root GPU surface. U++ continues to own layout/input/focus/state/theme.
+
+## Multiple controls
+
+Multiple `GpuCtrl`/window presenters use `GpuContext::Default()` unless an advanced caller opens presentation against a separate context. Surfaces and swapchains remain independent. The current Vulkan context shares runtime/instance state; logical-device/resource pooling is being expanded during productization.
+
+## Backend selection
+
+Vulkan is currently the implemented production backend and remains the default. `SetBackend()` exists for backend selection/testing, but Metal and WebGPU are not yet implemented. Application drawing code should not depend on backend-specific types.

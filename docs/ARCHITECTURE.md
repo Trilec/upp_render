@@ -1,112 +1,109 @@
-# Architecture
+# upp_render architecture
 
-## Stage 1 Goal
+## Product boundaries
 
-Stage 1 proves the backend-neutral rendering foundation before any GPU backend.
-It focuses on recording, inspection, deterministic replay, and a software
-reference path.
+There are three U++ presentation cases and they intentionally share one renderer stack.
 
-## Pipeline
+### Embedded accelerated content — `GpuCtrl`
+
+A `GpuCtrl` is a bounded native accelerated surface inside an ordinary U++ layout. Standard U++ controls can remain around it. This is appropriate for previews, graph/canvas views, video/image tools and other explicitly accelerated regions.
+
+### Custom whole GPU window — `GpuWindow`
+
+A `GpuWindow` binds the same presentation stack directly to the top-level client area and lets the application draw through `GpuPainter`.
+
+### GPU-composited U++ interface — `GpuTopWindow`
+
+`GpuTopWindow` keeps U++ as authority for the control tree, layout, input, focus, state and theme. Resolved control painting is recorded through `RenderCtrlBridge` into the neutral display list and replayed through one root GPU surface. Ordinary controls are not converted into native GPU child windows.
+
+## Public drawing pipeline
 
 ```text
-Drawing caller
-    ↓
-UiCanvas
-    ↓
+GpuCtrl / GpuWindow
+        |
+    GpuPainter
+        |
 UiDisplayListBuilder
-    ↓
-UiDisplayList
-    ↓
-SoftwareUiRenderer
+        |
+ immutable UiDisplayList
+        |
+    UiRenderer2D
+        |
+      GpuRhi
+        |
+Vulkan / Metal / WebGPU
 ```
 
-The future GPU path is intentionally separate:
+For `GpuTopWindow` the producer changes, not the renderer:
 
 ```text
-UiDisplayList
-    ↓
-UiRenderer2D
-    ↓
-GpuRhi
-    ↓
-Vulkan / Metal / WebGPU / OpenGL
+U++ control tree + theme/state
+        |
+ RecordCtrlDisplayList
+        |
+ immutable UiDisplayList
+        |
+    same replay stack
 ```
 
-`UiRenderer2D` and `GpuRhi` are not implemented in this task.
+Software replay consumes the same display list and remains the semantic/correctness reference.
 
-## Package Responsibilities
+## `GpuContext` and many surfaces
 
-### RenderCore
+The application-level context is separate from the presentation surface.
 
-Small backend-neutral value types shared by the rendering packages.
-It currently carries `Rgba8`, `Transform2D`, and `RoundedRect`.
+Target ownership:
 
-### RenderCanvas
+```text
+GpuContext
+  backend runtime / instance
+  compatible physical/logical device
+  queues
+  pipelines and shaders
+  image/glyph/resource caches
+       |
+       +-- surface + swapchain: GpuCtrl A
+       +-- surface + swapchain: GpuCtrl B
+       +-- surface + swapchain: GpuWindow
+       +-- surface + swapchain: GpuTopWindow/dialog
+```
 
-The high-level recording API and immutable display list.
-`UiCanvas` is separate from the future RHI because it describes drawing intent,
-not GPU resources or command buffers.
+This takes the useful lesson from U++ `GLCtrl` (share expensive backend state across controls) without copying OpenGL's global mutable rendering context.
 
-### RenderSoftware
+Current Vulkan status: `GpuContext::Default()` shares the accepted grouped runtime/instance state. Compatibility-keyed logical-device/resource pooling is active productization work.
 
-A correctness-oriented replay path that interprets the display list using U++
-software painting primitives.
+## Backend neutrality
 
-### DisplayListDemo
+The following public layers must contain no Vulkan/Metal/WebGPU objects:
 
-A plain visual check that shows the direct reference rendering beside the
-recorded-and-replayed result, along with the deterministic display-list dump.
+- `GpuPainter`
+- `GpuCtrl`
+- `GpuWindow`
+- `GpuTopWindow`
+- `GpuContext`
+- `RenderCanvas`
+- generic `RenderRhi` contracts
 
-### RenderCanvasTest
+Native-window adaptation is a platform/backend concern. The current Win32 path builds a neutral native-window descriptor below the public controls.
 
-Unit tests for ordering, value preservation, validity handling, determinism,
-and software replay.
+## Text, vector and image authority
 
-## Why Display Lists Are Immutable
+U++ remains semantic authority where it already has mature behavior:
 
-The recording model must remain stable after completion so tests and future
-tools can inspect it without hidden mutation or backend coupling.
+- U++ font/text metrics and glyph rasterization feed the glyph-atlas path;
+- U++ Painter is the vector/gradient/SVG semantic raster authority for the v1 GPU vector path;
+- the sampled-image renderer owns GPU upload, texture reuse, affine UV clipping and batching.
 
-## Why Deterministic Inspection Is Required
+A future native GPU vector tessellator is an optimization, not a replacement semantic system.
 
-Deterministic dumps make it possible to compare recordings, diagnose regressions,
-and create stable test expectations without relying on pointer values or runtime
-addresses.
+## Whole-UI constraints
 
-## Why The Software Renderer Exists
+- one root presentation surface per GPU-composited top-level window;
+- no native child per ordinary button/label/edit control;
+- no second layout/theme/control-state authority;
+- unsupported U++ Draw semantics fail explicitly and fall back rather than silently disappearing;
+- GPU presentation failure must leave ordinary U++ software painting available as fallback.
 
-The software renderer is the reference implementation for correctness. It lets
-the project validate recording semantics, replay order, clipping, transforms,
-and state restoration before a GPU backend exists.
+## Future platforms
 
-## Deferred Features
-
-This task deliberately defers:
-
-- Vulkan and all other GPU backends
-- text rendering
-- images and textures
-- gradients
-- shadows
-- paths beyond simple rectangle and rounded-rectangle primitives
-- U++ control integration
-- speculative backend packages
-
-## Stage 2
-
-Add the minimal `GpuRhi` contract and a headless `RenderNull` backend without
-pulling Vulkan into the recording layer.
-This stage now also covers surface, swapchain, and frame lifecycle so the next
-step is not starting from a blank screen and a shrug.
-
-## Vulkan Preflight
-
-`RenderVulkan` and `VulkanProbe` cover Vulkan loader, instance,
-physical-device selection, logical-device creation, and graphics-queue
-bootstrap. They use the local Vulkan SDK headers, keep Vulkan types out of the
-recording layer, and stop well before surface, swapchain, presentation, or
-rendering work. The reference hardware file `docs/VulkanReport_RTX_4070Ti.json`
-is a capability snapshot from the local RTX 4070 Ti; its UUID and LUID values
-are machine-specific, and the live probe run remains the source of truth.
-
-For the broader roadmap, see `docs/PROJECT_PLAN.md`.
+Metal and WebGPU should implement the same surface/device/replay contracts rather than creating new application-facing painters. Browser/WebAssembly support will additionally require a U++ browser platform host for event loop, input, text/clipboard/IME, timers and top-level surface integration; the renderer architecture is being kept compatible with that direction.

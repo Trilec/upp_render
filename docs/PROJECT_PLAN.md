@@ -1,177 +1,75 @@
-# Project Plan
+# upp_render project plan
 
-`upp_render` is being built in staged layers so the recording model can settle
-before any GPU backend is bolted on with wishful thinking.
+## Product goal
 
-## Workflow Rules
+Provide U++ developers with a simple backend-neutral accelerated rendering system:
 
-- Curt is the project manager and publisher.
-- Contributors implement assigned work only.
-- Work currently happens directly on local `main`.
-- No task branches unless Curt later changes the workflow.
-- Contributors may commit locally.
-- Contributors must not push, publish, tag, release or create pull requests.
-- Completion reports should include summary, files changed, validation,
-  remaining issues and the recommended next step.
+- `GpuCtrl` for an embedded GPU surface;
+- `GpuWindow` for a custom full GPU client area;
+- `GpuTopWindow` for a GPU-composited U++/upp_Ui interface;
+- `GpuPainter` as the ordinary drawing API;
+- `GpuContext` to share compatible expensive backend state across many presentation surfaces.
 
-## Architecture Rules
+Vulkan is first. Metal and WebGPU are first-class follow-on backends.
 
-- no Vulkan, Metal, WebGPU or OpenGL types in public Stage 1/2 APIs
-- `UiCanvas` records drawing intent
-- `GpuRhi` is the lower-level GPU contract
-- display lists are immutable after build
-- software replay remains the correctness reference
+## Stage status
 
-## Stage 1 - Backend-Neutral Foundation
+### Stage 1 — backend-neutral recording/software reference
 
-Done:
+**PASS / accepted.** Value types, immutable display lists, deterministic inspection and software replay.
 
-- `RenderCore` value types
-- `UiCanvas` recording API
-- immutable display lists
-- deterministic dumps and inspection
-- software replay
-- unit tests and a visual demo
+### Stage 2 — RHI and Null backend
 
-## Stage 2 - RHI Contract and Null Backend
+**PASS / accepted.** Neutral GPU resource/command/surface contracts and headless lifecycle/state validation.
 
-Define `GpuRhi` as the minimal GPU-facing contract and implement `RenderNull`
-for headless validation of command ordering, lifetime rules, and state handling.
+### Stage 3 — Vulkan backend/bootstrap
 
-- TASK-002 completed.
-- TASK-003 completed.
-- TASK-004 completed.
-- TASK-004A completed.
+**PASS / accepted.** Vulkan 1.3 runtime/instance/device/queues, surfaces, swapchains, frame lifecycle, resources/uploads and cleanup.
 
-## Stage 3 - Vulkan Bootstrap
+### Stage 4 — GPU 2D renderer
 
-Add the first GPU backend:
+**PASS / accepted.** Geometry, strokes, rounded rectangles, clipping, affine transforms, opacity/source-over and batching. Vulkan framebuffer orientation correction is accepted.
 
-- instance and validation setup
-- device and queue selection
-- surface and swapchain management
-- frame submission and synchronization
-- resource upload and deferred destruction
+### Stage 5 — image/text/vector
 
-TASK-005 and TASK-005A are complete.
-TASK-006 and TASK-006A are complete: Vulkan loader, instance, physical-device
-selection, logical-device creation, and graphics-queue bootstrap.
-It uses Vulkan 1.3 as the baseline, loads the runtime through `vulkan-1.dll`,
-and keeps the SDK header path local via a build method with `INCLUDE` extended
-by `%VULKAN_SDK%\Include`.
+Images and text are **PASS / accepted**. Vector/gradient/AA/SVG implementation is complete and has passed targeted Vulkan regressions, but the final consolidated Windows/Vulkan acceptance `TASK-010-W1` remains tracked.
 
-Surface/platform bring-up, grouped ownership, private swapchain lifecycle,
-explicit frame acquisition/presentation, and the first visible clear frame are
-accepted. The active closure work is converging those accepted paths behind the
-neutral `GpuDevice` contract rather than adding more bootstrap-only APIs.
+### Stage 6 — U++ integration
 
-TASK-007 completed the surface and platform bridge layer, with a Win32
-native-window contract, bridge test coverage, a live Vulkan surface probe, and
-a ten-cycle validation gate that now passes.
+Underlying presentation, embedded frame source, CtrlCore recording bridge and root compositor are **PASS / accepted**. Active work is productization: one public package, simple painter API, shared context/device resources, canonical examples and current documentation.
 
-TASK-007A3 restored the backend-neutral `GpuCtrl` public boundary.
-TASK-007A4 completed the control/session foundation, removing duplicate
-surface bring-up code, documenting the usage and future UI rendering shape, and
-adding practical embedded-control demos.
+### Stage 7 — effects/compute/specialized rendering
 
-S17A added explicit neutral buffer/texture upload operations and made
-`RenderNull` authoritative for upload-range and texture-layout validation.
-S17B adds the first production `VulkanGpuDevice` slice by borrowing the accepted
-live `VulkanSurfaceSession` device/queue ownership and providing real Vulkan
-buffer allocation/writes plus optimal-image texture allocation and staging
-uploads. Command/pipeline/draw and neutral surface/swapchain/frame bridging
-remain the final Stage 3 convergence work.
+Not started as a product stage. Defer until the productization/shared-context boundary is stable. Likely scope: effects/layers, offscreen helpers, compute/storage resources, specialized views.
 
-Successful local build command:
+### Stage 8 — hardening/backends/platform expansion
 
-```text
-<upp-root>\umk.exe render,examples,tests,tools,<upp-root>\uppsrc VulkanProbe <local-vulkan-build-method> --out-dir build
-```
+In progress conceptually; implementation follows current productization.
 
-## Stage 4 - GPU 2D Renderer
+Planned backend/platform tracks:
 
-Build `UiRenderer2D` on top of `GpuRhi` for:
+1. **Vulkan shared-device/resource hardening** — many surfaces on compatible shared device/context, retained independent swapchains, stronger output parity/readback tests.
+2. **Metal** — macOS bring-up first; design platform/presentation seams to remain viable for iOS/iPadOS.
+3. **WebGPU** — backend bring-up plus browser/WebAssembly feasibility. Browser U++ requires a platform host/event/input/text layer in addition to RenderRhi/WebGPU.
+4. Future backend evaluation only after the neutral contract proves itself across at least Vulkan + one substantially different backend.
 
-- filled rectangles
-- strokes and borders
-- rounded rectangles
-- clipping and transforms
-- opacity and batching
+## Current productization sequence
 
-## Stage 5 - Text and Vector Rendering
+1. Public `GpuRender` façade and `GpuPainter` — implemented, validation pending.
+2. Consolidate U++ integration packages/folders — implemented, validation pending.
+3. Canonical user examples and current docs — implemented in current productization pass.
+4. Decouple backend creation/registration from the façade so `GpuRender` is not structurally Vulkan-only.
+5. Implement compatibility-keyed shared Vulkan logical-device/pipeline/image/glyph resource ownership in `GpuContext`.
+6. Consolidated Windows validation, including the remaining Stage-5 final gate.
+7. Metal bring-up slice.
+8. WebGPU/browser-host feasibility slice.
 
-Add:
+## Architecture rules
 
-- text shaping
-- glyph caching
-- vector paths
-- gradients
-- anti-aliasing
-- icon and SVG geometry support
-
-## Stage 6 - U++ Integration
-
-Connect the new pipeline back into existing U++ controls and painting.
-
-`GpuCtrl` is the intended application-facing boundary for future embedded GPU
-content.
-
-## Stage 7 - Effects, Compute, and Specialized Views
-
-Add the follow-on pieces that depend on the earlier layers:
-
-- effects and layers
-- compute-backed helpers
-- offscreen and specialized views
-- broader GPU capability plumbing
-
-Compute is an architectural consideration here, not an implementation yet.
-
-## Stage 8 - Hardening and Future Backends
-
-Stabilize the stack, compare software and GPU outputs, and then evaluate any
-additional backends beyond the first ones already planned.
-
-## Current Status
-
-- TASK-007 surface bring-up passes the ten-cycle validation gate
-- TASK-007A4 control/session cleanup is accepted and no longer the active focus
-- TASK-008A1 S9 private shared-instance registry is accepted
-- TASK-008A1 S10 private RAII lease is accepted after the release-build
-  destructor fix
-- TASK-008A1 S11 grouped surface-session integration is accepted
-- TASK-008A1 S12 private Vulkan swapchain ownership is accepted
-- TASK-008A1 S13 explicit Vulkan frame acquisition and presentation is accepted
-- TASK-008A1 S14 first visible Vulkan clear-colour frame is accepted
-- TASK-008A1 S15 GpuCtrl Vulkan presentation integration is accepted
-- grouped sessions share runtime and instance state while logical devices,
-  queues, surfaces, swapchains, and frame state remain owned per session
-- ordinary GpuCtrl instances remain isolated through their default session groups
-- S14 uses a temporary dynamic-rendering clear submission and deliberately keeps
-  the accepted S13 present-only implementation unchanged
-- S15 drives private swapchain recreation and S14 clear presentation from native
-  paint invalidation without adding a timer/render loop or Vulkan public API
-- S16A adds the first backend-private filled rectangle through the real GpuCtrl
-  presentation lifecycle; S16B moves its background/rectangle description into
-  backend-neutral private frame intent so the Vulkan backend no longer invents
-  control content or geometry
-- S16C records the orange rectangle as one existing UiDisplayList FillRect and
-  replays that neutral operation into the private frame intent
-- S16D extends the FillRect-only replay proof to ordered operations and carries
-  two fills through one Vulkan dynamic-rendering frame
-- S16E adds persistent ClipRect replay above the Vulkan boundary: clips intersect
-  cumulatively and affect only later FillRects
-- S16F adds Save/Restore scoping for that private replay state so ClipRect state
-  can be restored deterministically
-- S16G adds translation-only ConcatTransform replay for FillRect geometry, scoped by
-  Save/Restore; scale, rotation, shear and general renderer state remain deferred
-- S17A aligns the neutral GpuDevice contract with explicit buffer and texture upload
-  operations and makes RenderNull the validation authority for upload range/layout rules
-- S17B adds a production VulkanGpuDevice resource slice using the accepted surface-session
-  device ownership: real buffer allocation/write/destruction and optimal-image texture
-  allocation/staging upload/destruction, while command/pipeline/surface RHI methods remain
-  explicitly Unsupported until the next convergence slice
-- general 2D rendering, shaders, painter callbacks, and shared control device
-  ownership remain deferred
-- GPU-backed U++ and upp_Ui rendering is a future stage
-- compute remains an architectural topic only
+- no backend-native types in application painter/control APIs;
+- no second U++ theme/layout/input/control-state system;
+- one root surface for a GPU-composited top-level UI;
+- embedded native surfaces only for explicitly accelerated `GpuCtrl` content;
+- software replay remains semantic reference/fallback;
+- diagnose root causes; do not weaken tests to accommodate architecture changes;
+- publish coherent recoverable checkpoints and keep `docs/ACTIVE_WORK.md` current.

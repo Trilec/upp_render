@@ -1,83 +1,130 @@
 # upp_render
 
-`upp_render` is intended to become the rendering layer for Ultimate++.
-The foundation phase is complete enough to have an actual RHI and a Vulkan
-preflight probe, which is a little unsettling but useful.
+`upp_render` is a backend-neutral GPU rendering layer for Ultimate++.
 
-The first planned GPU backend is Vulkan, but this stage is backend-neutral.
-It establishes value types, display-list recording, deterministic inspection,
-software replay, tests, and demos before any GPU API is introduced.
-`GpuCtrl` now provides the embedded surface/session boundary; general UI rendering
-still comes later.
+The ordinary application entry point is now **`GpuRender`**. Add that package and include:
 
-## Current packages
+```cpp
+#include <GpuRender/GpuRender.h>
+```
 
-- `render/RenderCore`
-- `render/RenderCanvas`
-- `render/RenderSoftware`
-- `render/RenderRhi`
-- `render/RenderNull`
-- `render/RenderPlatformWin32`
-- `render/RenderVulkan`
-- `render/GpuCtrl`
-- `examples/DisplayListDemo`
-- `examples/GpuCtrlBasicDemo`
-- `examples/GpuCtrlLifecycleDemo`
-- `examples/GpuCtrlMultiViewDemo`
-- `examples/VulkanClearFrameDemo`
-- `tests/RenderCanvasTest`
-- `tests/RenderRhiTest`
-- `tests/RenderVulkanTest`
-- `tests/RenderVulkanFrameTest`
-- `tests/RenderVulkanClearFrameTest`
-- `tests/GpuCtrlPresentationTest`
-- `tests/RenderPlatformWin32Test`
-- `tools/VulkanProbe`
-- `tools/VulkanSurfaceProbe`
+Application code does not need HWNDs, Vulkan handles, queue families, swapchains or command buffers.
 
-## Docs
+## Three ways to use it
 
-- `docs/GPU_CTRL_USAGE.md`
-- `docs/DEMO_ROADMAP.md`
-- `docs/UI_GPU_RENDERING_ARCHITECTURE.md`
+### 1. Embedded GPU surface
 
-## Build
+Use `GpuCtrl` inside an ordinary U++ window:
 
-Build the packages in the Windows `CLANGx64` configuration using TheIDE.
-`GitHubOut.var.example` uses `<path-to-uppsrc>` as a placeholder, because the
-real U++ source tree is local to each machine and pretending otherwise is how
-machines start developing personality.
-For Vulkan work, use a local build method with `INCLUDE` extended by
-`%VULKAN_SDK%\Include`.
-The expected outputs are:
+```cpp
+GpuCtrl view;
+view.SetGpuPaint([](GpuPainter& w) {
+    Size sz = w.GetSize();
+    w.Clear(Color(24, 31, 45));
+    w.FillRect(Rectf(20, 20, sz.cx - 20, sz.cy - 20), Color(62, 112, 214));
+    w.DrawText(Pointf(40, 42), "GPU content", SansSerif(24).Bold(), White());
+});
 
-- the corresponding executables under `build/`
+TopWindow win;
+win.Add(view.SizePos());
+win.Run();
+```
 
-## Run
+`GpuCtrl` owns the native embedded presentation surface. The rest of the window can remain ordinary U++/GDI controls.
 
-Run the test and demo executables after building.
+### 2. Whole custom GPU window
 
-## Current limitations
+Subclass `GpuWindow` when the full client area is application-owned GPU content:
 
-- Vulkan loader, instance, physical-device selection, logical-device creation,
-  and graphics-queue bootstrap are implemented; TASK-007 surface bring-up also
-  passes the ten-cycle validation gate
-- `GpuCtrl` now owns a private Vulkan surface/swapchain/presentation lifecycle
-  with a deterministic retry policy and no test-only public hooks
-- explicitly grouped `VulkanSurfaceSession` instances share runtime and
-  instance state while retaining per-session surfaces and logical devices;
-  default sessions and `GpuCtrl` instances remain isolated
-- no general Vulkan 2D rendering backend yet
-- private swapchain ownership, explicit frame acquisition/presentation, and the
-  first visible clear-colour frame are available through `VulkanSurfaceSession`
-- S14 uses Vulkan 1.3 dynamic rendering with a color-attachment clear and no
-  shaders, graphics pipeline, render pass, or renderer abstraction
-- no other GPU backend yet
-- `GpuCtrl` now automatically creates/recreates its private swapchain and presents
-  the S14 clear frame from ordinary invalidation/paint events
-- unsupported or failed presentation falls back to normal host painting; later
-  invalidation can recover without a busy repaint loop
-- the public `GpuCtrl` API remains backend-neutral
-- no text, image, gradient, shadow, or shader pipeline yet
-- no compute API or execution path yet
-- no speculative backend packages are present
+```cpp
+class View : public GpuWindow {
+    void GpuPaint(GpuPainter& w) override {
+        w.Clear(Black());
+        w.DrawText(Pointf(30, 30), "Whole GPU window", SansSerif(28), White());
+    }
+};
+```
+
+### 3. GPU-composited U++ interface
+
+Use `GpuTopWindow` when U++ should keep control/layout/input/theme authority while the resolved control tree is recorded and replayed through one root GPU surface:
+
+```cpp
+class MainWindow : public GpuTopWindow {
+public:
+    MainWindow() {
+        Add(button.LeftPos(20, 120).TopPos(20, 32));
+        button.SetLabel("Ordinary U++ button");
+    }
+private:
+    Button button;
+};
+```
+
+## Current rendering capability
+
+The accepted/implemented stack includes:
+
+- immutable backend-neutral display lists;
+- software reference replay;
+- Vulkan 1.3 bootstrap, surfaces, swapchains and frame presentation;
+- filled/stroked/rounded geometry;
+- clipping, affine transforms, alpha/source-over and batching;
+- sampled images;
+- text through U++ font/glyph authority and persistent glyph atlases;
+- vector paths, fill rules, multi-stop gradients, stroke styles and SVG through U++ Painter raster authority;
+- embedded `GpuCtrl` presentation;
+- full-window custom `GpuWindow` presentation;
+- U++ control-tree recording and `GpuTopWindow` root composition.
+
+Stage-5 vector/SVG implementation is complete; the final consolidated Windows/Vulkan acceptance gate is still tracked in `docs/ACTIVE_WORK.md`.
+
+## Shared application GPU context
+
+Ordinary presenters use `GpuContext::Default()`. Multiple surfaces therefore share compatible application-level backend context state instead of each starting from a completely isolated runtime. Today the Vulkan path shares runtime/instance ownership; the active productization work is extending this to a compatibility-keyed logical-device/resource pool while preserving independent surfaces and swapchains.
+
+## Packages
+
+Ordinary application developers should normally care about only:
+
+- **`GpuRender`** — public U++ integration façade.
+
+The remaining packages are deliberate renderer/backend layers:
+
+- `RenderCanvas` — neutral display list and `GpuPainter` recording;
+- `RenderCore` — backend-neutral value types;
+- `RenderGpu2D` — GPU 2D replay engine;
+- `RenderRhi` — backend contract;
+- `RenderVulkan` — current Vulkan implementation;
+- `RenderSoftware` — correctness/reference renderer;
+- `RenderVector` — vector/Painter authority;
+- `RenderNull` — headless validation backend;
+- `RenderPlatformWin32` — current native-window adapter.
+
+See `render/README.md` for the dependency map.
+
+## Examples
+
+Start with:
+
+- `examples/GpuRenderEmbedded`
+- `examples/GpuRenderWindow`
+- `examples/GpuRenderUiWindow`
+- `examples/RendererShowcase`
+
+Historical bring-up/lifecycle probes are under `examples/diagnostics`.
+
+## Backend roadmap
+
+Vulkan is the current production/validation backend. Metal and WebGPU are first-class planned backends and the public API is intentionally kept free of Vulkan types.
+
+- Metal: macOS first, while keeping the design viable for iOS/iPadOS presentation models.
+- WebGPU: native/browser backend, with a longer-term goal of allowing U++ rendering/control intent to run in a WebAssembly/browser host. This requires browser platform/event/input work in addition to the renderer backend itself.
+
+See `docs/BACKEND_ROADMAP.md`.
+
+## Build status
+
+Windows/Vulkan is the currently validated platform. Use the repository `CLANGx64_Vulkan.bm` environment/build method and a Vulkan SDK available to the local U++ toolchain. Platform-specific paths belong in local configuration, not application code.
+
+For exact accepted SHAs and the active validation boundary, see `docs/ACTIVE_WORK.md`.

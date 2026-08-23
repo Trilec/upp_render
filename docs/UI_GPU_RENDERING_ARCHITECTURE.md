@@ -1,109 +1,51 @@
-# UI GPU Rendering Architecture
+# GPU-rendered U++ interface
 
-## Two Separate Cases
+## Principle
 
-### Embedded GPU Content
+A GPU-rendered U++ application is still a U++ application.
 
-`GpuCtrl` is the right boundary for embedded accelerated views such as:
+U++ owns:
 
-- image viewers
-- video viewers
-- 2D and 3D canvases
-- VFX previews
-- graphs and specialized visual tools
+- control tree;
+- layout;
+- input and focus;
+- state and event dispatch;
+- themes/style resolution;
+- text/font choices.
 
-The control owns its native child host and a backend session. The ordinary U++ layout owns everything around it.
+The renderer owns replay and presentation of the resolved drawing intent.
 
-### Entire GPU-Rendered Interface
-
-Do not model the whole UI as one native child window per button.
-
-The long-term shape should be a root compositor or `GpuTopWindow`-style path where:
-
-- U++ still owns layout, input, focus and control state
-- existing themes and upp_Ui style resolution remain authoritative
-- controls emit neutral drawing commands
-- commands are recorded into a display list
-- software replay remains the correctness reference
-- GPU replay batches and renders the same command stream
-- text, clipping and images arrive in controlled stages
-
-## Architecture Sketch
+## Root path
 
 ```text
-TopWindow / GpuTopWindow
-  -> U++ control tree and theme resolution
-  -> neutral display list / drawing commands
-  -> software replay or GPU replay
+GpuTopWindow
+  -> U++ DrawCtrl / resolved control painting
+  -> RenderCtrlBridge
+  -> UiDisplayList
+  -> UiRenderer2D
   -> RenderRhi
-  -> backend implementation
+  -> backend
+  -> one top-level surface/swapchain
 ```
 
-## Strategy Comparison
+Do not create a GPU-native child surface for every button, edit field or label.
 
-### Direct `GpuPainter` Calls
+## Embedded exception
 
-Pros:
+`GpuCtrl` intentionally does create an embedded native accelerated surface. It is for content that is naturally a separate GPU viewport such as image/video/VFX previews, graphs, editors, 2D/3D scenes and similar views. Normal U++ controls can surround it.
 
-- simple to call from a control
-- easy to understand for one-off views
+## Software parity
 
-Cons:
+The same neutral display list can be replayed through the software reference renderer. This is the correctness/fallback model and protects the project from inventing backend-specific UI semantics.
 
-- tends to leak backend thinking into UI code
-- harder to preserve software reference parity
+## Popup/dialog direction
 
-### Draw-Compatible Recording Adapter
+Each top-level/native popup or dialog that genuinely needs GPU composition should have a presentation surface but should acquire compatible expensive device/resource state from the same `GpuContext`. The renderer must not imply one Vulkan device per dialog.
 
-Pros:
+## Unsupported Draw operations
 
-- preserves the existing U++/upp_Ui drawing model
-- keeps software replay as the reference path
-- matches the current neutral architecture well
+The control bridge explicitly reports unsupported operations. They must either gain a neutral semantic mapping or deliberately fall back; silently dropping them is not acceptable.
 
-Cons:
+## upp_Ui
 
-- more work up front
-- requires careful command coverage
-
-### Converting Existing Draw Operations Into `RenderCanvas`
-
-Pros:
-
-- good bridge from current code
-- can reuse existing control drawing knowledge
-
-Cons:
-
-- may inherit too much legacy shape from `Draw`
-
-### Hybrid Path
-
-Pros:
-
-- practical for staged adoption
-- allows new controls and converted legacy controls to coexist
-
-Cons:
-
-- needs discipline so the API does not become a drawer of half-measures
-
-## Recommendation
-
-Use a hybrid path with a neutral recording adapter as the center.
-
-That keeps software replay as the truth source, lets existing controls migrate gradually, and avoids turning the UI layer into a backend-specific API parade.
-
-## Native-Child Airspace
-
-`GpuCtrl` is appropriate for embedded content, but it is not a general answer for overlapping UI.
-
-Native child windows have airspace and compositing limits, so they should not be used to fake a whole control tree.
-
-For the whole interface, the future renderer must draw into a composited surface owned by the UI framework, not into a stack of child HWNDs wearing optimism.
-
-## Theme Data
-
-The existing upp_Ui theme data should be consumed, not replaced.
-
-The GPU layer should receive resolved colors, metrics, glyph choices and control geometry from the existing theme machinery so it does not grow a second theme system with a better haircut and worse compatibility.
+`upp_Ui` theme/model/control state is consumed after resolution. GPU rendering must not create a second theme database or second layout system.
