@@ -7,6 +7,26 @@
 
 namespace Upp {
 
+struct GpuContext::Impl {
+	// VulkanSurfaceSessionGroup already owns the accepted compatibility-aware
+	// shared runtime/instance registry. Device/resource pooling can grow behind
+	// this context without changing application-facing controls or painters.
+	VulkanSurfaceSessionGroup vulkan_group;
+};
+
+GpuContext::GpuContext()
+{
+	impl.Create();
+}
+
+GpuContext::~GpuContext() = default;
+
+GpuContext& GpuContext::Default()
+{
+	static GpuContext context;
+	return context;
+}
+
 namespace {
 
 static GpuClearColor ToClearColor(Rgba8 color)
@@ -35,6 +55,11 @@ public:
 
 class VulkanBackendSession : public BackendSession {
 public:
+	explicit VulkanBackendSession(VulkanSurfaceSessionGroup& group)
+		: session(group)
+	{
+	}
+
 	~VulkanBackendSession() override
 	{
 		Close();
@@ -76,8 +101,6 @@ public:
 
 	void Close() override
 	{
-		// Reverse the borrowing order: renderer -> logical swapchain/surface ->
-		// adapter -> VulkanSurfaceSession. The adapter never owns session objects.
 		renderer.reset();
 		if(device) {
 			if(swapchain.IsValid())
@@ -203,7 +226,6 @@ private:
 
 		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
 			String render_error = renderer->GetError();
-			// Release an acquired frame even when renderer command setup fails.
 			device->Present(frame.frame);
 			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
 			out_error = error;
@@ -234,10 +256,11 @@ private:
 	String error;
 };
 
-static One<BackendSession> CreateBackendSession(GpuBackendKind kind)
+static One<BackendSession> CreateBackendSession(GpuBackendKind kind,
+                                                 VulkanSurfaceSessionGroup *vulkan_group)
 {
-	if(kind == GpuBackendKind::Vulkan)
-		return new VulkanBackendSession;
+	if(kind == GpuBackendKind::Vulkan && vulkan_group)
+		return new VulkanBackendSession(*vulkan_group);
 	return One<BackendSession>();
 }
 
@@ -245,6 +268,7 @@ static One<BackendSession> CreateBackendSession(GpuBackendKind kind)
 
 struct GpuDisplayPresenter::Impl {
 	One<BackendSession> session;
+	GpuContext *context = nullptr;
 	GpuBackendKind backend = GpuBackendKind::Unknown;
 	String error;
 };
@@ -260,13 +284,23 @@ GpuDisplayPresenter::~GpuDisplayPresenter()
 }
 
 bool GpuDisplayPresenter::Open(GpuBackendKind backend, bool request_validation,
-	                           const GpuNativeWindowDesc& native_window,
-	                           String& out_error)
+                               const GpuNativeWindowDesc& native_window,
+                               String& out_error)
+{
+	return Open(GpuContext::Default(), backend, request_validation, native_window, out_error);
+}
+
+bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
+                               bool request_validation,
+                               const GpuNativeWindowDesc& native_window,
+                               String& out_error)
 {
 	Close();
 	out_error.Clear();
+	impl->context = &context;
 	impl->backend = backend;
-	impl->session = CreateBackendSession(backend);
+	VulkanSurfaceSessionGroup *vulkan_group = context.impl ? &context.impl->vulkan_group : nullptr;
+	impl->session = CreateBackendSession(backend, vulkan_group);
 	if(!impl->session) {
 		impl->error = backend == GpuBackendKind::Unknown ?
 		              String("backend not selected") : String("backend not supported");
@@ -299,6 +333,7 @@ void GpuDisplayPresenter::Close()
 	if(impl->session)
 		impl->session->Close();
 	impl->session.Clear();
+	impl->context = nullptr;
 	impl->backend = GpuBackendKind::Unknown;
 	impl->error.Clear();
 }
@@ -323,7 +358,7 @@ String GpuDisplayPresenter::GetError() const
 }
 
 bool GpuDisplayPresenter::Present(Size requested_size, const UiDisplayList& list,
-	                              Rgba8 background, String& out_error)
+                                  Rgba8 background, String& out_error)
 {
 	out_error.Clear();
 	if(!IsReady()) {
