@@ -7,40 +7,37 @@
 
 namespace Upp {
 
+// Embedded accelerated drawing surface for an ordinary U++ layout.
 class GpuCtrl : public Ctrl {
 public:
 	GpuCtrl();
 	~GpuCtrl() override;
 
-	// Simple application-facing paint path. Drawing is recorded through
-	// GpuPainter into the neutral display list and replayed by the selected
-	// backend. No backend/swapchain objects are exposed to application code.
+	// Ordinary drawing callback. GpuPainter exposes the live surface size and
+	// records neutral drawing intent; application code never owns a swapchain.
+	Function<void(GpuPainter&)> WhenGpuPaint;
 	GpuCtrl& SetGpuPaint(Function<void(GpuPainter&)> paint)
 	{
-		WhenBuildFrame = [paint](Size, UiDisplayList& list, Rgba8& background, String& error) mutable {
-			GpuPainter painter;
-			if(paint)
-				paint(painter);
-			return painter.FinishFrame(list, background, error);
-		};
+		WhenGpuPaint = paint;
+		RequestGpuRefresh();
 		return *this;
 	}
 
-	// Advanced neutral frame source. Use this only when the caller needs to own
-	// immutable display-list construction directly. Native/session/swapchain
-	// ownership always stays inside GpuCtrl.
+	// Advanced neutral frame source. When set, this deliberately bypasses the
+	// GpuPainter virtual/callback path while presentation ownership stays here.
 	Function<bool(Size, UiDisplayList&, Rgba8&, String&)> WhenBuildFrame;
 
-	bool   IsNativeHostReady() const;
-	bool   IsGpuReady() const;
+	bool IsNativeHostReady() const;
+	bool IsGpuReady() const;
 	String GetGpuError() const;
-	void   RequestGpuRefresh();
+	void RequestGpuRefresh();
 	GpuCtrl& RetryGpuInit();
-
 	GpuCtrl& SetBackend(GpuBackendKind kind);
 	GpuCtrl& SetValidation(bool validation = true);
 
 protected:
+	// Subclass-friendly equivalent of WhenGpuPaint. Default draws nothing.
+	virtual void GpuPaint(GpuPainter& painter);
 	void State(int reason) override;
 	void Layout() override;
 

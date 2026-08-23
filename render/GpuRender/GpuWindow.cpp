@@ -2,14 +2,12 @@
 
 namespace Upp {
 
-void GpuWindow::GpuPaint(GpuPainter&)
-{
-}
+void GpuWindow::GpuPaint(GpuPainter&) {}
 
-bool GpuWindow::BuildGpuFrame(Size, UiDisplayList& list,
+bool GpuWindow::BuildGpuFrame(Size size, UiDisplayList& list,
                               Rgba8& background, String& error)
 {
-	GpuPainter painter;
+	GpuPainter painter(size);
 	GpuPaint(painter);
 	if(WhenGpuPaint)
 		WhenGpuPaint(painter);
