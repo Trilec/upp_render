@@ -36,267 +36,102 @@ Update it whenever a coherent checkpoint is published so work can resume from re
 
 ## Current Objective
 
-Stage 5 is **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING**.
-Stage 6 U++ integration has accepted the shared presenter, root presentation boundary, embedded neutral frame source, CtrlCore recorder and root compositor wiring.
+The renderer capability stack is substantially complete through Stage 6, but the project is now in a **productization and architecture consolidation pass** before effects/compute or additional backends.
 
-Active Stage-5 validation: `TASK-010-W1` — final vector/gradient/AA/SVG plus image/text regression acceptance.
-Remaining Stage-6 validation: Renderer Showcase manual interaction smoke only; its GPU visual/orientation boundary and automated renderer coverage are accepted.
+Stage 5 remains **IMPLEMENTATION COMPLETE — FINAL WINDOWS/VULKAN ACCEPTANCE PENDING** through `TASK-010-W1`.
+The Renderer Showcase GPU visual/orientation boundary is accepted; a short human control-interaction smoke remains useful but is not an architecture blocker.
 
-The Renderer Showcase live GPU smoke exposed a real Vulkan framebuffer-orientation defect that earlier structural/resource tests did not detect. Production correction `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8` normalizes Vulkan to the neutral/U++ top-left framebuffer orientation with a negative-height viewport. Windows revalidation at `42d74c7bf44bac5f9ce8c92a3e553946943b8738` passed the focused Vulkan graphics/image/text/vector regressions plus GPU2D and live GpuCtrl frame-source regression, and manager screenshot evidence confirms the authored scene orientation is restored. The orientation defect is therefore closed.
+The immediate product goal is now explicit:
+1. embedded `GpuCtrl` that a normal U++ developer can add and paint without Vulkan/display-list ceremony;
+2. custom full-surface `GpuWindow` for an application-owned GPU client area;
+3. `GpuTopWindow` for a GPU-composited U++/upp_Ui control tree;
+4. a shared application GPU context so multiple surfaces do not imply duplicated expensive backend ownership;
+5. one public `GpuRender` package/header, with lower `Render*` packages treated as implementation/advanced layers;
+6. preserve backend neutrality so Vulkan, Metal and WebGPU can implement the same presentation/render contracts.
+
+## Productization Block P1 — public painter façade
+
+Published implementation checkpoint: `a33ea54dc08d319798bc40135faddcea250f8aeb`
+Status: **IMPLEMENTED — WINDOWS COMPILE/BEHAVIOR VALIDATION PENDING**
+
+Added:
+- `render/RenderCanvas/GpuPainter.h`: immediate-style application painter that records into the accepted neutral immutable display list; `Clear()` configures frame clear colour; U++ `Color` convenience overloads are provided while existing `Rgba8` paths remain available;
+- `GpuCtrl::SetGpuPaint(Function<void(GpuPainter&)>)`: ordinary embedded drawing no longer requires callers to construct `UiDisplayList` values or know presentation internals; advanced `WhenBuildFrame` remains available for explicit neutral-frame ownership;
+- new `render/GpuRender` façade package/header: intended ordinary developer entry point;
+- new `GpuWindow`: a custom top-level GPU surface whose application code paints through `GpuPainter`; `GpuTopWindow` remains the separate whole-U++-UI compositor.
+
+This block deliberately does not change the accepted renderer/presentation implementation beneath the new public surface.
+
+## Architecture Audit Findings Driving P2/P3
+
+- current repository has many technically meaningful packages, but ordinary users should not have to choose among `RenderCore`, `RenderCanvas`, `RenderPresentation`, `RenderRhi`, `RenderVulkan`, etc.; `GpuRender` is now the intended public package;
+- existing README/architecture/usage/plan documents are materially stale and describe milestones that the live code has already passed;
+- current ordinary `GpuCtrl` presenters still open isolated default Vulkan surface sessions; explicitly grouped sessions share Vulkan runtime/instance ownership but still create per-session logical devices;
+- U++ `GLCtrl` demonstrates the usability benefit of shared expensive backend state across multiple child drawing surfaces; Vulkan must achieve the equivalent benefit without copying OpenGL's global mutable-context model;
+- target shared model is application-level backend context/device/resource ownership plus independent per-window surfaces/swapchains;
+- the neutral API must remain suitable for future Metal and WebGPU backends; backend selection/context compatibility belongs below `GpuCtrl`/`GpuWindow` rather than in application drawing code.
 
 ## Stage 5 - Text, Images and Vector Rendering
 
-### Images — accepted
+Images and text remain accepted. Vector/gradient/AA/SVG production implementation remains at `0d37b2472c4d49e6908f6acbf5f85cc523193006` with final consolidated Windows/Vulkan acceptance still required by `TASK-010-W1`.
 
-Production scope includes immutable `DrawImage`, deterministic software replay, sampled-texture RHI/Null authority, sRGB uploads, affine UV clipping, ordered image/solid batching, renderer image caching and real Vulkan offscreen/swapchain presentation.
-
-### Text — accepted
-
-Production scope includes immutable `DrawText`, fractional U++ software replay, U++-authoritative glyph metrics/fallback/composition, persistent sampled glyph atlas pages, padded partial uploads, affine clipping, text tint/alpha, ordered text/image/solid batching and cross-frame atlas/buffer reuse.
-
-Boundary honesty: current U++ does not expose a HarfBuzz-grade complex-script shaper in the inspected text path, so Stage 5 does not claim one. U++ remains font/text authority.
-
-### TASK-010C-A — neutral vector + U++ Painter authority
-
-Published: `e6367d8e72eea4803a3585680674c79784f52bef`
-
-Scope:
-- copy-safe backend-neutral `UiPath` Move/Line/Quadratic/Cubic/Close;
-- NonZero/EvenOdd fill rules;
-- solid, multi-stop linear/radial paints with Pad/Repeat/Reflect spreads;
-- stroke width, caps, joins, miter, dash pattern/offset;
-- immutable FillPath/StrokePath/DrawSvg recording and deterministic dumps;
-- shared `RenderVector` U++ Painter semantic/raster authority;
-- U++ curves, gradients, stroke style and SVG replay;
-- antialiased raster helper with conservative bounds, malformed-stream rejection and 4096-pixel safety cap;
-- `RenderSoftware` uses the same vector authority;
-- focused `RenderVectorTest`.
-
-### TASK-010C-B — production GPU vector/SVG path
-
-Published: `0d37b2472c4d49e6908f6acbf5f85cc523193006`
-Status: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
-
-Production design deliberately avoids a second GPU vector/resource authority:
-- vector/SVG ops are rasterized by U++ Painter into cached antialiased `Image` values;
-- raster scale follows the largest singular value of the active affine transform, clamped 1..8;
-- vector cache identity is exact `UiDisplayOp` value equality + raster scale;
-- materialized vector operations become ordinary `DrawImage` operations;
-- the accepted image path owns GPU upload, sRGB conversion, texture cache, descriptors, affine UV clipping, batching and destruction;
-- vector sidecar owns CPU Images only and owns zero Vulkan/GpuTexture resources;
-- mixed vector + text scenes preserve original order and reuse both image and glyph caches;
-- no-vector display lists retain the accepted prior renderer path unchanged.
-
-Coverage:
-- `RenderGpuVectorTest`: first-frame vector raster/image uploads, second-frame zero raster/upload work, mixed vector/text ordering, glyph reuse, RenderNull cleanup;
-- `RenderVulkanVectorTest`: real Vulkan offscreen vector/text rendering, cached repeat, acquired swapchain presentation, zero adapter resources and final ownership diagnostics;
-- `RenderVectorTest`: curves, fill rules, Pad/Reflect/Repeat gradients, stroke styles, SVG and explicit partial-alpha antialias evidence.
-
-Native GPU path tessellation remains a Stage-8 optimization candidate. For v1, U++ Painter is the semantic authority and the accepted sampled-image pipeline is the GPU transport.
+The accepted vector design continues to use U++ Painter as semantic/raster authority and the sampled-image pipeline as GPU transport; native tessellation is a later optimization, not a productization prerequisite.
 
 ## Stage 6 - U++ Integration
 
-Architecture constraints:
-- one root GPU/native presentation boundary for a GPU-composited interface; do not create one native child per ordinary control;
-- U++ retains control tree, layout, input, focus, state and theme authority;
-- controls emit resolved neutral drawing intent/display lists;
-- software replay remains the correctness/fallback path;
-- `GpuCtrl` remains appropriate for explicitly embedded accelerated content, not as the implementation mechanism for every ordinary control.
+Accepted underlying boundaries remain:
+- shared neutral presenter/root presentation;
+- embedded frame source;
+- CtrlCore semantic recording bridge;
+- root compositor wiring;
+- Vulkan orientation correction.
 
-### TASK-011A — first root-composition boundary
+Productization work now sits above those accepted boundaries rather than reopening them.
 
-Published on `main`: `a4979f17becfb4af6390314cc316eb1ea31e3c92`
-PR: `#22`
-Status: **PASS / accepted**
-Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
+### Renderer Showcase
 
-Implemented scope:
-- backend-neutral `RenderPresentation` package owns selected backend session, `UiRenderer2D`, logical surface/swapchain and frame-present lifecycle;
-- Vulkan-specific ownership remains private to `RenderPresentation.cpp`; public presentation API contains no Vulkan types;
-- `GpuCtrl` uses `GpuDisplayPresenter`, removing its duplicate private Vulkan/session/swapchain/render lifecycle while retaining DHCtrl hosting for explicitly embedded GPU content;
-- `GpuTopWindow` binds `GpuDisplayPresenter` directly to the real top-level U++ HWND and creates no native child host;
-- `GpuTopWindow::BuildGpuFrame()` is the root neutral-display-list composition hook; U++ remains window/input/layout authority;
-- root WM_PAINT presents one neutral frame through one Vulkan surface/swapchain;
-- `GpuTopWindowPresentationTest` covers live surface/device/swapchain ownership, idle stability, refresh, resize, hide/show and zero final Vulkan ownership.
+Published: `094e8807c70fd591bf7e921a5a98ae7069a8b97f`
+Status: **PARTIAL — GPU VISUAL/ORIENTATION + AUTOMATED RENDERER COVERAGE ACCEPTED; SHORT HUMAN INTERACTION SMOKE REMAINS**
 
-Windows acceptance evidence:
-- current `GpuTopWindowPresentationTest` Debug compile PASS and runs PASS `4/4`;
-- Release compile PASS and runs PASS `2/2`;
-- `GpuCtrlPresentationTest` Debug PASS and Release PASS after the shared-presenter migration;
-- validation was requested in the root and embedded Vulkan presentation tests and no validation messages occurred;
-- no assertions, crashes or `FAIL` output occurred;
-- root test final Vulkan ownership passed at zero;
-- final worktree clean and diff check passed.
+Post-orientation evidence at `42d74c7bf44bac5f9ce8c92a3e553946943b8738`:
+- RendererShowcase Debug/Release build and launch paths pass;
+- authored GPU orientation visually correct;
+- RenderVulkanGraphics/Image/Text/Vector Debug+Release pass;
+- RenderGpu2D Debug pass;
+- GpuCtrlFrameSourceTest Debug pass;
+- no Vulkan validation/runtime failures observed;
+- validation trees clean.
 
-### TASK-011B — embedded neutral frame source
+## Backend Direction
 
-Published on `main`: `3ac69f1971b5770b08ab9d06b7be72654dabe521`
-Focused acceptance package on `main`: `947a06038bddb6fd116b00aff1ac697a79eab55b`
-PR: `#29`
-Status: **PASS / accepted**
-Windows acceptance HEAD: `e3ad497b0bb0d001287eddd2d90e0fae861e00c7`
+### Vulkan
 
-- `GpuCtrl::WhenBuildFrame` optionally accepts a caller-produced immutable neutral `UiDisplayList` plus background;
-- callback owns drawing intent only; native host, presentation session, surface/swapchain and renderer ownership stay in `GpuCtrl` / `GpuDisplayPresenter`;
-- unset callback preserves the existing default reference scene exactly;
-- invalid callback output is rejected before presentation.
+Vulkan 1.3 remains the first production backend and current validation authority.
+Next architecture block must introduce shared application context ownership so multiple `GpuCtrl`/`GpuWindow`/`GpuTopWindow` surfaces can reuse compatible expensive backend state while retaining independent surface/swapchain lifecycles.
 
-Focused acceptance coverage in `tests/GpuCtrlFrameSourceTest`:
-- live Vulkan `GpuCtrl` invokes `WhenBuildFrame` and passes the current native-host/control size;
-- same-size refresh invokes the callback again without recreating the swapchain;
-- resize propagates the new size and recreates the presentation swapchain while retaining one live surface/device/swapchain;
-- callback failure preserves caller diagnostic text without tearing down the GPU session;
-- invalid `UiDisplayList` output is rejected at the `GpuCtrl` boundary before presentation with deterministic builder error evidence;
-- a later valid frame recovers cleanly after both callback failure and invalid-list rejection;
-- close requires final Vulkan ownership to return to zero;
-- existing `GpuCtrlReplayTest` remains the unset/default-scene authority and `GpuCtrlPresentationTest` remains the shared lifecycle authority.
+### Metal
 
-Windows acceptance evidence:
-- required focused-test ancestor `947a06038bddb6fd116b00aff1ac697a79eab55b` verified at acceptance HEAD;
-- `GpuCtrlFrameSourceTest` Debug compile PASS, runs PASS `4/4`;
-- Release compile PASS, runs PASS `2/2`;
-- `GpuCtrlReplayTest` Debug/Release PASS;
-- `GpuCtrlPresentationTest` Debug/Release PASS;
-- no Vulkan validation messages, assertions, crashes or `FAIL` output;
-- final Vulkan ownership returned to zero as asserted by the tests;
-- final worktree clean and diff checks passed;
-- no edits, commits or pushes were made during validation.
+Metal is a first-class target for macOS and should also leave the architecture viable for iOS/iPadOS. No Objective-C/Metal types may leak into `GpuPainter`, `GpuCtrl`, `GpuWindow`, `GpuTopWindow`, `RenderCanvas` or generic presentation contracts.
 
-Accepted boundary: caller-owned neutral embedded frame sourcing, default-scene preservation, invalid-output rejection, failure recovery and shared presentation lifecycle are accepted.
+### WebGPU
 
-### Renderer Showcase / consolidated acceptance
+WebGPU is a first-class target, including the longer-term possibility of a U++ application/rendering front end hosted in a browser/WebAssembly environment. Current productization must therefore avoid Win32/Vulkan assumptions in public APIs and keep native-window/presentation adaptation isolated below the façade.
 
-Published on `main`: `094e8807c70fd591bf7e921a5a98ae7069a8b97f`
-Source head: `a8d873c987418a183515885751ea0c742edef3aa`
-PR: `#25`
-Status: **PARTIAL — GPU VISUAL/ORIENTATION BOUNDARY ACCEPTED; MANUAL INTERACTION SMOKE REMAINS**
-
-Reference UI revision inspected while designing the showcase:
-- `Trilec/upp_Ui` `main`: `b3375564dff21c124374472aabfd79d62ef0d51e`
-- visual/layout reference: `examples/UiLabelDemo`
-- PropertyEditor rules: `Utilities/PropertyEditor/DESIGN.md` and `README.md`
-
-Current compatibility review:
-- current `Trilec/upp_Ui` API compatibility was rechecked past `1c239c68c504919e60859955db4faf9ea537d181`;
-- targeted orientation revalidation used `upp_Ui` HEAD `6ec3232ee295c16db17abb54a51dce0398064473`;
-- `UiTitleCard` still exposes the title/subtitle/title-line/content-cell/inset API used by the showcase;
-- `UiStack`, `UiBoxLayout`, `UiButton` and PropertyEditor model/event APIs used by the showcase remain source-compatible.
-
-Implemented design:
-- `examples/RendererShowcaseScene` is the single scene authority;
-- the shared scene records fills, rectangle strokes, rounded geometry, Save/Restore, clipping, affine transform, source alpha, sampled image, text, reflected multi-stop gradient vector fill, dashed round vector stroke and SVG;
-- `examples/RendererShowcase` is a deliberately light developer-facing window inspired by the UiLabel demo: `UiTitleCard` header/title line, status + GPU/Software/Reset/Exit buttons, large preview area, right PropertyEditor rail;
-- PropertyEditor remains the single authored interactive state with `Renderer`, `Content`, `Appearance` and `Geometry` groups;
-- GPU preview uses accepted `GpuCtrl::WhenBuildFrame`; software preview uses `SoftwareUiRenderer`; both call the exact same `BuildRendererShowcaseScene()` function;
-- `tests/RendererShowcaseTest` consumes that same shared scene, checks every broad capability op, deterministic dump, software visible output/immutability, and an alternate interactive property projection.
-
-Mechanical Windows fixes published during acceptance:
-- `758e8126b073abb7b6659b5b153781346a24f170` adds the explicit `CtrlLib` include/package dependency required for concrete `ImageDraw` construction;
-- `77bce046cef7c1e746b4e5ae63c5b49f82272d4a` replaces stale `upp_AnimationEasing` in `GitHubOut.var` with the actual `E:/apps/github/upp_animation` dependency used by current `upp_Ui`;
-- both fixes are mechanical build/dependency corrections; no renderer/showcase behavior or test expectations changed.
-
-Automated/binary acceptance:
-- `RendererShowcaseTest` Debug build PASS and runs PASS `2/2`;
-- `RendererShowcaseTest` Release build PASS and run PASS `1/1`;
-- interactive `RendererShowcase` Debug build/link PASS;
-- interactive `RendererShowcase` Release build/link PASS, launch PASS and clean close PASS;
-- `GpuCtrlFrameSourceTest` Debug PASS;
-- targeted post-orientation `RenderVulkanGraphicsTest` Debug/Release PASS;
-- targeted post-orientation `RenderVulkanImageTest` Debug/Release PASS;
-- targeted post-orientation `RenderVulkanTextTest` Debug/Release PASS;
-- targeted post-orientation `RenderVulkanVectorTest` Debug/Release PASS;
-- targeted post-orientation `RenderGpu2DTest` Debug PASS;
-- no Vulkan validation errors or runtime failures were observed;
-- both validation repositories were clean and diff checks passed.
-
-Visual orientation acceptance:
-- manager screenshot plus Windows validation screenshot confirms footer at bottom;
-- gradient/vector blob is upper-right;
-- SVG panel is lower-right and its triangle points upward;
-- GPU text is upright/readable;
-- sampled image is upright;
-- transformed left card has the authored orientation;
-- no blank GPU preview was observed;
-- resize operations left the process stable.
-
-Accepted orientation root cause/fix:
-- the pre-fix whole framebuffer was vertically inverted; this was not a glyph/SVG-specific or sampled-UV-only defect;
-- `UiRenderer2D` maps U++ y=0 to NDC +1 and bottom to NDC -1, while the Vulkan backend had used a positive-height viewport;
-- `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8` corrects the Vulkan backend with `y = height`, `height = -height`;
-- the correction applies uniformly to solid, sampled image, glyph and vector/SVG-raster paths without changing neutral display-list, U++ text/vector authority or UV conventions.
-
-Remaining manual interaction boundary:
-- Windows UI Automation exposes only the top-level U++ window, so it could not reliably drive the custom GPU/Software buttons or PropertyEditor child controls;
-- therefore live GPU -> Software comparison, representative property edits, Reset and repeated GPU/Software switching have not been directly runtime-verified;
-- this is not evidence of a renderer failure: the shared scene's software replay and alternate property projection are already covered by `RendererShowcaseTest`, but GUI event dispatch itself remains a short human smoke item.
-
-Compiler note:
-- one existing warning remains in the preserved Stage-4 `RenderGpu2DBase.inc` switch because later `UiDisplayOpType` values are handled by Stage-5 wrapper paths; current source review found no missing production fallback caused by this warning;
-- do not create a renderer validation cycle solely to silence it; clean it only as part of a coherent warning/hygiene pass.
-
-Dependency boundary:
-- no `Ui` or PropertyEditor dependency was added to RenderCore/RenderCanvas/RenderGpu2D/RenderRhi/RenderVulkan;
-- only the interactive example depends on the external `upp_Ui` repository;
-- console showcase test and shared scene remain renderer-repo-only.
-
-### TASK-011B — CtrlCore semantic recording bridge
-
-Published on `main`: `c4210d80a815950df53df5db9dea45a38edbbfdd`
-Source head: `30ef093f4035eff923594bc6408ae17292a8512f`
-PR: `#27`
-Status: **PASS / accepted**
-
-Implemented scope:
-- new `render/RenderCtrlBridge` production package depends on `CtrlCore` + `RenderCanvas`, not CtrlLib, Ui, Vulkan or platform APIs;
-- public `RecordCtrlDisplayList()` supplies a recording Win32 `SystemDraw` to public `Ctrl::DrawCtrl()`, so U++'s own private `CtrlPaint` path remains the recursive control/frame/layout/theme authority;
-- no duplicate Ctrl-tree traversal, private `CtrlPaint` access, HDC-backed target, native-child-per-control mechanism or second theme/layout model is introduced;
-- U++ 2026.1 normally routes Win32 painting through `BackDraw`; the bridge uses a harmless `FULLBACKPAINT` probe to observe the otherwise write-only `GlobalBackBuffer` state, enables direct drawing only when needed, and restores the exact inherited state under the GUI lock;
-- neutral `SystemDraw` translation maps U++ Begin/End, Offset, Clip/Clipoff/intersect, rectangles, images including U++ tint semantics, text, lines/polylines, disjunct polygons with EvenOdd fill, and ellipses into existing immutable `UiDisplayList` operations;
-- unsupported exclusion clips, native SystemDraw/GDI access, invert/XOR/pattern drawing, arcs and rotated text fail explicitly instead of being silently dropped;
-- focused Windows validation passed Debug 4/4, Release 2/2 plus RenderCanvas/RenderVector/RenderText regressions.
-
-Accepted boundary:
-- ordinary resolved Win32 U++ semantic control painting is accepted;
-- exclusion clips/native child surfaces, raw native drawing, arcs and rotated DrawText remain explicit unsupported boundaries.
-
-### TASK-011C — root compositor wiring
-
-Published on `main`: `21ca529525455408356c38c4d5a2b8361cf950fd`
-Source head: `dbc7f27f2888ba637d949dadc25edcd9074a3537`
-PR: `#28`
-Status: **PASS / accepted**
-Windows acceptance HEAD: `cb01a20a283ac18e07121a94ccc90bc3d232d8cf`
-
-Implemented scope:
-- `GpuTopWindow` now depends directly on `RenderCtrlBridge` and the base `BuildGpuFrame()` records `*this` through accepted `RecordCtrlDisplayList()`;
-- no duplicate traversal, second style/layout state, per-control native surface or backend-specific UI API was introduced;
-- the existing virtual `BuildGpuFrame()` contract is preserved, so custom neutral frame sources remain source-compatible and can still bypass default control-tree recording deliberately;
-- successful root GPU presentation validates the Win32 paint region only after presentation succeeds;
-- recorder or presenter failure now falls through to `TopWindow::WindowProc()` so ordinary U++ software painting remains the visible fallback instead of consuming WM_PAINT and blank-filling the client area;
-- the production hot path adds only the accepted semantic recording call on actual root repaints; no new persistent cache or duplicate state is introduced;
-- `GpuTopWindowPresentationTest` now exercises the base recorder with a real Label, Button and custom child, verifies root/child paint execution plus semantic text/geometry evidence, re-records on explicit refresh, preserves one surface/device/swapchain lifecycle, and checks an intentional frame-build failure falls through to U++ software painting while retaining diagnostic error evidence.
-
-Windows acceptance evidence:
-- implementation ancestor `21ca529525455408356c38c4d5a2b8361cf950fd` verified at acceptance HEAD;
-- `GpuTopWindowPresentationTest` Debug compile PASS, runs PASS `4/4`;
-- Release compile PASS, runs PASS `2/2`;
-- `GpuCtrlPresentationTest` Debug/Release PASS;
-- `RenderCtrlBridgeTest` Debug/Release PASS;
-- `RenderCanvasTest`, `RenderVectorTest` and `RenderTextTest` Debug PASS;
-- no assertions, validation messages, crashes or `FAIL` output;
-- root test final Vulkan ownership passed at zero;
-- final worktree clean and diff check passed;
-- no edits, commits or pushes were made during validation.
+No speculative Metal/WebGPU implementation package should pretend to be functional before a platform bring-up slice exists; architecture seams should be prepared now, implementations added as bounded backend stages.
 
 ## Recovery Log
 
-BASE: `42d74c7bf44bac5f9ce8c92a3e553946943b8738` / `main`
-TASK: Renderer Showcase final human interaction smoke, then Stage-5 final vector/Vulkan acceptance
-TOUCHED: `render/RenderVulkan/RenderVulkanRhi.cpp`; showcase/build fixes; `docs/ACTIVE_WORK.md`
-STATUS: Stage 3 PASS; Stage 4 PASS with orientation correction accepted; Stage-5 images/text PASS; Stage-5 vector IMPLEMENTATION COMPLETE / PLATFORM VALIDATION PENDING; TASK-011A/B/C accepted; Renderer Showcase GPU visual/orientation + automated coverage PASS; manual GUI interaction smoke remains
-PUBLISHED: showcase `094e8807c70fd591bf7e921a5a98ae7069a8b97f`; `ImageDraw`/CtrlLib fix `758e8126b073abb7b6659b5b153781346a24f170`; animation dependency-path fix `77bce046cef7c1e746b4e5ae63c5b49f82272d4a`; Vulkan framebuffer orientation fix `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8`; evidence checkpoint `42d74c7bf44bac5f9ce8c92a3e553946943b8738`; earlier accepted checkpoints unchanged
-VALIDATION: orientation-fix ancestor verified; Debug showcase build/live GPU PASS; authored orientation visually PASS; resize stable; Release build/launch/close PASS; RenderVulkanGraphics/Image/Text/Vector Debug+Release PASS; RenderGpu2D Debug PASS; GpuCtrlFrameSourceTest Debug PASS; no Vulkan validation/runtime failures; `upp_Ui` tested at `6ec3232ee295c16db17abb54a51dce0398064473`; trees clean
+BASE: `a33ea54dc08d319798bc40135faddcea250f8aeb` / `main` (public façade commit created; branch publication to verify)
+TASK: Productization P1-P3 — public drawing API, shared GPU context, package/folder cleanup and current documentation
+TOUCHED: `render/RenderCanvas/GpuPainter.h`, `render/RenderCanvas/RenderCanvas.upp`, `render/GpuCtrl/GpuCtrl.h`, new `render/GpuRender/*`, `docs/ACTIVE_WORK.md`
+STATUS: Accepted Vulkan/rendering baseline retained; public painter/façade implemented; shared context/folder consolidation/docs rewrite still active
+PUBLISHED: orientation fix `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8`; prior evidence checkpoint `9112e7b26d6170135ee1f0a0034d91258db91f37`; public façade implementation commit `a33ea54dc08d319798bc40135faddcea250f8aeb`
+VALIDATION: static source/dependency review only for P1; Windows compile/runtime validation pending after coherent structural blocks land
 
 ## Next Action
 
-Perform one short human Renderer Showcase interaction smoke: switch GPU -> Software, change representative Text/Accent/Rotation or Scale values, toggle Image/SVG/Clip, Reset, switch Software -> GPU, and confirm both previews remain visible and responsive. If that passes, mark Renderer Showcase and Stage 6 **PASS / accepted**. Then execute the separately tracked `TASK-010-W1` final Stage-5 vector/gradient/AA/SVG plus image/text Vulkan acceptance.
+1. Publish/verify `a33ea54d...` on `main` and use it as the next base.
+2. Implement backend-neutral shared `GpuContext` ownership and route ordinary presenters through a default application context, initially reusing the existing Vulkan grouped-instance machinery; extend Vulkan sharing toward compatible logical-device/resource ownership without changing surface/swapchain independence.
+3. Consolidate public U++ integration packages under `GpuRender` and remove obsolete top-level application-facing package clutter only after all in-repo includes/package dependencies are migrated coherently.
+4. Rewrite README/ARCHITECTURE/usage/project plan around current truth and add three canonical quick starts: embedded `GpuCtrl`, full custom `GpuWindow`, whole-UI `GpuTopWindow`.
+5. Run one consolidated Windows validation block covering the new façade, multi-surface sharing, existing renderer regressions and remaining Stage-5 acceptance.
