@@ -1,11 +1,24 @@
 uses
 	Core,
+	Draw,
+	CtrlCore,
 	CtrlLib,
 	RenderCanvas,
-	GpuCtrl,
-	GpuTopWindow;
+	RenderGpu2D,
+	RenderPlatformWin32,
+	RenderRhi,
+	RenderVulkan;
 
 file
 	GpuRender.h,
+	GpuCtrl.h,
+	GpuCtrlTestHooks.h,
+	GpuCtrl.cpp,
+	GpuTopWindow.h,
+	GpuTopWindow.cpp,
 	GpuWindow.h,
-	GpuWindow.cpp;
+	GpuWindow.cpp,
+	RenderPresentation.h,
+	RenderPresentation.cpp,
+	RenderCtrlBridge.h,
+	RenderCtrlBridge.cpp;

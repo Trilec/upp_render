@@ -1,6 +1,6 @@
 uses
 	Core,
-	GpuCtrl,
+	GpuRender,
 	RenderCanvas,
 	RenderGpu2D,
 	RenderNull;

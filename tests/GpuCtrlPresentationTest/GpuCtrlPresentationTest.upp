@@ -1,7 +1,7 @@
 uses
 	Core,
 	CtrlLib,
-	GpuCtrl,
+	GpuRender,
 	RenderVulkan;
 
 file
@@ -9,4 +9,3 @@ file
 
 mainconfig
 	"" = "GUI";
-

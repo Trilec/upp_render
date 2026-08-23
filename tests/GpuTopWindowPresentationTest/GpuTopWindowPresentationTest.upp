@@ -1,7 +1,7 @@
 uses
 	Core,
 	CtrlLib,
-	GpuTopWindow,
+	GpuRender,
 	RenderVulkan;
 
 file

@@ -2,7 +2,7 @@
 
 #include <Ui/Ui.h>
 #include <Utilities/PropertyEditor/PropertyEditor.h>
-#include <GpuCtrl/GpuCtrl.h>
+#include <GpuRender/GpuRender.h>
 #include <RenderSoftware/RenderSoftware.h>
 #include <RendererShowcaseScene/RendererShowcaseScene.h>
 
@@ -17,10 +17,8 @@ public:
 class RendererShowcase : public TopWindow {
 public:
 	typedef RendererShowcase CLASSNAME;
-
 	RendererShowcase();
 	void Layout() override;
-
 private:
 	void BuildHeader();
 	void BuildInspector();
@@ -31,7 +29,6 @@ private:
 	bool BuildScene(Size size, UiDisplayList& list, Rgba8& background, String& error) const;
 	RendererShowcaseSettings GetSettings() const;
 	Value PropertyValue(const String& id) const;
-
 	UiTitleCard header;
 	UiBoxLayout header_actions { UiDirection::H };
 	UiLabel status;
@@ -39,19 +36,16 @@ private:
 	UiButton btn_software;
 	UiButton btn_reset;
 	UiButton btn_exit;
-
 	UiPanel preview_panel;
 	UiStack preview_stack;
 	GpuCtrl gpu_preview;
 	RendererSoftwarePreview software_preview;
 	UiLabel preview_caption;
-
 	UiPanel inspector_panel;
 	UiLabel inspector_title;
 	UiLabel inspector_subtitle;
 	PropertyEditor inspector;
 	PropertyEditorModel model;
-
 	Image demo_image;
 };
 

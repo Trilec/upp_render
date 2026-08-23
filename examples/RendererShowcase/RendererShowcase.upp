@@ -4,7 +4,7 @@ uses
 	Painter,
 	Ui,
 	Utilities/PropertyEditor,
-	GpuCtrl,
+	GpuRender,
 	RenderCanvas,
 	RenderSoftware,
 	RendererShowcaseScene;

@@ -1,6 +1,6 @@
 uses
 	Core,
-	GpuCtrl;
+	GpuRender;
 
 file
 	main.cpp;
