@@ -1,17 +1,87 @@
 #include "RenderPresentation.h"
-
-#include <RenderGpu2D/RenderGpu2D.h>
-#include <RenderVulkan/RenderVulkanRhi.h>
-
-#include <memory>
+#include "RenderPresentationBackend.h"
 
 namespace Upp {
 
+namespace {
+
+struct BackendRegistration : Moveable<BackendRegistration> {
+	GpuBackendKind kind = GpuBackendKind::Unknown;
+	GpuPresentationBackend *backend = nullptr;
+};
+
+static Vector<BackendRegistration>& BackendRegistry()
+{
+	static Vector<BackendRegistration> registry;
+	return registry;
+}
+
+static int FindBackendIndex(GpuBackendKind kind)
+{
+	const Vector<BackendRegistration>& registry = BackendRegistry();
+	for(int i = 0; i < registry.GetCount(); ++i)
+		if(registry[i].kind == kind)
+			return i;
+	return -1;
+}
+
+} // namespace
+
+bool RegisterGpuPresentationBackend(GpuBackendKind kind, GpuPresentationBackend& backend)
+{
+	if(kind == GpuBackendKind::Unknown || FindBackendIndex(kind) >= 0)
+		return false;
+	BackendRegistration& registration = BackendRegistry().Add();
+	registration.kind = kind;
+	registration.backend = &backend;
+	return true;
+}
+
+GpuPresentationBackend *FindGpuPresentationBackend(GpuBackendKind kind)
+{
+	int index = FindBackendIndex(kind);
+	return index >= 0 ? BackendRegistry()[index].backend : nullptr;
+}
+
+bool IsGpuPresentationBackendRegistered(GpuBackendKind kind)
+{
+	return FindGpuPresentationBackend(kind) != nullptr;
+}
+
 struct GpuContext::Impl {
-	// VulkanSurfaceSessionGroup already owns the accepted compatibility-aware
-	// shared runtime/instance registry. Device/resource pooling can grow behind
-	// this context without changing application-facing controls or painters.
-	VulkanSurfaceSessionGroup vulkan_group;
+	struct ContextEntry : Moveable<ContextEntry> {
+		GpuBackendKind kind = GpuBackendKind::Unknown;
+		One<GpuPresentationBackendContext> context;
+	};
+
+	GpuPresentationBackendContext *GetOrCreate(GpuBackendKind kind, String& error)
+	{
+		error.Clear();
+		for(ContextEntry& entry : contexts)
+			if(entry.kind == kind)
+				return entry.context;
+
+		GpuPresentationBackend *backend = FindGpuPresentationBackend(kind);
+		if(!backend) {
+			error = kind == GpuBackendKind::Unknown ? String("backend not selected")
+			                                      : String("backend not supported");
+			return nullptr;
+		}
+
+		One<GpuPresentationBackendContext> created = backend->CreateContext(error);
+		if(!created) {
+			if(error.IsEmpty())
+				error = "GPU backend context creation failed";
+			return nullptr;
+		}
+
+		ContextEntry& entry = contexts.Add();
+		entry.kind = kind;
+		entry.context = pick(created);
+		return entry.context;
+	}
+
+	Vector<ContextEntry> contexts;
 };
 
 GpuContext::GpuContext()
@@ -27,247 +97,8 @@ GpuContext& GpuContext::Default()
 	return context;
 }
 
-namespace {
-
-static GpuClearColor ToClearColor(Rgba8 color)
-{
-	const float scale = 1.0f / 255.0f;
-	GpuClearColor out;
-	out.red = color.r * scale;
-	out.green = color.g * scale;
-	out.blue = color.b * scale;
-	out.alpha = color.a * scale;
-	return out;
-}
-
-class BackendSession {
-public:
-	virtual ~BackendSession() {}
-
-	virtual bool Open(bool request_validation, const GpuNativeWindowDesc& native_window,
-	                  String& error) = 0;
-	virtual void Close() = 0;
-	virtual bool IsReady() const = 0;
-	virtual String GetError() const = 0;
-	virtual bool Present(Size requested_size, const UiDisplayList& list,
-	                     Rgba8 background, String& error) = 0;
-};
-
-class VulkanBackendSession : public BackendSession {
-public:
-	explicit VulkanBackendSession(VulkanSurfaceSessionGroup& group)
-		: session(group)
-	{
-	}
-
-	~VulkanBackendSession() override
-	{
-		Close();
-	}
-
-	bool Open(bool request_validation, const GpuNativeWindowDesc& window,
-	          String& out_error) override
-	{
-		Close();
-		error.Clear();
-		native_window = window;
-		if(!session.Open(request_validation, native_window)) {
-			error = session.GetError();
-			out_error = error;
-			return false;
-		}
-
-		device.reset(new VulkanGpuDevice(session));
-		if(!device->IsReady()) {
-			String failure = device->GetError();
-			Close();
-			error = failure.IsEmpty() ? String("VulkanGpuDevice initialization failed") : failure;
-			out_error = error;
-			return false;
-		}
-
-		renderer.reset(new UiRenderer2D(*device));
-		if(!renderer->IsReady()) {
-			String failure = renderer->GetError();
-			Close();
-			error = failure.IsEmpty() ? String("UiRenderer2D initialization failed") : failure;
-			out_error = error;
-			return false;
-		}
-
-		out_error.Clear();
-		return true;
-	}
-
-	void Close() override
-	{
-		renderer.reset();
-		if(device) {
-			if(swapchain.IsValid())
-				device->DestroySwapchain(swapchain);
-			swapchain = GpuSwapchainId();
-			if(surface.IsValid())
-				device->DestroySurface(surface);
-			surface = GpuSurfaceId();
-		}
-		device.reset();
-		session.Close();
-		native_window = GpuNativeWindowDesc();
-		swapchain_request_size = Size(0, 0);
-		error.Clear();
-	}
-
-	bool IsReady() const override
-	{
-		return session.IsReady() && device && device->IsReady() &&
-		       renderer && renderer->IsReady();
-	}
-
-	String GetError() const override
-	{
-		return error;
-	}
-
-	bool Present(Size requested_size, const UiDisplayList& list,
-	             Rgba8 background, String& out_error) override
-	{
-		out_error.Clear();
-		if(requested_size.cx <= 0 || requested_size.cy <= 0)
-			return true;
-		if(!IsReady()) {
-			error = !device ? session.GetError() : device->GetError();
-			if(error.IsEmpty())
-				error = "GPU presentation session is not ready";
-			out_error = error;
-			return false;
-		}
-		if(!EnsureSwapchain(requested_size, out_error))
-			return false;
-		if(PresentOnce(list, background, out_error))
-			return true;
-
-		if(!session.GetFrameReport().out_of_date)
-			return false;
-		if(device->ResizeSwapchain(swapchain, requested_size) != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty())
-				error = "GPU swapchain recreation after out-of-date presentation failed";
-			out_error = error;
-			return false;
-		}
-		swapchain_request_size = requested_size;
-		if(PresentOnce(list, background, out_error)) {
-			out_error.Clear();
-			return true;
-		}
-		return false;
-	}
-
-private:
-	bool EnsureSwapchain(Size requested_size, String& out_error)
-	{
-		if(!surface.IsValid()) {
-			GpuSurfaceDesc desc;
-			desc.label = "GPU presentation surface";
-			desc.size = requested_size;
-			desc.native_window = native_window;
-			GpuResult result = device->CreateSurface(desc, surface);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty())
-					error = "logical GPU surface creation failed";
-				out_error = error;
-				return false;
-			}
-		}
-
-		if(!swapchain.IsValid()) {
-			GpuSwapchainDesc desc;
-			desc.label = "GPU presentation swapchain";
-			desc.surface = surface;
-			desc.size = requested_size;
-			desc.color_format = GpuFormat::RGBA8;
-			desc.image_count = 2;
-			GpuResult result = device->CreateSwapchain(desc, swapchain);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty())
-					error = "logical GPU swapchain creation failed";
-				out_error = error;
-				return false;
-			}
-			swapchain_request_size = requested_size;
-		}
-		else if(requested_size != swapchain_request_size) {
-			GpuResult result = device->ResizeSwapchain(swapchain, requested_size);
-			if(result != GpuResult::Ok) {
-				error = device->GetError();
-				if(error.IsEmpty())
-					error = "logical GPU swapchain resize failed";
-				out_error = error;
-				return false;
-			}
-			swapchain_request_size = requested_size;
-		}
-		return true;
-	}
-
-	bool PresentOnce(const UiDisplayList& list, Rgba8 background, String& out_error)
-	{
-		GpuFrameInfo frame;
-		GpuResult result = device->BeginFrame(swapchain, frame);
-		if(result != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty())
-				error = "GPU BeginFrame failed";
-			out_error = error;
-			return false;
-		}
-
-		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
-			String render_error = renderer->GetError();
-			device->Present(frame.frame);
-			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
-			out_error = error;
-			return false;
-		}
-
-		result = device->Present(frame.frame);
-		if(result != GpuResult::Ok) {
-			error = device->GetError();
-			if(error.IsEmpty())
-				error = "GPU Present failed";
-			out_error = error;
-			return false;
-		}
-
-		error.Clear();
-		out_error.Clear();
-		return true;
-	}
-
-	VulkanSurfaceSession session;
-	std::unique_ptr<VulkanGpuDevice> device;
-	std::unique_ptr<UiRenderer2D> renderer;
-	GpuNativeWindowDesc native_window;
-	GpuSurfaceId surface;
-	GpuSwapchainId swapchain;
-	Size swapchain_request_size = Size(0, 0);
-	String error;
-};
-
-static One<BackendSession> CreateBackendSession(GpuBackendKind kind,
-                                                 VulkanSurfaceSessionGroup *vulkan_group)
-{
-	if(kind == GpuBackendKind::Vulkan && vulkan_group)
-		return new VulkanBackendSession(*vulkan_group);
-	return One<BackendSession>();
-}
-
-} // namespace
-
 struct GpuDisplayPresenter::Impl {
-	One<BackendSession> session;
+	One<GpuPresentationBackendSession> session;
 	GpuContext *context = nullptr;
 	GpuBackendKind backend = GpuBackendKind::Unknown;
 	String error;
@@ -299,14 +130,33 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 	out_error.Clear();
 	impl->context = &context;
 	impl->backend = backend;
-	VulkanSurfaceSessionGroup *vulkan_group = context.impl ? &context.impl->vulkan_group : nullptr;
-	impl->session = CreateBackendSession(backend, vulkan_group);
-	if(!impl->session) {
-		impl->error = backend == GpuBackendKind::Unknown ?
-		              String("backend not selected") : String("backend not supported");
+
+	GpuPresentationBackend *provider = FindGpuPresentationBackend(backend);
+	if(!provider) {
+		impl->error = backend == GpuBackendKind::Unknown ? String("backend not selected")
+		                                                  : String("backend not supported");
 		out_error = impl->error;
 		return false;
 	}
+
+	String context_error;
+	GpuPresentationBackendContext *backend_context = context.impl
+	                                               ? context.impl->GetOrCreate(backend, context_error)
+	                                               : nullptr;
+	if(!backend_context) {
+		impl->error = context_error.IsEmpty() ? String("GPU backend context is unavailable") : context_error;
+		out_error = impl->error;
+		return false;
+	}
+
+	String create_error;
+	impl->session = provider->CreateSession(*backend_context, create_error);
+	if(!impl->session) {
+		impl->error = create_error.IsEmpty() ? String("GPU backend session creation failed") : create_error;
+		out_error = impl->error;
+		return false;
+	}
+
 	if(!impl->session->Open(request_validation, native_window, out_error)) {
 		impl->error = out_error.IsEmpty() ? impl->session->GetError() : out_error;
 		impl->session.Clear();
