@@ -98,6 +98,7 @@ private:
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
+		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 		VkQueue graphics_queue = VK_NULL_HANDLE;
 		VkQueue present_queue = VK_NULL_HANDLE;
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
@@ -125,6 +126,7 @@ private:
 	bool DestroyFrameState();
 
 	friend class VulkanGpuDevice;
+	friend bool VulkanTestHooks::TestVulkanGroupedSurfaceSessions(VulkanProcResolver, VulkanTestHooks::VulkanGroupedSurfaceSessionTestResult&);
 	friend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);
 };
 

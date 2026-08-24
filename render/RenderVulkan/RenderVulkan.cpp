@@ -1176,6 +1176,8 @@ struct VulkanDeviceContext {
 	PFN_vkDestroyDevice destroy_device = nullptr;
 	PFN_vkGetDeviceQueue get_device_queue = nullptr;
 	PFN_vkDeviceWaitIdle device_wait_idle = nullptr;
+	VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
+	PFN_vkDestroyPipelineCache destroy_pipeline_cache = nullptr;
 	VectorMap<int, VkQueue> family_queues;
 	bool cleanup_ok = true;
 	int cleanup_result = 0;
@@ -1186,7 +1188,7 @@ struct VulkanDeviceContext {
 
 	bool IsCleared() const
 	{
-		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && family_queues.IsEmpty();
+		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && pipeline_cache == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && destroy_pipeline_cache == nullptr && family_queues.IsEmpty();
 	}
 
 	void RegisterDiagnostics()
@@ -1214,6 +1216,11 @@ struct VulkanDeviceContext {
 				cleanup_error = String("vkDeviceWaitIdle failed: ") + AsString((int)vr);
 			}
 		}
+		if(pipeline_cache && destroy_pipeline_cache)
+			destroy_pipeline_cache(device, pipeline_cache, nullptr);
+		else if(pipeline_cache)
+			ok = false;
+		pipeline_cache = VK_NULL_HANDLE;
 		if(device && destroy_device)
 			destroy_device(device, nullptr);
 		else if(device)
@@ -1225,6 +1232,7 @@ struct VulkanDeviceContext {
 		destroy_device = nullptr;
 		get_device_queue = nullptr;
 		device_wait_idle = nullptr;
+		destroy_pipeline_cache = nullptr;
 		physical_device = VK_NULL_HANDLE;
 		cleanup_ok = cleanup_ok && ok && IsCleared();
 		if(diagnostic_id) {
@@ -1404,6 +1412,16 @@ struct VulkanDeviceContext {
 		                       device, "vkGetDeviceQueue", error)) return fail(error);
 		if(!ResolveDeviceProc(device_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr,
 		                       device, "vkDeviceWaitIdle", error)) return fail(error);
+		PFN_vkCreatePipelineCache create_pipeline_cache = nullptr;
+		if(!ResolveDeviceProc(create_pipeline_cache, instance.dispatch->proc_filter, instance.get_device_proc_addr,
+		                       device, "vkCreatePipelineCache", error)) return fail(error);
+		if(!ResolveDeviceProc(destroy_pipeline_cache, instance.dispatch->proc_filter, instance.get_device_proc_addr,
+		                       device, "vkDestroyPipelineCache", error)) return fail(error);
+		VkPipelineCacheCreateInfo pipeline_cache_info {};
+		pipeline_cache_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		vr = create_pipeline_cache(device, &pipeline_cache_info, nullptr, &pipeline_cache);
+		if(vr != VK_SUCCESS)
+			return fail(String("vkCreatePipelineCache failed: ") + AsString((int)vr));
 
 		family_queues.Clear();
 		for(int family_index : family_indices) {
@@ -3489,6 +3507,9 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		bool first_ok = first.Open(true, first_window, resolver);
 		bool second_ok = second.Open(true, second_window, resolver);
 		if(!first_ok || !second_ok || !first.IsReady() || !second.IsReady() || !second.GetReport().shared_instance_reused) return false;
+		VulkanSurfaceSession::FrameInterop first_interop, second_interop;
+		if(!first.GetFrameInterop(first_interop) || !second.GetFrameInterop(second_interop) ||
+		   first_interop.pipeline_cache == VK_NULL_HANDLE || first_interop.pipeline_cache != second_interop.pipeline_cache) return false;
 		result.first_report_authoritative = first.GetReport().shared_instance_acquired && !first.GetReport().shared_instance_reused;
 		result.second_report_authoritative = second.GetReport().shared_instance_acquired && second.GetReport().shared_instance_reused;
 		if(!result.first_report_authoritative || !result.second_report_authoritative) return false;
@@ -3507,6 +3528,8 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		result.non_final_registry_entries = group.impl->registry.GetEntryCount();
 		result.non_final_acquire_count = group.impl->registry.entries[0]->acquire_count;
 		if(group.impl->device_registry.GetEntryCount() != 1 || group.impl->device_registry.entries[0]->acquire_count != 1) return false;
+		VulkanSurfaceSession::FrameInterop survivor_interop;
+		if(!second.GetFrameInterop(survivor_interop) || survivor_interop.pipeline_cache != second_interop.pipeline_cache) return false;
 		result.first_survivor_state = second.IsReady() && second.GetError() == second_error && second.GetReport().shared_instance_acquired == second_report.shared_instance_acquired && second.GetReport().shared_instance_reused == second_report.shared_instance_reused && second.HasSwapchain() && result.non_final_diag.runtime_live_count == 1 && result.non_final_diag.instance_live_count == 1 && result.non_final_diag.surface_live_count == 1 && result.non_final_diag.device_live_count == 1 && result.non_final_diag.swapchain_live_count == 1;
 		if(!result.first_survivor_state) return false;
 		result.non_final_close = true;
@@ -4338,6 +4361,7 @@ bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 	out.instance = VK_NULL_HANDLE;
 	out.physical_device = VK_NULL_HANDLE;
 	out.device = VK_NULL_HANDLE;
+	out.pipeline_cache = VK_NULL_HANDLE;
 	out.graphics_queue = VK_NULL_HANDLE;
 	out.present_queue = VK_NULL_HANDLE;
 	out.swapchain = VK_NULL_HANDLE;
@@ -4355,6 +4379,7 @@ bool VulkanSurfaceSession::GetFrameInterop(FrameInterop& out) const
 	out.instance = owner->instance.instance;
 	out.physical_device = impl->device->physical_device;
 	out.device = impl->device->device;
+	out.pipeline_cache = impl->device->pipeline_cache;
 	out.graphics_queue = impl->graphics_queue;
 	out.present_queue = impl->present_queue;
 	out.swapchain = impl->swapchain.swapchain;

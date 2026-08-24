@@ -249,6 +249,7 @@ struct VulkanGpuDevice::Impl {
 	VkInstance instance = VK_NULL_HANDLE;
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
+	VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 	VkQueue graphics_queue = VK_NULL_HANDLE;
 	uint32_t graphics_queue_family_index = 0;
 	PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
@@ -851,12 +852,13 @@ VulkanGpuDevice::VulkanGpuDevice(VulkanSurfaceSession& session)
 	impl->instance = interop.instance;
 	impl->physical_device = interop.physical_device;
 	impl->device = interop.device;
+	impl->pipeline_cache = interop.pipeline_cache;
 	impl->graphics_queue = interop.graphics_queue;
 	impl->graphics_queue_family_index = interop.graphics_queue_family_index;
 	impl->get_instance_proc_addr = interop.get_instance_proc_addr;
 	impl->get_device_proc_addr = interop.get_device_proc_addr;
 	impl->proc_filter = interop.proc_filter;
-	if(!impl->instance || !impl->physical_device || !impl->device || !impl->graphics_queue ||
+	if(!impl->instance || !impl->physical_device || !impl->device || !impl->pipeline_cache || !impl->graphics_queue ||
 	   !impl->get_instance_proc_addr || !impl->get_device_proc_addr) {
 		impl->error = "VulkanGpuDevice session interop is incomplete";
 		return;
@@ -1291,7 +1293,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	VkGraphicsPipelineCreateInfo pci {}; pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; pci.pNext = &rendering; pci.stageCount = 2; pci.pStages = stages;
 	pci.pVertexInputState = &vertex; pci.pInputAssemblyState = &assembly; pci.pViewportState = &viewport; pci.pRasterizationState = &raster; pci.pMultisampleState = &ms; pci.pColorBlendState = &blend; pci.pDynamicState = &dynamic; pci.layout = layout;
 	VkPipeline pipeline = VK_NULL_HANDLE;
-	vr = impl->create_graphics_pipelines(impl->device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline);
+	vr = impl->create_graphics_pipelines(impl->device, impl->pipeline_cache, 1, &pci, nullptr, &pipeline);
 	if(vr != VK_SUCCESS) { impl->destroy_pipeline_layout(impl->device, layout, nullptr); impl->error = VkFailure("vkCreateGraphicsPipelines", vr); return GpuResult::InvalidState; }
 	GpuPipelineId id; id.value = impl->next_pipeline_id++;
 	Impl::PipelineState& state = impl->pipelines.Add(id.value, Impl::PipelineState()); state.desc = desc; state.layout = layout; state.pipeline = pipeline; out = id;
