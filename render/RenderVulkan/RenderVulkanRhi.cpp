@@ -431,7 +431,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	pci.pColorBlendState = &blend;
 	pci.pDynamicState = &dynamic;
 	pci.layout = state.layout;
-	vr = impl->create_graphics_pipelines(impl->device, VK_NULL_HANDLE, 1, &pci, nullptr, &state.pipeline);
+	vr = impl->create_graphics_pipelines(impl->device, impl->pipeline_cache, 1, &pci, nullptr, &state.pipeline);
 	if(vr != VK_SUCCESS) {
 		sampled.DestroyPipelineState(state);
 		impl->error = VkFailure("vkCreateGraphicsPipelines", vr);
