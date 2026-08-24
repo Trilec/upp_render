@@ -1,8 +1,9 @@
 #include "RenderVulkanRhi.h"
 
-// Preserve the accepted Stage-3/Stage-4 adapter byte-for-byte and rename only
-// the entry points whose behaviour Stage 5 must extend. The public wrappers
-// below add sampled-image state without forking resource/frame ownership.
+// Keep the core RHI and sampled-texture extension in one translation unit so the
+// wrappers can reuse VulkanGpuDevice private Impl state without publishing backend
+// internals. The renamed base entry points are deliberate internal layering, not a
+// compatibility API.
 #define GetLivePipelineCount GetLivePipelineCountBase
 #define DestroyShader DestroyShaderBase
 #define CreatePipeline CreatePipelineBase

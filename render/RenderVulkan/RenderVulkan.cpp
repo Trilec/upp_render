@@ -1176,6 +1176,7 @@ struct VulkanDeviceContext {
 	PFN_vkDestroyDevice destroy_device = nullptr;
 	PFN_vkGetDeviceQueue get_device_queue = nullptr;
 	PFN_vkDeviceWaitIdle device_wait_idle = nullptr;
+	PFN_vkQueueWaitIdle queue_wait_idle = nullptr;
 	VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 	PFN_vkDestroyPipelineCache destroy_pipeline_cache = nullptr;
 	VectorMap<int, VkQueue> family_queues;
@@ -1188,7 +1189,7 @@ struct VulkanDeviceContext {
 
 	bool IsCleared() const
 	{
-		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && pipeline_cache == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && destroy_pipeline_cache == nullptr && family_queues.IsEmpty();
+		return physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && pipeline_cache == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && queue_wait_idle == nullptr && destroy_pipeline_cache == nullptr && family_queues.IsEmpty();
 	}
 
 	void RegisterDiagnostics()
@@ -1232,6 +1233,7 @@ struct VulkanDeviceContext {
 		destroy_device = nullptr;
 		get_device_queue = nullptr;
 		device_wait_idle = nullptr;
+		queue_wait_idle = nullptr;
 		destroy_pipeline_cache = nullptr;
 		physical_device = VK_NULL_HANDLE;
 		cleanup_ok = cleanup_ok && ok && IsCleared();
@@ -1242,18 +1244,28 @@ struct VulkanDeviceContext {
 		return cleanup_ok;
 	}
 
-	bool WaitIdle(String& error)
+	bool WaitQueuesIdle(VkQueue graphics, VkQueue present, String& error)
 	{
-		if(!device)
+		error.Clear();
+		if(!device || (!graphics && !present))
 			return true;
-		VkResult vr = VK_SUCCESS;
-		if(g_validation_test_injection.point == VulkanValidationTestPoint::DuringDeviceCleanup && g_validation_test_injection.force_device_cleanup_failure)
-			vr = g_validation_test_injection.device_cleanup_result;
-		else
-			vr = device_wait_idle ? device_wait_idle(device) : VK_ERROR_INITIALIZATION_FAILED;
-		if(vr != VK_SUCCESS) {
-			error = String("vkDeviceWaitIdle failed: ") + AsString((int)vr);
+		if(!queue_wait_idle) {
+			error = "vkQueueWaitIdle";
 			return false;
+		}
+		if(graphics) {
+			VkResult vr = queue_wait_idle(graphics);
+			if(vr != VK_SUCCESS) {
+				error = String("vkQueueWaitIdle(graphics) failed: ") + AsString((int)vr);
+				return false;
+			}
+		}
+		if(present && present != graphics) {
+			VkResult vr = queue_wait_idle(present);
+			if(vr != VK_SUCCESS) {
+				error = String("vkQueueWaitIdle(present) failed: ") + AsString((int)vr);
+				return false;
+			}
 		}
 		return true;
 	}
@@ -1319,6 +1331,7 @@ struct VulkanDeviceContext {
 		if(!ResolveDeviceProc(destroy_device, instance.dispatch->proc_filter, instance.get_device_proc_addr, device, "vkDestroyDevice", error)) return fail(error);
 		if(!ResolveDeviceProc(get_device_queue, instance.dispatch->proc_filter, instance.get_device_proc_addr, device, "vkGetDeviceQueue", error)) return fail(error);
 		if(!ResolveDeviceProc(device_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr, device, "vkDeviceWaitIdle", error)) return fail(error);
+		if(!ResolveDeviceProc(queue_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr, device, "vkQueueWaitIdle", error)) return fail(error);
 
 		get_device_queue(device, (uint32_t)chosen_queue_index, 0, &graphics_queue);
 		if(graphics_queue == VK_NULL_HANDLE) {
@@ -1412,6 +1425,8 @@ struct VulkanDeviceContext {
 		                       device, "vkGetDeviceQueue", error)) return fail(error);
 		if(!ResolveDeviceProc(device_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr,
 		                       device, "vkDeviceWaitIdle", error)) return fail(error);
+		if(!ResolveDeviceProc(queue_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr,
+		                       device, "vkQueueWaitIdle", error)) return fail(error);
 		PFN_vkCreatePipelineCache create_pipeline_cache = nullptr;
 		if(!ResolveDeviceProc(create_pipeline_cache, instance.dispatch->proc_filter, instance.get_device_proc_addr,
 		                       device, "vkCreatePipelineCache", error)) return fail(error);
@@ -1894,18 +1909,17 @@ struct VulkanSwapchainContext {
 		diagnostic_id = 0;
 	}
 
-	bool Destroy(VulkanDeviceContext& device, String& error)
+	bool Destroy(VulkanDeviceContext& device)
 	{
-		bool idle_ok = device.WaitIdle(error);
-		if(swapchain && destroy_swapchain)
+		bool ok = true;
+		if(swapchain && destroy_swapchain && device.device)
 			destroy_swapchain(device.device, swapchain, nullptr);
 		else if(swapchain)
-			idle_ok = false;
-		if(diagnostic_id) {
+			ok = false;
+		if(diagnostic_id)
 			g_runtime_device_stats.swapchain_live_count.fetch_sub(1, std::memory_order_relaxed);
-		}
 		ClearState();
-		cleanup_ok = cleanup_ok && idle_ok && IsCleared();
+		cleanup_ok = cleanup_ok && ok && IsCleared();
 		return cleanup_ok;
 	}
 };
@@ -2311,7 +2325,7 @@ static VulkanProbeStatus MapInstanceError(const String& error)
 
 static VulkanProbeStatus MapDeviceError(const String& error)
 {
-	if(error == "vkDestroyDevice" || error == "vkGetDeviceQueue" || error == "vkDeviceWaitIdle")
+	if(error == "vkDestroyDevice" || error == "vkGetDeviceQueue" || error == "vkDeviceWaitIdle" || error == "vkQueueWaitIdle")
 		return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
 	if(error.StartsWith("physical device count query failed") || error.StartsWith("physical device enumeration failed"))
 		return VulkanProbeStatus::PhysicalDeviceEnumerationFailed;
@@ -3675,10 +3689,10 @@ bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult&
 	rollback_injection.point = VulkanValidationTestPoint::DuringDeviceCleanup;
 	rollback_injection.force_device_cleanup_failure = true;
 	SetVulkanValidationTestInjection(rollback_injection);
-	if(session.CreateSwapchain(Size(64, 64)) || session.GetReport().swapchain_error != "injected swapchain image enumeration failure" || session.GetReport().swapchain_cleanup_ok || GetVulkanRuntimeDeviceDiagnostics().swapchain_live_count != 0) return false;
+	if(session.CreateSwapchain(Size(64, 64)) || session.GetReport().swapchain_error != "injected swapchain image enumeration failure" || !session.GetReport().swapchain_cleanup_ok || GetVulkanRuntimeDeviceDiagnostics().swapchain_live_count != 0) return false;
 	ClearVulkanValidationTestInjection();
-	if(!session.CreateSwapchain(Size(64, 64)) || !session.DestroySwapchain() || session.GetReport().swapchain_cleanup_ok) return false;
-	result.rollback_cleanup_sticky = true;
+	if(!session.CreateSwapchain(Size(64, 64)) || !session.DestroySwapchain() || !session.GetReport().swapchain_cleanup_ok) return false;
+	result.rollback_cleanup_independent = true;
 	const char *missing[] = { "vkCreateSwapchainKHR", "vkDestroySwapchainKHR", "vkGetSwapchainImagesKHR" };
 	for(const char *name : missing) {
 		g_registry_test_missing_proc = name;
@@ -3695,7 +3709,7 @@ bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult&
 	bool rollback_create = session.CreateSwapchain(Size(64, 64));
 	if(rollback_create || session.HasSwapchain() || !session.IsReady() || session.GetReport().swapchain_error != "injected swapchain image enumeration failure") return false;
 	VulkanRuntimeDeviceDiagnostics rollback_diag = GetVulkanRuntimeDeviceDiagnostics();
-	if(rollback_diag.swapchain_create_count != create_before_rollback + 1 || rollback_diag.swapchain_live_count != 0 || !session.GetReport().swapchain_state_cleared || session.GetReport().swapchain_cleanup_ok) return false;
+	if(rollback_diag.swapchain_create_count != create_before_rollback + 1 || rollback_diag.swapchain_live_count != 0 || !session.GetReport().swapchain_state_cleared || !session.GetReport().swapchain_cleanup_ok) return false;
 	result.rollback = true;
 	ClearVulkanValidationTestInjection();
 	bool sticky_create = session.CreateSwapchain(Size(64, 64));
@@ -3716,8 +3730,8 @@ bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult&
 		ClearVulkanValidationTestInjection();
 		const VulkanSurfaceReport& idle_report = idle_failure.GetReport();
 		VulkanRuntimeDeviceDiagnostics idle_diag = GetVulkanRuntimeDeviceDiagnostics();
-		if(idle_report.swapchain_cleanup_ok || !idle_report.cleanup_state_cleared || idle_report.clean_shutdown || idle_diag.swapchain_live_count != 0 || idle_diag.device_live_count != 0 || idle_diag.surface_live_count != 0 || idle_diag.instance_live_count != 0 || idle_diag.runtime_live_count != 0) return false;
-		result.active_idle_failure_cleanup = true;
+		if(!idle_report.swapchain_cleanup_ok || idle_report.device_cleanup_ok || !idle_report.cleanup_state_cleared || idle_report.clean_shutdown || idle_diag.swapchain_live_count != 0 || idle_diag.device_live_count != 0 || idle_diag.surface_live_count != 0 || idle_diag.instance_live_count != 0 || idle_diag.runtime_live_count != 0) return false;
+		result.device_cleanup_does_not_poison_swapchain = true;
 	}
 	{
 		ClearVulkanRuntimeDeviceDiagnostics();
@@ -3731,7 +3745,7 @@ bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult&
 	}
 	session.Close();
 	result.final_diag = GetVulkanRuntimeDeviceDiagnostics();
-	return result.created && result.destroyed && result.idempotent && result.invalid_size_refused && result.already_created_refused && result.missing_procedure_recovered && result.rollback && result.active_idle_failure_cleanup && result.destructor_cleanup && result.transient_incomplete_recovered && result.persistent_incomplete_rolled_back && result.rollback_cleanup_sticky && result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;
+	return result.created && result.destroyed && result.idempotent && result.invalid_size_refused && result.already_created_refused && result.missing_procedure_recovered && result.rollback && result.device_cleanup_does_not_poison_swapchain && result.destructor_cleanup && result.transient_incomplete_recovered && result.persistent_incomplete_rolled_back && result.rollback_cleanup_independent && result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;
 }
 
 } // namespace VulkanTestHooks
@@ -4398,7 +4412,7 @@ bool VulkanSurfaceSession::WaitFrameIdle(String& error)
 	error.Clear();
 	if(!impl || !impl->device || !impl->device->device)
 		return true;
-	return impl->device->WaitIdle(error);
+	return impl->device->WaitQueuesIdle(impl->graphics_queue, impl->present_queue, error);
 }
 
 void VulkanSurfaceSession::SyncFrameValidation()
@@ -4421,7 +4435,7 @@ bool VulkanSurfaceSession::DestroySwapchain()
 	bool frame_ok = DestroyFrameState();
 	if(!impl->swapchain.swapchain)
 		return frame_ok;
-	bool ok = impl->swapchain.Destroy(*impl->device, impl->report.swapchain_error);
+	bool ok = impl->swapchain.Destroy(*impl->device);
 	impl->report.swapchain_state_cleared = impl->swapchain.IsCleared();
 	impl->report.swapchain_cleanup_ok = impl->report.swapchain_cleanup_ok && ok;
 	return frame_ok && ok;
@@ -4582,11 +4596,10 @@ bool VulkanSurfaceSession::CreateSwapchain(Size requested_size)
 	for(const VkImage image : images) if(image == VK_NULL_HANDLE) images_valid = false;
 	if(!images_valid) {
 		if(enumeration_error.IsEmpty()) enumeration_error = "vkGetSwapchainImagesKHR returned a null image";
-		String idle_error;
-		bool idle_ok = impl->device->WaitIdle(idle_error);
+		// The newly created swapchain has never been submitted or presented; rollback
+		// therefore needs no queue/device idle boundary before destruction.
 		destroy_swapchain(impl->device->device, created, nullptr);
 		g_runtime_device_stats.swapchain_live_count.fetch_sub(1, std::memory_order_relaxed);
-		impl->report.swapchain_cleanup_ok = impl->report.swapchain_cleanup_ok && idle_ok;
 		impl->report.swapchain_state_cleared = true;
 		impl->report.swapchain_error = enumeration_error;
 		return false;
@@ -4640,7 +4653,7 @@ static void CleanupSurfaceSession(VulkanSurfaceSession::Impl& impl)
 	bool swapchain_close_ok = true;
 	if(swapchain_was_active) {
 		if(impl.device)
-			swapchain_close_ok = impl.swapchain.Destroy(*impl.device, impl.error);
+			swapchain_close_ok = impl.swapchain.Destroy(*impl.device);
 		else
 			swapchain_close_ok = false;
 		impl.report.swapchain_cleanup_ok = impl.report.swapchain_cleanup_ok && swapchain_close_ok;

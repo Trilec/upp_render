@@ -199,11 +199,11 @@ struct VulkanSwapchainTestResult {
 	bool already_created_refused = false;
 	bool missing_procedure_recovered = false;
 	bool rollback = false;
-	bool active_idle_failure_cleanup = false;
+	bool device_cleanup_does_not_poison_swapchain = false;
 	bool destructor_cleanup = false;
 	bool transient_incomplete_recovered = false;
 	bool persistent_incomplete_rolled_back = false;
-	bool rollback_cleanup_sticky = false;
+	bool rollback_cleanup_independent = false;
 	VulkanSurfaceReport active_report;
 	VulkanSurfaceReport destroyed_report;
 	VulkanRuntimeDeviceDiagnostics active_diag;

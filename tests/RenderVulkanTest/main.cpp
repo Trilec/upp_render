@@ -234,7 +234,13 @@ static bool TestMissingDeviceFunction()
 	if(!Check(report.status == VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "missing device function should be reported")) return false;
 	if(!Check(report.instance_error == "vkCreateDevice", "missing device function name should be preserved")) return false;
 	if(!Check(report.cleanup_state_cleared, "missing device function should still clear state")) return false;
-	return Check(report.clean_shutdown, "missing device function should clean up what it can");
+	if(!Check(report.clean_shutdown, "missing device function should clean up what it can")) return false;
+
+	VulkanBootstrapReport queue_wait = RunBootstrap(false, true, "vkQueueWaitIdle");
+	if(!Check(queue_wait.status == VulkanProbeStatus::RequiredLoaderFunctionUnavailable, "missing queue-wait function should be reported")) return false;
+	if(!Check(queue_wait.device_error == "vkQueueWaitIdle", "missing queue-wait function name should be preserved")) return false;
+	if(!Check(queue_wait.cleanup_state_cleared, "missing queue-wait function should still clear state")) return false;
+	return Check(queue_wait.clean_shutdown, "missing queue-wait function should clean up what it can");
 }
 
 static bool TestInjectedFailureCleanup()
@@ -994,7 +1000,7 @@ static bool TestGroupedSurfaceSessions()
 {
 	VulkanGroupedSurfaceSessionTestResult result;
 	if(!Check(TestVulkanGroupedSurfaceSessions(&TestResolver, result), "grouped surface-session tests should succeed")) return false;
-	if(!Check(result.compatible_shared && result.grouped_swapchains_separate && result.compatible_registry_entries == 1 && result.compatible_acquire_count == 2 && result.compatible_diag.runtime_create_count == 1 && result.compatible_diag.instance_create_count == 1 && result.compatible_diag.surface_create_count == 2 && result.compatible_diag.device_create_count == 2, "compatible grouped sessions should share runtime and instance only")) return false;
+	if(!Check(result.compatible_shared && result.grouped_swapchains_separate && result.compatible_registry_entries == 1 && result.compatible_acquire_count == 2 && result.compatible_diag.runtime_create_count == 1 && result.compatible_diag.instance_create_count == 1 && result.compatible_diag.surface_create_count == 2 && result.compatible_diag.device_create_count == 1 && result.compatible_diag.device_live_count == 1, "compatible grouped sessions should share runtime, instance and one logical device while retaining two surfaces")) return false;
 	if(!Check(result.first_report_authoritative && result.second_report_authoritative, "grouped acquisition reports should distinguish new and reused leases")) return false;
 	if(!Check(result.non_final_close && result.non_final_registry_entries == 1 && result.non_final_acquire_count == 1 && result.non_final_diag.runtime_live_count == 1 && result.non_final_diag.instance_live_count == 1 && result.non_final_diag.surface_live_count == 1 && result.non_final_diag.device_live_count == 1, "non-final grouped close should preserve the second session")) return false;
 	if(!Check(result.first_survivor_state && result.second_survivor_state, "both grouped close orders should preserve the survivor")) return false;
@@ -1010,7 +1016,7 @@ static bool TestSwapchain()
 	if(!Check(TestVulkanSwapchain(&TestResolver, result), "swapchain tests should succeed")) return false;
 	if(!Check(result.created && result.active_report.swapchain_created && !result.active_report.swapchain_state_cleared && result.active_report.swapchain_image_count > 0 && result.active_diag.swapchain_create_count == 1 && result.active_diag.swapchain_live_count == 1, "swapchain creation evidence should be explicit")) return false;
 	if(!Check(result.destroyed && result.idempotent && result.destroyed_report.swapchain_state_cleared && result.destroyed_report.swapchain_cleanup_ok, "swapchain destruction and idempotence should be explicit")) return false;
-	if(!Check(result.invalid_size_refused && result.already_created_refused && result.missing_procedure_recovered && result.rollback && result.active_idle_failure_cleanup && result.destructor_cleanup && result.transient_incomplete_recovered && result.persistent_incomplete_rolled_back && result.rollback_cleanup_sticky, "swapchain refusal, rollback, incomplete recovery, idle cleanup and destructor cleanup should be explicit")) return false;
+	if(!Check(result.invalid_size_refused && result.already_created_refused && result.missing_procedure_recovered && result.rollback && result.device_cleanup_does_not_poison_swapchain && result.destructor_cleanup && result.transient_incomplete_recovered && result.persistent_incomplete_rolled_back && result.rollback_cleanup_independent, "swapchain refusal, rollback, cleanup isolation, incomplete recovery and destructor cleanup should be explicit")) return false;
 	return Check(result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0, "swapchain tests should finish with zero live resources");
 }
 

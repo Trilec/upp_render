@@ -3,9 +3,9 @@
 #include <cmath>
 #include <limits>
 
-// Keep the accepted Stage-4/image renderer byte-preserved. Stage-5 wrappers
-// only intercept features the accepted base does not know about; vector/SVG
-// content is materialized into ordinary DrawImage intent before reaching it.
+// Keep the base replay and feature extensions in one translation unit so text/vector
+// wrappers can reuse UiRenderer2D private state without publishing a second internal API.
+// Vector/SVG content is materialized into ordinary DrawImage intent before replay.
 #define BuildGeometry BuildGeometryBase
 #define Render RenderBase
 #define RenderFrame RenderFrameBase

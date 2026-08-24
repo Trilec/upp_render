@@ -31,7 +31,8 @@ UiDisplayListBuilder
         |
       GpuRhi
         |
-Vulkan / Metal / WebGPU
+registered backend provider
+ Vulkan / future Metal / WebGPU
 ```
 
 For `GpuTopWindow` the producer changes, not the renderer:
@@ -50,31 +51,32 @@ Software replay consumes the same display list and remains the semantic/correctn
 
 ## `GpuContext` and many surfaces
 
-The application-level context is separate from the presentation surface.
+The application-level context is separate from each presentation surface.
 
-Target ownership:
+Current compatible Vulkan ownership is:
 
 ```text
 GpuContext
-  backend runtime / instance
-  compatible physical/logical device
-  queues
-  pipelines and shaders
-  image/glyph/resource caches
+  provider context
+    shared Vulkan runtime / instance
+    shared physical + logical device domain
+    shared queue handles
+    shared VkPipelineCache
        |
-       +-- surface + swapchain: GpuCtrl A
-       +-- surface + swapchain: GpuCtrl B
-       +-- surface + swapchain: GpuWindow
-       +-- surface + swapchain: GpuTopWindow/dialog
+       +-- presenter A: UiRenderer2D + surface + swapchain + frame state
+       +-- presenter B: UiRenderer2D + surface + swapchain + frame state
+       +-- presenter C: UiRenderer2D + surface + swapchain + frame state
 ```
 
-This takes the useful lesson from U++ `GLCtrl` (share expensive backend state across controls) without copying OpenGL's global mutable rendering context.
+This takes the useful lesson from U++ `GLCtrl`—reuse expensive backend state across controls—without copying OpenGL's global mutable rendering context.
 
-Current Vulkan status: `GpuContext::Default()` shares the accepted grouped runtime/instance state. Compatibility-keyed logical-device/resource pooling is active productization work.
+Image/glyph RHI handles and `UiRenderer2D` caches remain presenter-owned. Cross-presenter sharing of those mutable resources is deferred until there is a real resource identity, compatibility and lifetime model; device compatibility alone is not enough.
 
-## Backend neutrality
+On Vulkan, per-surface teardown waits only the queues used by that surface before destroying submitted/presented swapchain state. The final release of the shared logical device still uses a device-wide idle boundary before destroying device-owned resources. A never-used swapchain that fails during creation can be destroyed directly because no GPU work references it.
 
-The following public layers must contain no Vulkan/Metal/WebGPU objects:
+## Backend neutrality and registration
+
+The following public layers contain no Vulkan/Metal/WebGPU objects:
 
 - `GpuPainter`
 - `GpuCtrl`
@@ -83,6 +85,10 @@ The following public layers must contain no Vulkan/Metal/WebGPU objects:
 - `GpuContext`
 - `RenderCanvas`
 - generic `RenderRhi` contracts
+
+The internal provider registry is defined in `RenderRhi`. `RenderVulkan` implements and registers the Vulkan provider. Generic presentation owns `UiRenderer2D` and logical surface/swapchain orchestration through `GpuDevice`; it does not inspect Vulkan reports or construct Vulkan implementation objects.
+
+`GpuRender.upp` currently pulls `RenderVulkan` so the ordinary Windows/Vulkan build gets a default provider from the one public package. This is package composition rather than public/API coupling; future platform compositions can register Metal or WebGPU providers through the same neutral seam.
 
 Native-window adaptation is a platform/backend concern. The current Win32 path builds a neutral native-window descriptor below the public controls.
 
@@ -96,6 +102,8 @@ U++ remains semantic authority where it already has mature behavior:
 
 A future native GPU vector tessellator is an optimization, not a replacement semantic system.
 
+The `RenderGpu2DBase.inc` and `RenderVulkanRhiBase.inc` implementation layers are intentionally retained for now. Their wrapper and base code share private implementation state within one translation unit; splitting them before final acceptance would require publishing another internal API without reducing runtime ownership complexity.
+
 ## Whole-UI constraints
 
 - one root presentation surface per GPU-composited top-level window;
@@ -106,4 +114,4 @@ A future native GPU vector tessellator is an optimization, not a replacement sem
 
 ## Future platforms
 
-Metal and WebGPU should implement the same surface/device/replay contracts rather than creating new application-facing painters. Browser/WebAssembly support will additionally require a U++ browser platform host for event loop, input, text/clipboard/IME, timers and top-level surface integration; the renderer architecture is being kept compatible with that direction.
+Metal and WebGPU should implement the same provider/device/surface/replay contracts rather than creating new application-facing painters. Browser/WebAssembly support will additionally require a U++ browser platform host for event loop, input, text/clipboard/IME, timers and top-level surface integration; the renderer architecture is being kept compatible with that direction.

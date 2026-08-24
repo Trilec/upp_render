@@ -8,7 +8,7 @@ For ordinary application use add package `GpuRender` and include:
 #include <GpuRender/GpuRender.h>
 ```
 
-Do not add `RenderVulkan`, `RenderRhi` or presentation packages directly unless you are working on the renderer/backend itself.
+Do not add `RenderVulkan`, `RenderRhi` or lower renderer packages directly unless you are working on the renderer/backend itself.
 
 ## Embedded `GpuCtrl`
 
@@ -77,10 +77,14 @@ Use `GpuWindow` for a top-level window whose client area is entirely custom GPU 
 
 Use `GpuTopWindow` when ordinary U++ controls should remain the logical UI and be composited through a root GPU surface. U++ continues to own layout/input/focus/state/theme.
 
-## Multiple controls
+## Multiple controls and windows
 
-Multiple `GpuCtrl`/window presenters use `GpuContext::Default()` unless an advanced caller opens presentation against a separate context. Surfaces and swapchains remain independent. The current Vulkan context shares runtime/instance state; logical-device/resource pooling is being expanded during productization.
+Multiple `GpuCtrl`/window presenters use `GpuContext::Default()` unless an advanced caller opens presentation against a separate context.
+
+On the current Vulkan provider, compatible presenters share one runtime/instance/logical-device domain, queue handles and device-level pipeline cache. Their native surfaces, swapchains, acquired frames, `UiRenderer2D` state and image/glyph RHI handles remain independent.
+
+Closing or resizing one surface therefore does not transfer another surface's presentation ownership. Per-surface submitted/presented work is drained through that surface's graphics/present queues before swapchain destruction; the final compatible presenter release performs the final shared-device cleanup.
 
 ## Backend selection
 
-Vulkan is currently the implemented production backend and remains the default. `SetBackend()` exists for backend selection/testing, but Metal and WebGPU are not yet implemented. Application drawing code should not depend on backend-specific types.
+Vulkan is currently the implemented production backend and remains the default package composition for Windows. `SetBackend()` exists for backend selection/testing, but Metal and WebGPU are not yet implemented. Application drawing code should not depend on backend-specific types.
