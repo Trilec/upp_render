@@ -17,8 +17,8 @@ protected:
 		if(sz.cx <= 0 || sz.cy <= 0)
 			return;
 		w.FillRect(Rectf(40, 40, sz.cx - 40, 130), Color(50, 90, 180));
-		w.DrawText(Pointf(68, 68), "GpuWindow", SansSerif(34).Bold(), White());
-		w.DrawText(Pointf(68, 112), "The entire client area is your GPU drawing surface.", SansSerif(18), Color(220, 230, 248));
+		w.DrawText(Pointf(68, 68), String("GpuWindow"), SansSerif(34).Bold(), White());
+		w.DrawText(Pointf(68, 112), String("The entire client area is your GPU drawing surface."), SansSerif(18), Color(220, 230, 248));
 	}
 };
 

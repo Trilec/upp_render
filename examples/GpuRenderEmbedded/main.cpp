@@ -14,10 +14,10 @@ public:
 			if(sz.cx <= 0 || sz.cy <= 0)
 				return;
 			double margin = max(18.0, min(sz.cx, sz.cy) * 0.08);
-			RoundedRect panel(Rectf(margin, margin, sz.cx - margin, sz.cy - margin), 22.0);
+			struct RoundedRect panel(Rectf(margin, margin, sz.cx - margin, sz.cy - margin), 22.0);
 			w.FillRoundedRect(panel, Color(62, 112, 214));
-			w.DrawText(Pointf(margin + 28, margin + 30), "GpuCtrl — paint here", SansSerif(28).Bold(), White());
-			w.DrawText(Pointf(margin + 28, margin + 76), "No HWND, Vulkan or swapchain code in the application.", SansSerif(16), Color(225, 235, 252));
+			w.DrawText(Pointf(margin + 28, margin + 30), String("GpuCtrl — paint here"), SansSerif(28).Bold(), White());
+			w.DrawText(Pointf(margin + 28, margin + 76), String("No HWND, Vulkan or swapchain code in the application."), SansSerif(16), Color(225, 235, 252));
 		});
 	}
 private:

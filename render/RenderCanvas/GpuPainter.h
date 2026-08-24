@@ -25,7 +25,7 @@ public:
 
 	void FillRect(const Rectf& rect, Color color) { UiDisplayListBuilder::FillRect(rect, Rgba8::FromColor(color)); }
 	void StrokeRect(const Rectf& rect, double width, Color color) { UiDisplayListBuilder::StrokeRect(rect, width, Rgba8::FromColor(color)); }
-	void FillRoundedRect(const RoundedRect& rect, Color color) { UiDisplayListBuilder::FillRoundedRect(rect, Rgba8::FromColor(color)); }
+	void FillRoundedRect(const struct RoundedRect& rect, Color color) { UiDisplayListBuilder::FillRoundedRect(rect, Rgba8::FromColor(color)); }
 	void DrawText(const Pointf& point, const WString& text, Font font, Color color) { UiDisplayListBuilder::DrawText(point, text, font, Rgba8::FromColor(color)); }
 	void DrawText(const Pointf& point, const String& text, Font font, Color color) { DrawText(point, text.ToWString(), font, color); }
 
