@@ -70,7 +70,7 @@ public:
 		return session.GetError();
 	}
 
-	GpuDevice *GetDevice() override
+	GpuDevice *GetDevice() const override
 	{
 		return IsReady() ? device.get() : nullptr;
 	}
