@@ -20,7 +20,7 @@ public:
 	virtual void Close() = 0;
 	virtual bool IsReady() const = 0;
 	virtual String GetError() const = 0;
-	virtual GpuDevice *GetDevice() = 0;
+	virtual GpuDevice *GetDevice() const = 0;
 };
 
 class GpuPresentationBackend {
