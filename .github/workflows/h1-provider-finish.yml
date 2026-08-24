@@ -1,0 +1,98 @@
+name: Temporary H1 provider boundary finish
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'supervisor/h1-provider-boundary'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: supervisor/h1-provider-boundary
+          fetch-depth: 0
+      - name: Apply guarded neutral-result and package cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          replace_once('render/RenderRhi/RenderRhi.h',
+          '''enum class GpuResult {\n\tOk,\n\tInvalidArgument,\n\tInvalidHandle,\n\tInvalidState,\n\tNotFound,\n\tUnsupported,\n};''',
+          '''enum class GpuResult {\n\tOk,\n\tInvalidArgument,\n\tInvalidHandle,\n\tInvalidState,\n\tOutOfDate,\n\tNotFound,\n\tUnsupported,\n};''',
+          'GpuResult OutOfDate')
+
+          replace_once('render/RenderRhi/RenderRhi.h',
+          '''\tvirtual GpuDeviceId GetDeviceId() const = 0;\n\tvirtual GpuBackendKind GetBackendKind() const = 0;\n\tvirtual GpuAdapterInfo GetAdapterInfo() const = 0;''',
+          '''\tvirtual GpuDeviceId GetDeviceId() const = 0;\n\tvirtual GpuBackendKind GetBackendKind() const = 0;\n\tvirtual GpuAdapterInfo GetAdapterInfo() const = 0;\n\tvirtual String GetLastError() const { return String(); }''',
+          'GpuDevice last error')
+
+          replace_once('render/RenderRhi/RenderRhi.cpp',
+          '''\tcase GpuResult::InvalidState: return "InvalidState";\n\tcase GpuResult::NotFound: return "NotFound";''',
+          '''\tcase GpuResult::InvalidState: return "InvalidState";\n\tcase GpuResult::OutOfDate: return "OutOfDate";\n\tcase GpuResult::NotFound: return "NotFound";''',
+          'DumpGpuResult OutOfDate')
+
+          replace_once('render/RenderVulkan/RenderVulkanRhi.h',
+          '''\tGpuDeviceId GetDeviceId() const override;\n\tGpuBackendKind GetBackendKind() const override;\n\tGpuAdapterInfo GetAdapterInfo() const override;''',
+          '''\tGpuDeviceId GetDeviceId() const override;\n\tGpuBackendKind GetBackendKind() const override;\n\tGpuAdapterInfo GetAdapterInfo() const override;\n\tString GetLastError() const override;''',
+          'Vulkan neutral error override')
+
+          replace_once('render/RenderVulkan/RenderVulkanRhiBase.inc',
+          '''GpuDeviceId VulkanGpuDevice::GetDeviceId() const { return impl->device_id; }\nGpuBackendKind VulkanGpuDevice::GetBackendKind() const { return GpuBackendKind::Vulkan; }\nGpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const { return impl->adapter_info; }''',
+          '''GpuDeviceId VulkanGpuDevice::GetDeviceId() const { return impl->device_id; }\nGpuBackendKind VulkanGpuDevice::GetBackendKind() const { return GpuBackendKind::Vulkan; }\nGpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const { return impl->adapter_info; }\nString VulkanGpuDevice::GetLastError() const { return impl ? impl->error : String(); }''',
+          'Vulkan neutral error implementation')
+
+          replace_once('render/RenderVulkan/RenderVulkanRhiBase.inc',
+          '''\tif(!impl->session->AcquireFrame()) {\n\t\timpl->error = impl->session->GetFrameReport().error;\n\t\tif(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession frame acquisition failed";\n\t\treturn GpuResult::InvalidState;\n\t}''',
+          '''\tif(!impl->session->AcquireFrame()) {\n\t\timpl->error = impl->session->GetFrameReport().error;\n\t\tif(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession frame acquisition failed";\n\t\treturn impl->session->GetFrameReport().out_of_date ? GpuResult::OutOfDate : GpuResult::InvalidState;\n\t}''',
+          'BeginFrame OutOfDate')
+
+          replace_once('render/RenderVulkan/RenderVulkanRhiBase.inc',
+          '''\t\treturn GpuResult::InvalidState;\n\t}\n\tImpl::TextureState *texture = impl->FindTexture(state->color_target);\n\tif(texture) impl->ClearBorrowedTexture(*texture);\n\tstate->active = false;\n\tstate->presented = true;''',
+          '''\t\treturn impl->session->GetFrameReport().out_of_date ? GpuResult::OutOfDate : GpuResult::InvalidState;\n\t}\n\tImpl::TextureState *texture = impl->FindTexture(state->color_target);\n\tif(texture) impl->ClearBorrowedTexture(*texture);\n\tstate->active = false;\n\tstate->presented = true;''',
+          'Present OutOfDate')
+
+          p = Path('render/GpuRender/GpuRender.upp')
+          s = p.read_text(encoding='utf-8')
+          for line in ('\tRenderPresentationBackend.h,\n', '\tRenderPresentationVulkan.cpp,\n'):
+              if s.count(line) != 1:
+                  raise SystemExit(f'GpuRender.upp expected one {line.strip()}')
+              s = s.replace(line, '', 1)
+          p.write_text(s, encoding='utf-8', newline='\n')
+
+          replace_once('tests/GpuBackendRegistryTest/main.cpp',
+          '''#include <GpuRender/RenderPresentationBackend.h>''',
+          '''#include <RenderRhi/RenderRhiBackend.h>''',
+          'registry test include')
+
+          for dead in ('render/GpuRender/RenderPresentationBackend.h',
+                       'render/GpuRender/RenderPresentationVulkan.cpp'):
+              p = Path(dead)
+              if not p.exists():
+                  raise SystemExit(f'missing expected legacy file {dead}')
+              p.unlink()
+          PY
+      - name: Commit product files only
+        shell: bash
+        run: |
+          rm .github/workflows/h1-provider-finish.yml
+          git config user.name "upp_render supervisor"
+          git config user.email "Trilec@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "H1 finish neutral presentation provider boundary"
+          git push origin HEAD:supervisor/h1-provider-boundary
