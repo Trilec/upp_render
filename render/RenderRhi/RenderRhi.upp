@@ -3,4 +3,6 @@ uses
 
 file
 	RenderRhi.h,
-	RenderRhi.cpp;
+	RenderRhiBackend.h,
+	RenderRhi.cpp,
+	RenderRhiBackend.cpp;

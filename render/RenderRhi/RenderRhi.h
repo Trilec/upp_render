@@ -108,6 +108,7 @@ enum class GpuResult {
 	InvalidArgument,
 	InvalidHandle,
 	InvalidState,
+	OutOfDate,
 	NotFound,
 	Unsupported,
 };
@@ -253,6 +254,7 @@ public:
 	virtual GpuDeviceId GetDeviceId() const = 0;
 	virtual GpuBackendKind GetBackendKind() const = 0;
 	virtual GpuAdapterInfo GetAdapterInfo() const = 0;
+	virtual String GetLastError() const { return String(); }
 
 	virtual GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) = 0;
 	virtual GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) = 0;

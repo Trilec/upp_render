@@ -19,8 +19,6 @@ file
 	GpuWindow.h,
 	GpuWindow.cpp,
 	RenderPresentation.h,
-	RenderPresentationBackend.h,
 	RenderPresentation.cpp,
-	RenderPresentationVulkan.cpp,
 	RenderCtrlBridge.h,
 	RenderCtrlBridge.cpp;

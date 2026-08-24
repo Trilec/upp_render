@@ -1,12 +1,11 @@
 #pragma once
 
-#include "RenderPresentation.h"
+#include <RenderRhi/RenderRhi.h>
 
 namespace Upp {
 
-// Internal backend plug-in seam for GpuRender presentation.
-// Application-facing GpuCtrl/GpuWindow/GpuTopWindow code never depends on this
-// interface and never sees backend-native types.
+// Internal provider seam between application presentation and a compiled GPU backend.
+// It contains no backend-native types and deliberately stops at the neutral GpuDevice.
 class GpuPresentationBackendContext {
 public:
 	virtual ~GpuPresentationBackendContext() {}
@@ -21,8 +20,7 @@ public:
 	virtual void Close() = 0;
 	virtual bool IsReady() const = 0;
 	virtual String GetError() const = 0;
-	virtual bool Present(Size requested_size, const UiDisplayList& list,
-	                     Rgba8 background, String& error) = 0;
+	virtual GpuDevice *GetDevice() const = 0;
 };
 
 class GpuPresentationBackend {
@@ -34,8 +32,8 @@ public:
 	                                                          String& error) = 0;
 };
 
-// Registration is intended for compiled backend packages during process start.
-// One provider owns each backend kind; duplicate registration is rejected.
+// Compiled backend packages register during process start. One provider owns each
+// backend kind; duplicate registration and Unknown are rejected.
 bool RegisterGpuPresentationBackend(GpuBackendKind kind, GpuPresentationBackend& backend);
 GpuPresentationBackend *FindGpuPresentationBackend(GpuBackendKind kind);
 bool IsGpuPresentationBackendRegistered(GpuBackendKind kind);
