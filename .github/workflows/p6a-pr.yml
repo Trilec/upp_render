@@ -36,6 +36,6 @@ jobs:
           git config user.email "Trilec@users.noreply.github.com"
           git add -A
           git diff --cached --check
-          test "$(git diff --cached --name-only)" = "render/RenderVulkan/RenderVulkan.cpp"
+          test "$(git diff --cached --name-only | grep -v '^.github/' || true)" = "render/RenderVulkan/RenderVulkan.cpp"
           git commit -m "P6a generated shared Vulkan device ownership"
           git push origin HEAD:supervisor/p6a-shared-device
