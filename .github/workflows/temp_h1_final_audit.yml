@@ -1,0 +1,52 @@
+name: Temporary H1 final static audit
+
+on:
+  push:
+    branches:
+      - supervisor/h1b-final-cleanup
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: supervisor/h1b-final-cleanup
+          fetch-depth: 0
+      - name: Audit productization residue
+        shell: bash
+        run: |
+          set -eu
+          git diff --check e96bd6f244f81573d0fe2bf8f762642a64726a4a..HEAD
+
+          if grep -R -n -E '#include[[:space:]]*[<"](GpuCtrl|GpuTopWindow|RenderPresentation|RenderCtrlBridge)/' -- render tests examples docs README.md; then
+            echo 'stale pre-consolidation include found'
+            exit 1
+          fi
+
+          if grep -R -n -E 'uses[[:space:]]*$|^[[:space:]]*(GpuCtrl|GpuTopWindow|RenderPresentation|RenderCtrlBridge),' render/*/*.upp tests/*/*.upp examples/**/*.upp 2>/dev/null | grep -E '^[^:]+:[0-9]+:[[:space:]]*(GpuCtrl|GpuTopWindow|RenderPresentation|RenderCtrlBridge),'; then
+            echo 'stale pre-consolidation package dependency found'
+            exit 1
+          fi
+
+          if grep -R -n -E '#include[[:space:]]*[<"]RenderVulkan/' render/GpuRender --include='*.h' --include='*.cpp'; then
+            echo 'GpuRender source directly depends on Vulkan implementation'
+            exit 1
+          fi
+
+          if grep -R -n -E '#include[[:space:]]*[<"]GpuRender/' render/RenderRhi render/RenderVulkan --include='*.h' --include='*.cpp' --include='*.inc'; then
+            echo 'reverse dependency into GpuRender found'
+            exit 1
+          fi
+
+          if grep -R -n -E 'active_idle_failure_cleanup|rollback_cleanup_sticky|share runtime and instance only|logical-device/resource pooling is being expanded|active productization work is extending' render tests docs README.md; then
+            echo 'stale productization assumption found'
+            exit 1
+          fi
+
+          test ! -e render/GpuCtrl
+          test ! -e render/GpuTopWindow
+          test ! -e render/RenderPresentation
+          test ! -e render/RenderCtrlBridge
+
+          echo 'H1 static audit passed'
