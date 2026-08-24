@@ -98,34 +98,22 @@ The old top-level integration directories are removed. Tests were retained as ac
 
 #### P6b — shared safe device resources
 
-**ACTIVE IMPLEMENTATION.**
+- `37042388f1c580c9efbd43c38a76c5a8e0f1bd25` — **IMPLEMENTED / PUBLISHED — PLATFORM VALIDATION PENDING**.
+- The shared `VulkanDeviceContext` now owns one `VkPipelineCache` for the lifetime of the shared logical-device entry and destroys it before the final `VkDevice` release.
+- Surface `FrameInterop` borrows that cache alongside the shared device/queue handles; no per-surface cache ownership is introduced.
+- Both ordinary and sampled `vkCreateGraphicsPipelines` paths now use the same shared pipeline cache instead of `VK_NULL_HANDLE`.
+- Grouped-surface acceptance now requires the two compatible sessions to expose the same non-null pipeline-cache handle and verifies that the surviving session retains that same cache after the other surface closes.
+- Mutable surface/swapchain/frame state remains independent. Glyph/image RHI handles have not been falsely promoted to cross-renderer sharing without an explicit lifetime/identity model.
+- P6b was reviewed as a four-file production diff and recreated as a clean `main` commit; temporary execution workflow/PR history was not merged.
 
-Target: add a genuinely device-wide shared resource domain, initially a Vulkan pipeline cache owned by the shared device entry and reused by all per-surface RHI/renderers on that device. Do not merge mutable per-surface frame/swapchain state or claim glyph/image RHI-handle sharing without an explicit cross-renderer lifetime/identity model.
-
-Target ownership:
-
-```text
-GpuContext
-    |
-    +-- backend provider
-    |
-    +-- Vulkan context/domain
-           +-- shared VkInstance/runtime
-           +-- shared VkPhysicalDevice
-           +-- one compatible VkDevice + queues
-           +-- shared pipeline/device cache domain
-           +-- surface session A -> independent surface/swapchain/frame state
-           +-- surface session B -> independent surface/swapchain/frame state
-```
-
-Expected multi-surface acceptance shape after P6:
+P6 code architecture is now complete. Expected multi-surface ownership after platform validation:
 
 ```text
 2 compatible GPU surfaces
 runtime live         = 1
 instance live        = 1
 logical device live  = 1
-shared device domain = 1
+shared pipeline cache = 1
 surfaces             = 2
 swapchains           = 2
 ```
@@ -134,7 +122,7 @@ Known post-P6 hygiene item: swapchain destroy/resize still uses device-wide `vkD
 
 ## P7 — GPU-PRODUCTIZATION-H1 Architecture Hygiene / Legacy-Removal Audit
 
-Run only after P6 is published and `main` is re-fetched. This is a separate engineering stage, not a cosmetic pass.
+**ACTIVE ENGINEERING STAGE.** Re-fetch `main` after the P6 checkpoint and treat repository evidence as authoritative. This is a separate engineering stage, not a cosmetic pass.
 
 Audit and simplify:
 
@@ -172,18 +160,17 @@ Do not create placeholder Metal/WebGPU implementations that imply platform suppo
 
 ## Remaining Acceptance / Debt
 
-- P6b shared Vulkan safe device-resource domain: active implementation.
-- P7 H1 architecture hygiene / legacy removal: required after P6.
+- P7 H1 architecture hygiene / legacy removal: **active**.
 - P5 backend registry and P6 ownership changes require consolidated Windows/Vulkan validation after H1.
 - Stage-5 final consolidated `TASK-010-W1` remains and should be folded into that final productization Windows matrix rather than run as a disconnected duplicate cycle.
 - Short human Renderer Showcase property/button interaction remains desirable but is not blocking the architecture/hygiene work.
 
 ## Recovery Log
 
-BASE: `319c8b4880520a546bd365316fd42b4e2fd35bf0` / `main`
-TASK: Productization P6b shared Vulkan safe device-resource domain, then P7/H1 architecture hygiene and legacy-removal audit
+BASE: `37042388f1c580c9efbd43c38a76c5a8e0f1bd25` / `main`
+TASK: P7 / `GPU-PRODUCTIZATION-H1` architecture hygiene and legacy-removal audit, then consolidated Windows/Vulkan acceptance
 TOUCHED/INSPECTED: `render/GpuRender/*`, `render/RenderVulkan/RenderVulkan.cpp`, `RenderVulkanSurfaceSession.h`, `RenderVulkanRhi.cpp`, `RenderVulkanRhiBase.inc`, `RenderVulkanTestHooks.h`, multi-surface/presentation tests, package/docs dependency slice
-STATUS: P1-P5 published; W1 façade regression PASS; P6a shared logical-device ownership published/static-reviewed; P6b active; H1 explicitly required before final Windows acceptance
-PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`
+STATUS: P1-P5 published; W1 façade regression PASS; P6a shared logical device + P6b shared pipeline-cache domain published/static-reviewed; P6 platform validation pending; H1 active before final Windows acceptance
+PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`, `3704238...`
 VALIDATION: Windows/Vulkan W1 PASS through `b7bd3f3...`; P5/P6/H1 final Windows validation pending
-NEXT: implement/publish P6b shared pipeline/device cache domain; update this checkpoint; then H1 audit/cleanup; then one consolidated Gary Windows/Vulkan acceptance matrix.
+NEXT: re-fetch current `main`; perform H1 evidence-driven cleanup and publish it; then one consolidated Gary Windows/Vulkan acceptance matrix.
