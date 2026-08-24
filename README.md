@@ -2,7 +2,7 @@
 
 `upp_render` is a backend-neutral GPU rendering layer for Ultimate++.
 
-The ordinary application entry point is now **`GpuRender`**. Add that package and include:
+The ordinary application entry point is **`GpuRender`**. Add that package and include:
 
 ```cpp
 #include <GpuRender/GpuRender.h>
@@ -77,11 +77,15 @@ The accepted/implemented stack includes:
 - full-window custom `GpuWindow` presentation;
 - U++ control-tree recording and `GpuTopWindow` root composition.
 
-Stage-5 vector/SVG implementation is complete; the final consolidated Windows/Vulkan acceptance gate is still tracked in `docs/ACTIVE_WORK.md`.
+Stage-5 vector/SVG implementation is complete; its final consolidated Windows/Vulkan acceptance is tracked together with the productization validation in `docs/ACTIVE_WORK.md`.
 
 ## Shared application GPU context
 
-Ordinary presenters use `GpuContext::Default()`. Multiple surfaces therefore share compatible application-level backend context state instead of each starting from a completely isolated runtime. Today the Vulkan path shares runtime/instance ownership; the active productization work is extending this to a compatibility-keyed logical-device/resource pool while preserving independent surfaces and swapchains.
+Ordinary presenters use `GpuContext::Default()`. Compatible Vulkan presenters now share the expensive application/device domain: runtime, instance, physical/logical-device ownership, selected queue handles, and one device-level pipeline cache. Each presenter still owns its own native surface, swapchain and frame lifecycle.
+
+`UiRenderer2D` state and image/glyph RHI handles remain presenter/renderer-owned. They have not been promoted into process-wide caches without an explicit resource identity and lifetime contract.
+
+The generic provider registry lives below the public façade in `RenderRhi`; the Vulkan provider registers itself from `RenderVulkan`. `GpuRender.upp` currently depends on `RenderVulkan` so a normal Windows/Vulkan application still gets the default provider simply by adding the one public package. That is build composition, not a Vulkan dependency in the public drawing or presentation API.
 
 ## Packages
 
@@ -94,8 +98,8 @@ The remaining packages are deliberate renderer/backend layers:
 - `RenderCanvas` — neutral display list and `GpuPainter` recording;
 - `RenderCore` — backend-neutral value types;
 - `RenderGpu2D` — GPU 2D replay engine;
-- `RenderRhi` — backend contract;
-- `RenderVulkan` — current Vulkan implementation;
+- `RenderRhi` — backend contract and internal provider registry;
+- `RenderVulkan` — current Vulkan implementation/provider;
 - `RenderSoftware` — correctness/reference renderer;
 - `RenderVector` — vector/Painter authority;
 - `RenderNull` — headless validation backend;
@@ -112,7 +116,7 @@ Start with:
 - `examples/GpuRenderUiWindow`
 - `examples/RendererShowcase`
 
-Historical bring-up/lifecycle probes are under `examples/diagnostics`.
+Historical bring-up/lifecycle probes are under `examples/diagnostics`; they remain useful for validation and resource-lifetime accounting rather than as competing user entry points.
 
 ## Backend roadmap
 
@@ -127,4 +131,4 @@ See `docs/BACKEND_ROADMAP.md`.
 
 Windows/Vulkan is the currently validated platform. Use the repository `CLANGx64_Vulkan.bm` environment/build method and a Vulkan SDK available to the local U++ toolchain. Platform-specific paths belong in local configuration, not application code.
 
-For exact accepted SHAs and the active validation boundary, see `docs/ACTIVE_WORK.md`.
+The productization/H1 implementation is complete in code and awaiting the final consolidated Windows/Vulkan acceptance matrix. For exact accepted SHAs and the active validation boundary, see `docs/ACTIVE_WORK.md`.
