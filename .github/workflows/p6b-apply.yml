@@ -1,0 +1,126 @@
+name: Temporary P6b pipeline-cache transformation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'supervisor/p6b-pipeline-cache'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: supervisor/p6b-pipeline-cache
+          fetch-depth: 0
+      - name: Apply guarded P6b source transformation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          cpp = 'render/RenderVulkan/RenderVulkan.cpp'
+          hdr = 'render/RenderVulkan/RenderVulkanSurfaceSession.h'
+          base = 'render/RenderVulkan/RenderVulkanRhiBase.inc'
+          rhi = 'render/RenderVulkan/RenderVulkanRhi.cpp'
+
+          replace_once(cpp,
+          '''\tPFN_vkDestroyDevice destroy_device = nullptr;\n\tPFN_vkGetDeviceQueue get_device_queue = nullptr;\n\tPFN_vkDeviceWaitIdle device_wait_idle = nullptr;\n\tVectorMap<int, VkQueue> family_queues;''',
+          '''\tPFN_vkDestroyDevice destroy_device = nullptr;\n\tPFN_vkGetDeviceQueue get_device_queue = nullptr;\n\tPFN_vkDeviceWaitIdle device_wait_idle = nullptr;\n\tVkPipelineCache pipeline_cache = VK_NULL_HANDLE;\n\tPFN_vkDestroyPipelineCache destroy_pipeline_cache = nullptr;\n\tVectorMap<int, VkQueue> family_queues;''',
+          'device fields')
+
+          replace_once(cpp,
+          '''\t\treturn physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && family_queues.IsEmpty();''',
+          '''\t\treturn physical_device == VK_NULL_HANDLE && device == VK_NULL_HANDLE && graphics_queue == VK_NULL_HANDLE && present_queue == VK_NULL_HANDLE && pipeline_cache == VK_NULL_HANDLE && destroy_device == nullptr && get_device_queue == nullptr && device_wait_idle == nullptr && destroy_pipeline_cache == nullptr && family_queues.IsEmpty();''',
+          'device clear predicate')
+
+          replace_once(cpp,
+          '''\t\tif(device && destroy_device)\n\t\t\tdestroy_device(device, nullptr);\n\t\telse if(device)\n\t\t\tok = false;\n\t\tdevice = VK_NULL_HANDLE;\n\t\tgraphics_queue = VK_NULL_HANDLE;\n\t\tpresent_queue = VK_NULL_HANDLE;\n\t\tfamily_queues.Clear();\n\t\tdestroy_device = nullptr;\n\t\tget_device_queue = nullptr;\n\t\tdevice_wait_idle = nullptr;''',
+          '''\t\tif(pipeline_cache && destroy_pipeline_cache)\n\t\t\tdestroy_pipeline_cache(device, pipeline_cache, nullptr);\n\t\telse if(pipeline_cache)\n\t\t\tok = false;\n\t\tpipeline_cache = VK_NULL_HANDLE;\n\t\tif(device && destroy_device)\n\t\t\tdestroy_device(device, nullptr);\n\t\telse if(device)\n\t\t\tok = false;\n\t\tdevice = VK_NULL_HANDLE;\n\t\tgraphics_queue = VK_NULL_HANDLE;\n\t\tpresent_queue = VK_NULL_HANDLE;\n\t\tfamily_queues.Clear();\n\t\tdestroy_device = nullptr;\n\t\tget_device_queue = nullptr;\n\t\tdevice_wait_idle = nullptr;\n\t\tdestroy_pipeline_cache = nullptr;''',
+          'device close pipeline cache')
+
+          replace_once(cpp,
+          '''\t\tif(!ResolveDeviceProc(device_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr,\n\t\t                       device, "vkDeviceWaitIdle", error)) return fail(error);\n\n\t\tfamily_queues.Clear();''',
+          '''\t\tif(!ResolveDeviceProc(device_wait_idle, instance.dispatch->proc_filter, instance.get_device_proc_addr,\n\t\t                       device, "vkDeviceWaitIdle", error)) return fail(error);\n\t\tPFN_vkCreatePipelineCache create_pipeline_cache = nullptr;\n\t\tif(!ResolveDeviceProc(create_pipeline_cache, instance.dispatch->proc_filter, instance.get_device_proc_addr,\n\t\t                       device, "vkCreatePipelineCache", error)) return fail(error);\n\t\tif(!ResolveDeviceProc(destroy_pipeline_cache, instance.dispatch->proc_filter, instance.get_device_proc_addr,\n\t\t                       device, "vkDestroyPipelineCache", error)) return fail(error);\n\t\tVkPipelineCacheCreateInfo pipeline_cache_info {};\n\t\tpipeline_cache_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;\n\t\tvr = create_pipeline_cache(device, &pipeline_cache_info, nullptr, &pipeline_cache);\n\t\tif(vr != VK_SUCCESS)\n\t\t\treturn fail(String("vkCreatePipelineCache failed: ") + AsString((int)vr));\n\n\t\tfamily_queues.Clear();''',
+          'shared device pipeline cache creation')
+
+          replace_once(hdr,
+          '''\t\tVkDevice device = VK_NULL_HANDLE;\n\t\tVkQueue graphics_queue = VK_NULL_HANDLE;''',
+          '''\t\tVkDevice device = VK_NULL_HANDLE;\n\t\tVkPipelineCache pipeline_cache = VK_NULL_HANDLE;\n\t\tVkQueue graphics_queue = VK_NULL_HANDLE;''',
+          'frame interop cache field')
+
+          replace_once(hdr,
+          '''\tfriend class VulkanGpuDevice;\n\tfriend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);''',
+          '''\tfriend class VulkanGpuDevice;\n\tfriend bool VulkanTestHooks::TestVulkanGroupedSurfaceSessions(VulkanProcResolver, VulkanTestHooks::VulkanGroupedSurfaceSessionTestResult&);\n\tfriend bool VulkanTestHooks::TestVulkanFramePresentation(VulkanProcResolver, VulkanTestHooks::VulkanFrameTestResult&);''',
+          'grouped test friend')
+
+          replace_once(cpp,
+          '''\tout.device = VK_NULL_HANDLE;\n\tout.graphics_queue = VK_NULL_HANDLE;''',
+          '''\tout.device = VK_NULL_HANDLE;\n\tout.pipeline_cache = VK_NULL_HANDLE;\n\tout.graphics_queue = VK_NULL_HANDLE;''',
+          'interop cache reset')
+
+          replace_once(cpp,
+          '''\tout.device = impl->device->device;\n\tout.graphics_queue = impl->graphics_queue;''',
+          '''\tout.device = impl->device->device;\n\tout.pipeline_cache = impl->device->pipeline_cache;\n\tout.graphics_queue = impl->graphics_queue;''',
+          'interop cache borrow')
+
+          replace_once(cpp,
+          '''\t\tif(!first_ok || !second_ok || !first.IsReady() || !second.IsReady() || !second.GetReport().shared_instance_reused) return false;\n\t\tresult.first_report_authoritative = first.GetReport().shared_instance_acquired && !first.GetReport().shared_instance_reused;''',
+          '''\t\tif(!first_ok || !second_ok || !first.IsReady() || !second.IsReady() || !second.GetReport().shared_instance_reused) return false;\n\t\tVulkanSurfaceSession::FrameInterop first_interop, second_interop;\n\t\tif(!first.GetFrameInterop(first_interop) || !second.GetFrameInterop(second_interop) ||\n\t\t   first_interop.pipeline_cache == VK_NULL_HANDLE || first_interop.pipeline_cache != second_interop.pipeline_cache) return false;\n\t\tresult.first_report_authoritative = first.GetReport().shared_instance_acquired && !first.GetReport().shared_instance_reused;''',
+          'grouped shared cache assertion')
+
+          replace_once(cpp,
+          '''\t\tif(group.impl->device_registry.GetEntryCount() != 1 || group.impl->device_registry.entries[0]->acquire_count != 1) return false;\n\t\tresult.first_survivor_state = second.IsReady()''',
+          '''\t\tif(group.impl->device_registry.GetEntryCount() != 1 || group.impl->device_registry.entries[0]->acquire_count != 1) return false;\n\t\tVulkanSurfaceSession::FrameInterop survivor_interop;\n\t\tif(!second.GetFrameInterop(survivor_interop) || survivor_interop.pipeline_cache != second_interop.pipeline_cache) return false;\n\t\tresult.first_survivor_state = second.IsReady()''',
+          'grouped cache survivor assertion')
+
+          replace_once(base,
+          '''\tVkPhysicalDevice physical_device = VK_NULL_HANDLE;\n\tVkDevice device = VK_NULL_HANDLE;\n\tVkQueue graphics_queue = VK_NULL_HANDLE;''',
+          '''\tVkPhysicalDevice physical_device = VK_NULL_HANDLE;\n\tVkDevice device = VK_NULL_HANDLE;\n\tVkPipelineCache pipeline_cache = VK_NULL_HANDLE;\n\tVkQueue graphics_queue = VK_NULL_HANDLE;''',
+          'rhi cache field')
+
+          replace_once(base,
+          '''\timpl->physical_device = interop.physical_device;\n\timpl->device = interop.device;\n\timpl->graphics_queue = interop.graphics_queue;''',
+          '''\timpl->physical_device = interop.physical_device;\n\timpl->device = interop.device;\n\timpl->pipeline_cache = interop.pipeline_cache;\n\timpl->graphics_queue = interop.graphics_queue;''',
+          'rhi cache assignment')
+
+          replace_once(base,
+          '''\tif(!impl->instance || !impl->physical_device || !impl->device || !impl->graphics_queue ||\n\t   !impl->get_instance_proc_addr || !impl->get_device_proc_addr) {''',
+          '''\tif(!impl->instance || !impl->physical_device || !impl->device || !impl->pipeline_cache || !impl->graphics_queue ||\n\t   !impl->get_instance_proc_addr || !impl->get_device_proc_addr) {''',
+          'rhi interop completeness')
+
+          replace_once(base,
+          '''\tvr = impl->create_graphics_pipelines(impl->device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline);''',
+          '''\tvr = impl->create_graphics_pipelines(impl->device, impl->pipeline_cache, 1, &pci, nullptr, &pipeline);''',
+          'ordinary pipeline cache')
+
+          replace_once(rhi,
+          '''\tvr = impl->create_graphics_pipelines(impl->device, VK_NULL_HANDLE, 1, &pci, nullptr, &state.pipeline);''',
+          '''\tvr = impl->create_graphics_pipelines(impl->device, impl->pipeline_cache, 1, &pci, nullptr, &state.pipeline);''',
+          'sampled pipeline cache')
+          PY
+      - name: Commit transformed product files only
+        shell: bash
+        run: |
+          rm .github/workflows/p6b-apply.yml
+          git config user.name "upp_render supervisor"
+          git config user.email "Trilec@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          actual="$(git diff --cached --name-only | grep -v '^.github/workflows/p6b-apply.yml$' | sort)"
+          expected="$(printf '%s\n' render/RenderVulkan/RenderVulkan.cpp render/RenderVulkan/RenderVulkanRhi.cpp render/RenderVulkan/RenderVulkanRhiBase.inc render/RenderVulkan/RenderVulkanSurfaceSession.h | sort)"
+          test "$actual" = "$expected"
+          git commit -m "P6b share Vulkan pipeline cache across compatible surfaces"
+          git push origin HEAD:supervisor/p6b-pipeline-cache
