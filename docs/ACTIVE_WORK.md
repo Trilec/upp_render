@@ -11,170 +11,161 @@ Remote `main` is authoritative. This file is the recovery checkpoint for active 
 - Vulkan framebuffer Y-orientation correction: **PASS / accepted**. Implementation `c13783aaad1ce10d4ade5ac8f020c56e876ae5f8`; revalidation `42d74c7bf44bac5f9ce8c92a3e553946943b8738`.
 - Stage-5 image path: **PASS / accepted**. Implementation `a11862d138e6b2f06d92067b4b804d8418b69d32`; Windows acceptance `f2cd2bdf2ff7c05f7b883ef32405653ab198a98b`.
 - Stage-5 text/glyph atlas: **PASS / accepted**. Implementation `f98cce413b1992cfaef55669d4672824fe703b5f`; Windows acceptance `91f1fe3cad91b5afe00de4afd6398b773e8f4715`.
-- Stage-5 vector/gradient/AA/SVG implementation: `0d37b2472c4d49e6908f6acbf5f85cc523193006`; **IMPLEMENTATION COMPLETE — final consolidated Windows/Vulkan acceptance `TASK-010-W1` remains**.
+- Stage-5 vector/gradient/AA/SVG implementation: `0d37b2472c4d49e6908f6acbf5f85cc523193006`; **IMPLEMENTATION COMPLETE — final consolidated Windows/Vulkan acceptance remains** and is folded into the final productization matrix.
 - Stage-6 shared presenter/root boundary: **PASS / accepted** (`a4979f17...`, acceptance `cb01a20...`).
 - Stage-6 embedded neutral frame source: **PASS / accepted** (`3ac69f1...`; focused package `947a060...`; acceptance `e3ad497...`).
 - Stage-6 CtrlCore semantic recording bridge: **PASS / accepted** (`c4210d8...`; acceptance `d386ba1...`).
 - Stage-6 root compositor wiring: **PASS / accepted** (`21ca529...`; acceptance `cb01a20...`).
-- Renderer Showcase automated renderer coverage + corrected GPU orientation: **PASS**. Short human GUI button/property interaction smoke remains desirable but is not blocking architecture work.
+- Renderer Showcase automated renderer coverage + corrected GPU orientation: **PASS**. Short human GUI button/property interaction smoke remains desirable and is included in the final productization validation.
 
-## Active Objective — Productization / Multi-surface Architecture
+## Active Objective — Final Productization Acceptance
 
-The capability stack is no longer the main problem. The active objective is to finish the product architecture and then remove migration residue before wider developer presentation:
+Productization architecture and H1 hygiene are now **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
+
+The product surface is:
 
 1. `GpuCtrl` — embedded GPU rectangle inside a normal U++ application.
-2. `GpuWindow` — whole custom client area painted by the application through a GPU painter.
+2. `GpuWindow` — whole custom client area painted by the application through `GpuPainter`.
 3. `GpuTopWindow` — U++/upp_Ui control tree recorded and GPU-composited through one root surface.
-4. `GpuContext` — shared compatible application GPU ownership so multiple surfaces do not behave like independent GPU applications.
-5. `GpuRender` — the single ordinary developer package/header; lower `Render*` packages remain renderer/backend implementation layers.
-6. Backend-neutral provider registration so Vulkan, Metal and WebGPU are implementation choices rather than public-facade assumptions.
-7. Vulkan shared logical-device/resource ownership: compatible surfaces share one expensive device domain while retaining independent surface/swapchain/frame lifecycle.
-8. `GPU-PRODUCTIZATION-H1` — post-architecture hygiene/legacy-removal audit before final Windows acceptance.
+4. `GpuContext` — shared compatible application GPU ownership so multiple surfaces reuse expensive backend/device state.
+5. `GpuRender` — the single ordinary developer package/header; lower `Render*` packages are renderer/backend implementation layers.
+6. Backend-neutral provider registration below the façade so Vulkan, Metal and WebGPU are implementation choices rather than application-API assumptions.
+7. Compatible Vulkan surfaces share one runtime/instance/logical-device domain and one device-level pipeline cache while keeping surface/swapchain/frame and renderer-owned mutable state independent.
 
-The publication rhythm is deliberate because sessions can time out: implement one coherent ownership/architecture slice, review, publish, immediately update this file, then continue from fresh remote `main`.
+Do not start another architecture pass unless consolidated Windows/Vulkan validation reveals a real defect.
 
 ## Published Productization Checkpoints
 
 ### P1 — public painter façade
 
 - `f526a3d1208bbab1a47ac698757950cc6811075c` — introduced `GpuPainter`, `GpuWindow`, `GpuCtrl::SetGpuPaint()` and the `GpuRender` façade package.
-- `3ecccc677aaff1c61a37932407e6e0ac3e534161` — finished the simple drawing surface:
-  - `GpuPainter` receives live surface size via `GetSize()`;
-  - `GpuCtrl` now has subclassable `GpuPaint(GpuPainter&)`, `WhenGpuPaint`, and `SetGpuPaint()`;
-  - advanced `WhenBuildFrame` remains as an explicit neutral-display-list seam and takes precedence;
-  - normal unconfigured `GpuCtrl` now presents an empty GPU frame rather than the internal reference/test scene;
-  - `GpuWindow` uses the same size-aware `GpuPainter` model.
+- `3ecccc677aaff1c61a37932407e6e0ac3e534161` — completed the size-aware painter surface, subclass/callback path, advanced `WhenBuildFrame` precedence and empty default frame behavior.
 
 ### P2 — shared application context foundation
 
-- `f6af476448f8853490f72c36ca5ebceb039f6d59` — added backend-neutral `GpuContext` and routed ordinary `GpuDisplayPresenter` instances through `GpuContext::Default()`.
-- Compatible presenters share context-owned backend state while retaining independent presentation targets.
+- `f6af476448f8853490f72c36ca5ebceb039f6d59` — added backend-neutral `GpuContext` and routed ordinary presenters through `GpuContext::Default()`.
 
 ### P3 — physical U++ integration/package consolidation
 
 - `df03851aad2ba0a94d27b2e0d9c3e28ba75da252` — consolidated the former `GpuCtrl`, `GpuTopWindow`, `RenderPresentation`, and `RenderCtrlBridge` packages under `render/GpuRender` and migrated in-repo consumers.
-- `render/` now exposes one obvious U++ integration package plus genuine engine/backend layers:
-  - `GpuRender` — ordinary application façade/integration;
-  - `RenderCanvas` — neutral recording + `GpuPainter`;
-  - `RenderCore` — neutral value types;
-  - `RenderGpu2D` — GPU 2D replay;
-  - `RenderNull` — headless validation backend;
-  - `RenderPlatformWin32` — current native-window adapter;
-  - `RenderRhi` — backend contract;
-  - `RenderSoftware` — correctness/reference replay;
-  - `RenderVector` — vector/Painter semantic authority;
-  - `RenderVulkan` — Vulkan backend.
+- The old top-level integration directories are removed.
+- `render/` now contains only the public façade plus deliberate engine/backend layers: `GpuRender`, `RenderCanvas`, `RenderCore`, `RenderGpu2D`, `RenderNull`, `RenderPlatformWin32`, `RenderRhi`, `RenderSoftware`, `RenderVector`, `RenderVulkan`.
 
-The old top-level integration directories are removed. Tests were retained as acceptance authorities while package/include names were migrated.
+### P4 — canonical examples and public surface
 
-### P4 — canonical examples and current public surface
+- `5438c32cbd52322e78b8b34300dc73d30e81c45f` — canonical `GpuRenderEmbedded`, `GpuRenderWindow`, `GpuRenderUiWindow`; lifecycle/bring-up examples moved under diagnostics.
+- `bbf0e8baab086e995f4d9f752628b15819e84109` — public docs/backend-roadmap checkpoint.
+- `b7bd3f35190e57dead2edd4b687e6574d32f6a91` — Windows mechanical compatibility fixes.
 
-- `5438c32cbd52322e78b8b34300dc73d30e81c45f` — added/organized the three canonical entry examples (`GpuRenderEmbedded`, `GpuRenderWindow`, `GpuRenderUiWindow`) and moved bring-up/lifecycle examples under diagnostics.
-- `bbf0e8baab086e995f4d9f752628b15819e84109` — public documentation/backend-roadmap checkpoint.
-- `b7bd3f35190e57dead2edd4b687e6574d32f6a91` — published the three Windows mechanical compatibility fixes found during `GPU-PRODUCTIZATION-W1` (`RoundedRect` qualification and explicit `String(...)` text literals).
-
-`GPU-PRODUCTIZATION-W1` Windows/Vulkan result at `bbf0e8b...`: façade/header, all three canonical examples, embedded/root/bridge regressions, Vulkan graphics/image/text/vector, GPU2D, Renderer Showcase and requested Release builds **PASS**; no Vulkan validation errors/crashes/assertions/blank surfaces.
+`GPU-PRODUCTIZATION-W1` Windows/Vulkan result through `b7bd3f3...`: façade/header, canonical examples, embedded/root/bridge regressions, Vulkan graphics/image/text/vector, GPU2D and Renderer Showcase requested builds/runs **PASS**; no Vulkan validation errors/crashes/assertions/blank surfaces.
 
 ### P5 — backend registration / decoupling
 
-- `0101df4bb8d11457c616af38a69f00c7e3556bf4` — **IMPLEMENTED / PUBLISHED**.
-- Generic `GpuRender` presentation no longer directly constructs Vulkan implementation types.
-- Backend context/session creation is behind a neutral provider registry; Vulkan is the first registered provider.
-- This is the required seam for future Metal and WebGPU backends without changing the ordinary `GpuRender` public API.
-- `GpuBackendRegistryTest` was added and requires the final Windows productization validation block.
+- `0101df4bb8d11457c616af38a69f00c7e3556bf4` — initial backend-neutral provider registry / Vulkan provider seam.
+- `GpuBackendRegistryTest` is the focused registration authority.
 
 ### P6 — shared Vulkan logical-device/resource domain
 
 #### P6a — shared logical device + queues
 
-- `319c8b4880520a546bd365316fd42b4e2fd35bf0` — **IMPLEMENTED / PUBLISHED — PLATFORM VALIDATION PENDING**.
-- `VulkanSurfaceSessionGroup` now owns a ref-counted shared-device registry beside the shared-instance registry.
-- Compatible surface sessions on one instance/physical device acquire one `VkDevice`; each session retains its own surface, swapchain, frame state and selected graphics/present queue views.
-- The shared device requests one queue from every usable queue family so the first surface does not specialize the device to only its own present-family requirements.
-- Closing one session releases only its device lease; the final compatible lease destroys the shared device.
-- Existing grouped-session acceptance authority now requires two compatible surfaces to report one runtime, one instance, one logical device, two surfaces and independent swapchains; non-final/final close and incompatible-validation contexts are also covered.
-- `AfterDeviceCreation` validation injection now fires only when a lease actually created the shared device, not on device reuse.
-- P6a was generated/reviewed on an isolated temporary branch and recreated as a single clean `main` commit; temporary workflow/PR history was not merged.
+- `319c8b4880520a546bd365316fd42b4e2fd35bf0` — compatible `VulkanSurfaceSession`s share one ref-counted logical-device entry.
+- Each session retains its own surface, swapchain, frame state and selected queue views.
+- Shared-device creation requests one queue from every usable queue family so the first surface does not specialize the device to only its own present requirements.
+- Non-final close releases only that session's lease; final close destroys the shared device.
 
 #### P6b — shared safe device resources
 
-- `37042388f1c580c9efbd43c38a76c5a8e0f1bd25` — **IMPLEMENTED / PUBLISHED — PLATFORM VALIDATION PENDING**.
-- The shared `VulkanDeviceContext` now owns one `VkPipelineCache` for the lifetime of the shared logical-device entry and destroys it before the final `VkDevice` release.
-- Surface `FrameInterop` borrows that cache alongside the shared device/queue handles; no per-surface cache ownership is introduced.
-- Both ordinary and sampled `vkCreateGraphicsPipelines` paths now use the same shared pipeline cache instead of `VK_NULL_HANDLE`.
-- Grouped-surface acceptance now requires the two compatible sessions to expose the same non-null pipeline-cache handle and verifies that the surviving session retains that same cache after the other surface closes.
-- Mutable surface/swapchain/frame state remains independent. Glyph/image RHI handles have not been falsely promoted to cross-renderer sharing without an explicit lifetime/identity model.
-- P6b was reviewed as a four-file production diff and recreated as a clean `main` commit; temporary execution workflow/PR history was not merged.
+- `37042388f1c580c9efbd43c38a76c5a8e0f1bd25` — one shared device-owned `VkPipelineCache` for compatible sessions.
+- Both ordinary and sampled `vkCreateGraphicsPipelines` paths use that cache.
+- Grouped acceptance requires both sessions to expose the same non-null cache and the survivor to retain it after the other surface closes.
+- Image/glyph RHI handles and `UiRenderer2D` caches remain presenter-owned; they are not globally shared without an explicit identity/lifetime model.
+- P6 completion checkpoint: `40703a4c6c87f2aafe1f03ff76679004b9693f3c`.
 
-P6 code architecture is now complete. Expected multi-surface ownership after platform validation:
+Expected compatible two-surface ownership:
 
 ```text
-2 compatible GPU surfaces
-runtime live          = 1
-instance live         = 1
-logical device live   = 1
-shared pipeline cache = 1
-surfaces               = 2
-swapchains             = 2
+runtime create/live while active  = 1 / 1
+instance create/live while active = 1 / 1
+logical device create/live        = 1 / 1
+shared pipeline cache             = one identical non-null handle
+surfaces live                      = 2
+swapchains                         = 2 independent
+non-final close                    = device/cache survive
+final close                        = all live counts return to zero
 ```
 
-## P7 — GPU-PRODUCTIZATION-H1 Architecture Hygiene / Legacy-Removal Audit
-
-**ACTIVE ENGINEERING STAGE.** Re-fetch `main` after every H1 publication and treat repository evidence as authoritative. This is a separate engineering stage, not a cosmetic pass.
+## P7 — GPU-PRODUCTIZATION-H1 Architecture Hygiene / Legacy Removal
 
 ### H1a — provider/dependency boundary cleanup
 
-- `d231cf88b325412a6fbea9626fc7f76e68236fba` — **IMPLEMENTED / PUBLISHED — PLATFORM VALIDATION PENDING**.
-- Removed the migration-only `GpuRender/RenderPresentationBackend.h` seam and the Vulkan provider implementation from the façade package.
-- Neutral provider context/session/registry now live under `RenderRhi`; a backend session exposes only a neutral `GpuDevice` after backend-specific session/device initialization.
-- `GpuDisplayPresenter` now owns the backend-neutral `UiRenderer2D`, logical surface/swapchain, resize and present orchestration once, so future Metal/WebGPU providers do not duplicate Vulkan's generic presenter logic.
-- Vulkan registration/ownership now lives in `RenderVulkan/RenderVulkanPresentation.cpp`; the provider owns only `VulkanSurfaceSession` + `VulkanGpuDevice` and exposes the latter through the neutral contract.
-- Added neutral `GpuDevice::GetLastError()` and `GpuResult::OutOfDate`; Vulkan maps acquire/present out-of-date state through those neutral contracts rather than making generic presentation inspect Vulkan reports.
-- The current `GpuRender.upp` still pulls `RenderVulkan` so the one-package Windows developer path links the current provider; source/API dependency direction is now neutral and future platform-specific backend selection can be introduced without moving provider code back into the façade.
+- `d231cf88b325412a6fbea9626fc7f76e68236fba` — **IMPLEMENTED / PUBLISHED**.
+- recovery checkpoint `e96bd6f244f81573d0fe2bf8f762642a64726a4a`.
+- Removed migration-only `GpuRender/RenderPresentationBackend.h` and façade-owned Vulkan provider implementation.
+- Neutral provider context/session/registry now live under `RenderRhi`.
+- Vulkan provider implementation/registration lives in `RenderVulkan/RenderVulkanPresentation.cpp`.
+- `GpuDisplayPresenter` owns backend-neutral `UiRenderer2D`, logical surface/swapchain, resize and present orchestration once.
+- Vulkan provider owns only `VulkanSurfaceSession` + `VulkanGpuDevice` and exposes the latter through the neutral contract.
+- Added neutral `GpuDevice::GetLastError()` and `GpuResult::OutOfDate`; generic presentation no longer inspects Vulkan reports.
+- `GpuRender.upp` intentionally still pulls `RenderVulkan` so one public package links the current Windows/Vulkan provider. Generic/public source contains no Vulkan implementation dependency.
 
-Remaining H1 audit/simplification:
+### H1b — synchronization, stale acceptance and maintenance residue
 
-- replace avoidable device-wide synchronization with the narrowest safe queue/surface completion boundary;
-- inspect package dependencies and old diagnostics/examples for genuine duplication/staleness;
-- staged `.inc` preservation in `RenderGpu2D` / `RenderVulkan`: normalize only if it can be done without inventing a larger internal API; otherwise record the concrete same-TU/private-state reason for retaining it;
-- comments/README/architecture/usage/project-plan material describing architecture that no longer exists;
-- final dependency review (`GpuRender` public/API neutral, backend implementation below it, no reverse source dependency).
+- `9da8f8c416edff3a23f2c1992e27c421617a100e` — **IMPLEMENTED / PUBLISHED — PLATFORM VALIDATION PENDING**.
+- Per-surface frame/swapchain teardown now uses `vkQueueWaitIdle` on that session's graphics/present queues instead of `vkDeviceWaitIdle`.
+- The final shared-device destruction deliberately retains `vkDeviceWaitIdle` before destroying device-owned resources.
+- A newly created swapchain that fails before any submit/present is destroyed directly; no idle boundary is needed for that rollback.
+- Swapchain cleanup reporting is no longer incorrectly poisoned by an injected final-device cleanup failure.
+- `vkQueueWaitIdle` is resolved/validated as a required device procedure and has focused missing-procedure coverage.
+- `RenderVulkanTest` stale two-device grouped-surface assertion was corrected to one shared logical device.
+- Retained `RenderGpu2DBase.inc` and `RenderVulkanRhiBase.inc` intentionally: wrapper/base implementation shares private state in one translation unit; splitting now would introduce another private API without simplifying ownership.
+- Diagnostic examples remain under `examples/diagnostics` because they provide lifecycle, auto-close, validation and zero-resource accounting not duplicated by canonical user examples.
+- Public architecture/usage/backend/demo/project docs were updated to the final shared-device/provider model.
 
-Known synchronization conclusion from inspection: a render fence alone is insufficient for safe swapchain destruction because `vkQueuePresentKHR` completion is not represented by that fence. Without `VK_KHR_present_wait`/equivalent, H1 may narrow `vkDeviceWaitIdle` to the session graphics/present queues, but must not remove the completion boundary.
+### H1 whole-repository static audit
 
-H1 review question: **if this repository had been designed around the final architecture from day one, what migration-only code would not exist? Remove or justify it.**
+**PASS** on the reviewed H1b tree before publication:
 
-Publish H1 corrections as coherent checkpoints, then re-fetch and review the complete productization diff before Windows acceptance.
+- `git diff --check` clean;
+- no stale pre-consolidation includes or `.upp` dependencies for `GpuCtrl`, `GpuTopWindow`, `RenderPresentation`, `RenderCtrlBridge` packages;
+- old top-level integration directories absent;
+- no direct `RenderVulkan` include from generic `render/GpuRender` source;
+- no reverse `RenderRhi` / `RenderVulkan` source include of `GpuRender`;
+- no retired two-device or old idle-cleanup test assumptions;
+- full productization series reviewed from pre-P1 parent `9bd73497a7a4aef779a031b09cffbb65711c5d45` through H1.
+
+Temporary execution/review workflows and PRs were not merged into `main`.
+
+H1 result: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
 
 ## Backend Direction
 
 ### Vulkan
 
-Current production/validation backend. P6 completes shared compatible logical-device/resource ownership while preserving independent surfaces/swapchains.
+Current production/validation backend. After the final productization acceptance, follow-up should be hardening/output parity/device-loss work rather than another ownership redesign unless validation demonstrates a root architectural defect.
 
 ### Metal
 
-First-class next backend target. Public `GpuPainter`, `GpuCtrl`, `GpuWindow`, `GpuTopWindow`, `GpuContext`, display-list and RHI contracts must contain no Objective-C/Metal types. macOS is the primary bring-up target; keep the design viable for iOS/iPadOS rather than baking desktop-window assumptions into the neutral layer.
+First-class next backend target. Public `GpuPainter`, `GpuCtrl`, `GpuWindow`, `GpuTopWindow`, `GpuContext`, display-list and RHI contracts contain no Objective-C/Metal types. macOS is the primary bring-up target while retaining iOS/iPadOS viability.
 
 ### WebGPU
 
-First-class next backend target. Long-term goal includes browser/WebAssembly hosting so U++ rendering/control intent can replay through WebGPU. Public APIs therefore must not require HWND/Vulkan concepts. Browser CtrlCore/event-loop/input/text/clipboard/canvas hosting is a separate platform layer above/beside the WebGPU renderer backend.
+First-class next backend target. Browser/WebAssembly hosting remains a longer-term goal and needs a U++ browser platform host in addition to a WebGPU renderer provider.
 
-Do not create placeholder Metal/WebGPU implementations that imply platform support before their bring-up slices exist.
+Do not create placeholder Metal/WebGPU implementations before real bring-up slices exist.
 
 ## Remaining Acceptance / Debt
 
-- P7 H1 architecture hygiene / legacy removal: **active; H1a published, H1b cleanup remaining**.
-- P5 backend registry, P6 ownership and H1 changes require consolidated Windows/Vulkan validation after H1.
-- Stage-5 final consolidated `TASK-010-W1` remains and should be folded into that final productization Windows matrix rather than run as a disconnected duplicate cycle.
-- Short human Renderer Showcase property/button interaction remains desirable but is not blocking the architecture/hygiene work.
+- P5 backend registry + P6 shared-device/cache + H1 cleanup: **consolidated Windows/Vulkan validation pending**.
+- Stage-5 final vector/gradient/AA/SVG `TASK-010-W1` is folded into that same matrix.
+- Renderer Showcase short human property/button interaction smoke is included in the same matrix.
+- No additional H1 architecture work is scheduled unless platform validation exposes a substantive issue.
 
 ## Recovery Log
 
-BASE: `d231cf88b325412a6fbea9626fc7f76e68236fba` / `main`
-TASK: finish P7 / `GPU-PRODUCTIZATION-H1` cleanup (queue-scoped synchronization + residue/dependency/docs audit), then consolidated Windows/Vulkan acceptance
-TOUCHED/INSPECTED: `render/GpuRender/*`, `render/RenderRhi/*`, `render/RenderVulkan/*`, `RenderVulkanRhiBase.inc`, grouped/frame/presentation tests, package/docs dependency slice
-STATUS: P1-P6 published; H1a provider-boundary cleanup published/static-reviewed; P5/P6/H1 platform validation pending; H1b active before final Windows acceptance
-PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`, `3704238...`, `d231cf8...`
-VALIDATION: Windows/Vulkan W1 PASS through `b7bd3f3...`; P5/P6/H1 final Windows validation pending
-NEXT: re-fetch current `main`; implement/review/publish H1b queue-scoped synchronization and remaining evidence-backed cleanup; update this checkpoint; then one consolidated Gary Windows/Vulkan acceptance matrix.
+BASE: `9da8f8c416edff3a23f2c1992e27c421617a100e` / `main`
+TASK: consolidated Windows/Vulkan productization acceptance, including P5/P6/H1 and Stage-5 final vector gate
+TOUCHED/INSPECTED: complete productization delta from `9bd73497...`; `render/GpuRender/*`, `render/RenderRhi/*`, `render/RenderVulkan/*`, `render/RenderGpu2D/*`, package files, focused tests, canonical/diagnostic examples, public architecture/usage/roadmap docs
+STATUS: P1-P6 published; H1a/H1b published; whole-repository H1 static audit PASS; **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`, `3704238...`, `40703a4...`, `d231cf8...`, `e96bd6f...`, `9da8f8c...`
+VALIDATION: Windows/Vulkan W1 PASS through `b7bd3f3...`; H1 static audit PASS; final P5/P6/H1 + Stage-5 consolidated Windows/Vulkan validation pending
+NEXT: refresh current `main`; run one consolidated Windows/Vulkan acceptance matrix on the published H1 checkpoint; if clean, publish final productization acceptance and move to the next hardening/backend stage.
