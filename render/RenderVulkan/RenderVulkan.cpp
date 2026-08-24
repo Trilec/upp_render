@@ -4832,7 +4832,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	impl->report.selected_device.selected_queue_compute = impl->report.selected_device.queue_families[choice.graphics_family].compute;
 	impl->report.selected_device.selected_queue_transfer = impl->report.selected_device.queue_families[choice.graphics_family].transfer;
 	impl->report.status = VulkanProbeStatus::Ok;
-	if(request_validation)
+	if(request_validation && device_newly_created)
 		InjectValidationIfRequested(owner->instance.capture, VulkanValidationTestPoint::AfterDeviceCreation);
 	if(request_validation)
 		InjectValidationIfRequested(owner->instance.capture, VulkanValidationTestPoint::DuringDeviceCleanup);
