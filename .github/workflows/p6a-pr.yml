@@ -1,0 +1,41 @@
+name: Temporary P6a PR trigger
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'supervisor/p6a-shared-device'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: supervisor/p6a-shared-device
+          fetch-depth: 0
+      - name: Execute guarded P6a transformation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/p6a-apply.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(text) if line.strip() == "from pathlib import Path")
+          end = next(i for i in range(start + 1, len(text)) if text[i].strip() == 'PY')
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in text[start:end])
+          exec(compile(script, 'p6a-generated-patch.py', 'exec'))
+          PY
+      - name: Commit generated source only
+        shell: bash
+        run: |
+          rm -rf .github
+          git config user.name "upp_render supervisor"
+          git config user.email "Trilec@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          test "$(git diff --cached --name-only)" = "render/RenderVulkan/RenderVulkan.cpp"
+          git commit -m "P6a generated shared Vulkan device ownership"
+          git push origin HEAD:supervisor/p6a-shared-device
