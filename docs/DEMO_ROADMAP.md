@@ -1,27 +1,30 @@
 # Demo Roadmap
 
-The demos should arrive in the same order as the rendering features they prove.
+The ordinary developer path is now represented by the canonical examples:
 
-| Demo | Purpose | Proves | Prerequisite | Interactive | Compare to `RenderSoftware` | Why it matters |
-| --- | --- | --- | --- | --- | --- | --- |
-| `examples/GpuCtrlLifecycleDemo` | Lifecycle probe | open, retry policy, resize, hide/show, clean close | `GpuCtrl` host/session foundation | Automated | No | Validates control ownership and teardown |
-| `examples/GpuCtrlBasicDemo` | Ordinary usage | one embedded control, status/error reporting | `GpuCtrl` ready state + retry hook | Interactive | No | Shows the small default developer path |
-| `examples/GpuCtrlMultiViewDemo` | Multiple controls | independent sessions, hide/show, resize, no singleton state | multiple stable embedded controls | Interactive | No | Proves `GpuCtrl` scales beyond one host |
-| Clear colour demo | First rendered output | initial frame path and present path | swapchain + presentation | Interactive | No | Confirms the pipeline can show a frame |
-| Animated triangle | Basic GPU draw | pipeline, vertex path, frame cadence | clear colour demo | Interactive | No | Sanity-check for dynamic drawing |
-| Resize stress | Resize/present robustness | swapchain resize and surface recovery | visible rendering path | Interactive | No | Finds windowing bugs early |
-| Texture viewer | Image upload and display | texture handling and sampling | visible rendering path | Interactive | Maybe | Useful for asset preview work |
-| Vector shapes | GPU 2D primitives | fills, strokes, transforms, clipping | 2D renderer | Interactive | Yes | Bridges toward ordinary control rendering |
-| Mandelbrot | Specialized shader example | shader, uniform, and update cadence | shader pipeline | Interactive | No | Classic demo, useful for capability checks |
-| Offscreen rendering | Render-to-texture | offscreen targets and reuse | render targets | Interactive | Maybe | Important for compositing and UI effects |
-| Compute buffer example | Compute plumbing | buffer dispatch and results | compute execution | Interactive | No | Keeps compute honest without UI noise |
-| UI theme/control gallery | U++/upp_Ui integration | theme-driven control rendering | GPU control renderer | Interactive | Yes | Shows real application value |
+- `examples/GpuRenderEmbedded` — embedded `GpuCtrl` drawing through `GpuPainter`;
+- `examples/GpuRenderWindow` — whole custom GPU client area;
+- `examples/GpuRenderUiWindow` — U++ control tree composited through one root GPU surface;
+- `examples/RendererShowcase` — interactive rendering-capability/property showcase.
 
-## Suggested Sequence
+Historical bring-up probes remain under `examples/diagnostics`. They are validation tools rather than competing user APIs: several provide auto-close modes, validation output, lifecycle stress and zero-live-resource accounting that the canonical examples intentionally omit.
 
-1. Embedded surface and basic status demos.
-2. Multi-control and resize stress demos.
-3. Clear colour and animated triangle.
-4. Texture and vector demos.
-5. Offscreen and compute examples.
-6. Full UI gallery once the neutral control-rendering path exists.
+| Diagnostic / future demo | Purpose | Proves | Interactive | Compare to `RenderSoftware` |
+| --- | --- | --- | --- | --- |
+| `examples/diagnostics/GpuCtrlLifecycleDemo` | Lifecycle probe | open/retry/resize/hide-show/clean close | Automated | No |
+| `examples/diagnostics/GpuCtrlBasicDemo` | Embedded host probe | ready/error reporting and automatic cleanup evidence | Interactive/auto-close | No |
+| `examples/diagnostics/GpuCtrlMultiViewDemo` | Multi-surface probe | independent presentation targets over compatible shared device state | Interactive | No |
+| Resize stress | Resize/present robustness | swapchain recreation and survivor isolation | Interactive | No |
+| Texture viewer | Image upload/display | texture handling and sampling | Interactive | Maybe |
+| Vector shapes | GPU 2D primitives | fills, strokes, transforms, clipping | Interactive | Yes |
+| Mandelbrot | Specialized shader example | shader/uniform/update cadence | Interactive | No |
+| Offscreen rendering | Render-to-texture | offscreen targets and reuse | Interactive | Maybe |
+| Compute buffer example | Compute plumbing | buffer dispatch and results | Interactive | No |
+| UI theme/control gallery | U++/upp_Ui integration | theme-driven control rendering | Interactive | Yes |
+
+## Current sequence
+
+1. Keep the four canonical examples small and representative of the public API.
+2. Keep lifecycle/multi-surface/resource-accounting probes under `examples/diagnostics`.
+3. Complete the consolidated productization/Stage-5 Windows acceptance.
+4. Add new specialized demos only when their underlying product capability exists; do not create placeholder API commitments for future effects/compute/backends.
