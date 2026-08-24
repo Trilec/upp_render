@@ -893,6 +893,7 @@ int VulkanGpuDevice::GetLiveFrameCount() const
 GpuDeviceId VulkanGpuDevice::GetDeviceId() const { return impl->device_id; }
 GpuBackendKind VulkanGpuDevice::GetBackendKind() const { return GpuBackendKind::Vulkan; }
 GpuAdapterInfo VulkanGpuDevice::GetAdapterInfo() const { return impl->adapter_info; }
+String VulkanGpuDevice::GetLastError() const { return impl ? impl->error : String(); }
 
 GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out)
 {
@@ -1150,7 +1151,7 @@ GpuResult VulkanGpuDevice::BeginFrame(GpuSwapchainId swapchain, GpuFrameInfo& ou
 	if(!impl->session->AcquireFrame()) {
 		impl->error = impl->session->GetFrameReport().error;
 		if(impl->error.IsEmpty()) impl->error = "VulkanSurfaceSession frame acquisition failed";
-		return GpuResult::InvalidState;
+		return impl->session->GetFrameReport().out_of_date ? GpuResult::OutOfDate : GpuResult::InvalidState;
 	}
 	VulkanSurfaceSession::FrameInterop interop;
 	uint32_t image_index = UINT32_MAX;
@@ -1205,7 +1206,7 @@ GpuResult VulkanGpuDevice::Present(GpuFrameId frame)
 			state->active = false;
 			swapchain->active_frame = GpuFrameId();
 		}
-		return GpuResult::InvalidState;
+		return impl->session->GetFrameReport().out_of_date ? GpuResult::OutOfDate : GpuResult::InvalidState;
 	}
 	Impl::TextureState *texture = impl->FindTexture(state->color_target);
 	if(texture) impl->ClearBorrowedTexture(*texture);

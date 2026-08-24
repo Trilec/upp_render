@@ -31,6 +31,7 @@ public:
 	GpuDeviceId GetDeviceId() const override;
 	GpuBackendKind GetBackendKind() const override;
 	GpuAdapterInfo GetAdapterInfo() const override;
+	String GetLastError() const override;
 
 	GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) override;
 	GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) override;

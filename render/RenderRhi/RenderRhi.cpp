@@ -196,6 +196,7 @@ String DumpGpuResult(GpuResult result)
 	case GpuResult::InvalidArgument: return "InvalidArgument";
 	case GpuResult::InvalidHandle: return "InvalidHandle";
 	case GpuResult::InvalidState: return "InvalidState";
+	case GpuResult::OutOfDate: return "OutOfDate";
 	case GpuResult::NotFound: return "NotFound";
 	case GpuResult::Unsupported: return "Unsupported";
 	}
