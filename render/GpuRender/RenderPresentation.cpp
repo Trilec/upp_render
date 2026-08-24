@@ -1,52 +1,25 @@
 #include "RenderPresentation.h"
-#include "RenderPresentationBackend.h"
+
+#include <RenderGpu2D/RenderGpu2D.h>
+#include <RenderRhi/RenderRhiBackend.h>
+#include <memory>
 
 namespace Upp {
 
 namespace {
 
-struct BackendRegistration : Moveable<BackendRegistration> {
-	GpuBackendKind kind = GpuBackendKind::Unknown;
-	GpuPresentationBackend *backend = nullptr;
-};
-
-static Vector<BackendRegistration>& BackendRegistry()
+static GpuClearColor ToClearColor(Rgba8 color)
 {
-	static Vector<BackendRegistration> registry;
-	return registry;
-}
-
-static int FindBackendIndex(GpuBackendKind kind)
-{
-	const Vector<BackendRegistration>& registry = BackendRegistry();
-	for(int i = 0; i < registry.GetCount(); ++i)
-		if(registry[i].kind == kind)
-			return i;
-	return -1;
+	const float scale = 1.0f / 255.0f;
+	GpuClearColor out;
+	out.red = color.r * scale;
+	out.green = color.g * scale;
+	out.blue = color.b * scale;
+	out.alpha = color.a * scale;
+	return out;
 }
 
 } // namespace
-
-bool RegisterGpuPresentationBackend(GpuBackendKind kind, GpuPresentationBackend& backend)
-{
-	if(kind == GpuBackendKind::Unknown || FindBackendIndex(kind) >= 0)
-		return false;
-	BackendRegistration& registration = BackendRegistry().Add();
-	registration.kind = kind;
-	registration.backend = &backend;
-	return true;
-}
-
-GpuPresentationBackend *FindGpuPresentationBackend(GpuBackendKind kind)
-{
-	int index = FindBackendIndex(kind);
-	return index >= 0 ? BackendRegistry()[index].backend : nullptr;
-}
-
-bool IsGpuPresentationBackendRegistered(GpuBackendKind kind)
-{
-	return FindGpuPresentationBackend(kind) != nullptr;
-}
 
 struct GpuContext::Impl {
 	struct ContextEntry : Moveable<ContextEntry> {
@@ -99,9 +72,131 @@ GpuContext& GpuContext::Default()
 
 struct GpuDisplayPresenter::Impl {
 	One<GpuPresentationBackendSession> session;
+	std::unique_ptr<UiRenderer2D> renderer;
 	GpuContext *context = nullptr;
 	GpuBackendKind backend = GpuBackendKind::Unknown;
+	GpuNativeWindowDesc native_window;
+	GpuSurfaceId surface;
+	GpuSwapchainId swapchain;
+	Size swapchain_request_size = Size(0, 0);
 	String error;
+
+	GpuDevice *GetDevice() const
+	{
+		return session ? session->GetDevice() : nullptr;
+	}
+
+	void DestroyPresentationObjects()
+	{
+		renderer.reset();
+		GpuDevice *device = GetDevice();
+		if(device) {
+			if(swapchain.IsValid())
+				device->DestroySwapchain(swapchain);
+			if(surface.IsValid())
+				device->DestroySurface(surface);
+		}
+		swapchain = GpuSwapchainId();
+		surface = GpuSurfaceId();
+		swapchain_request_size = Size(0, 0);
+		native_window = GpuNativeWindowDesc();
+	}
+
+	bool EnsureSwapchain(Size requested_size, String& out_error)
+	{
+		GpuDevice *device = GetDevice();
+		if(!device) {
+			error = "GPU presentation backend exposes no device";
+			out_error = error;
+			return false;
+		}
+
+		if(!surface.IsValid()) {
+			GpuSurfaceDesc desc;
+			desc.label = "GPU presentation surface";
+			desc.size = requested_size;
+			desc.native_window = native_window;
+			GpuResult result = device->CreateSurface(desc, surface);
+			if(result != GpuResult::Ok) {
+				error = device->GetLastError();
+				if(error.IsEmpty())
+					error = "logical GPU surface creation failed";
+				out_error = error;
+				return false;
+			}
+		}
+
+		if(!swapchain.IsValid()) {
+			GpuSwapchainDesc desc;
+			desc.label = "GPU presentation swapchain";
+			desc.surface = surface;
+			desc.size = requested_size;
+			desc.color_format = GpuFormat::RGBA8;
+			desc.image_count = 2;
+			GpuResult result = device->CreateSwapchain(desc, swapchain);
+			if(result != GpuResult::Ok) {
+				error = device->GetLastError();
+				if(error.IsEmpty())
+					error = "logical GPU swapchain creation failed";
+				out_error = error;
+				return false;
+			}
+			swapchain_request_size = requested_size;
+		}
+		else if(requested_size != swapchain_request_size) {
+			GpuResult result = device->ResizeSwapchain(swapchain, requested_size);
+			if(result != GpuResult::Ok) {
+				error = device->GetLastError();
+				if(error.IsEmpty())
+					error = "logical GPU swapchain resize failed";
+				out_error = error;
+				return false;
+			}
+			swapchain_request_size = requested_size;
+		}
+		return true;
+	}
+
+	GpuResult PresentOnce(const UiDisplayList& list, Rgba8 background, String& out_error)
+	{
+		GpuDevice *device = GetDevice();
+		if(!device || !renderer) {
+			error = "GPU presentation session is not ready";
+			out_error = error;
+			return GpuResult::InvalidState;
+		}
+
+		GpuFrameInfo frame;
+		GpuResult result = device->BeginFrame(swapchain, frame);
+		if(result != GpuResult::Ok) {
+			error = device->GetLastError();
+			if(error.IsEmpty())
+				error = "GPU BeginFrame failed";
+			out_error = error;
+			return result;
+		}
+
+		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
+			String render_error = renderer->GetError();
+			device->Present(frame.frame); // Release the acquired frame on the failure path.
+			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
+			out_error = error;
+			return GpuResult::InvalidState;
+		}
+
+		result = device->Present(frame.frame);
+		if(result != GpuResult::Ok) {
+			error = device->GetLastError();
+			if(error.IsEmpty())
+				error = "GPU Present failed";
+			out_error = error;
+			return result;
+		}
+
+		error.Clear();
+		out_error.Clear();
+		return GpuResult::Ok;
+	}
 };
 
 GpuDisplayPresenter::GpuDisplayPresenter()
@@ -130,6 +225,7 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 	out_error.Clear();
 	impl->context = &context;
 	impl->backend = backend;
+	impl->native_window = native_window;
 
 	GpuPresentationBackend *provider = FindGpuPresentationBackend(backend);
 	if(!provider) {
@@ -171,6 +267,27 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 		impl->session.Clear();
 		return false;
 	}
+
+	GpuDevice *device = impl->GetDevice();
+	if(!device || device->GetBackendKind() != backend) {
+		impl->error = "GPU presentation backend returned an incompatible device";
+		out_error = impl->error;
+		impl->session->Close();
+		impl->session.Clear();
+		return false;
+	}
+
+	impl->renderer.reset(new UiRenderer2D(*device));
+	if(!impl->renderer->IsReady()) {
+		String failure = impl->renderer->GetError();
+		impl->renderer.reset();
+		impl->session->Close();
+		impl->session.Clear();
+		impl->error = failure.IsEmpty() ? String("UiRenderer2D initialization failed") : failure;
+		out_error = impl->error;
+		return false;
+	}
+
 	impl->error.Clear();
 	out_error.Clear();
 	return true;
@@ -180,6 +297,7 @@ void GpuDisplayPresenter::Close()
 {
 	if(!impl)
 		return;
+	impl->DestroyPresentationObjects();
 	if(impl->session)
 		impl->session->Close();
 	impl->session.Clear();
@@ -190,7 +308,8 @@ void GpuDisplayPresenter::Close()
 
 bool GpuDisplayPresenter::IsReady() const
 {
-	return impl && impl->session && impl->session->IsReady();
+	return impl && impl->session && impl->session->IsReady() && impl->GetDevice() &&
+	       impl->renderer && impl->renderer->IsReady();
 }
 
 GpuBackendKind GpuDisplayPresenter::GetBackend() const
@@ -211,6 +330,8 @@ bool GpuDisplayPresenter::Present(Size requested_size, const UiDisplayList& list
                                   Rgba8 background, String& out_error)
 {
 	out_error.Clear();
+	if(requested_size.cx <= 0 || requested_size.cy <= 0)
+		return true;
 	if(!IsReady()) {
 		impl->error = GetError();
 		if(impl->error.IsEmpty())
@@ -218,14 +339,25 @@ bool GpuDisplayPresenter::Present(Size requested_size, const UiDisplayList& list
 		out_error = impl->error;
 		return false;
 	}
-	if(!impl->session->Present(requested_size, list, background, out_error)) {
-		impl->error = out_error.IsEmpty() ? impl->session->GetError() : out_error;
+	if(!impl->EnsureSwapchain(requested_size, out_error))
+		return false;
+
+	GpuResult result = impl->PresentOnce(list, background, out_error);
+	if(result == GpuResult::Ok)
+		return true;
+	if(result != GpuResult::OutOfDate)
+		return false;
+
+	GpuDevice *device = impl->GetDevice();
+	if(!device || device->ResizeSwapchain(impl->swapchain, requested_size) != GpuResult::Ok) {
+		impl->error = device ? device->GetLastError() : String();
+		if(impl->error.IsEmpty())
+			impl->error = "GPU swapchain recreation after out-of-date presentation failed";
 		out_error = impl->error;
 		return false;
 	}
-	impl->error.Clear();
-	out_error.Clear();
-	return true;
+	impl->swapchain_request_size = requested_size;
+	return impl->PresentOnce(list, background, out_error) == GpuResult::Ok;
 }
 
 }
