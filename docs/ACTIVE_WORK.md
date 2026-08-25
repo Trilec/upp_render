@@ -20,7 +20,7 @@ Remote `main` is authoritative. This file is the recovery checkpoint for active 
 
 ## Active Objective — Final Productization Acceptance
 
-Productization architecture and H1 hygiene are now **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
+Productization architecture, H1 hygiene and the final source/test closure pass are now **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
 
 The product surface is:
 
@@ -121,21 +121,32 @@ final close                        = all live counts return to zero
 - Diagnostic examples remain under `examples/diagnostics` because they provide lifecycle, auto-close, validation and zero-resource accounting not duplicated by canonical user examples.
 - Public architecture/usage/backend/demo/project docs were updated to the final shared-device/provider model.
 
+### Final source/test closure
+
+- `778f95d03c06ff95b86d8fbec5bee6353face382` — H1 productization-hygiene checkpoint.
+- `2186c391cbe404ad044ba270643d6a828887745a` — corrected the remaining product-level `GpuCtrlPresentationTest` pre-P6 two-device assumption.
+- `GpuCtrlPresentationTest` now requires two independent surfaces/swapchains with one shared logical device and verifies that idle processing, explicit refresh, resize and hide/show do not recreate that device.
+- The lower-level grouped Vulkan authority already requires one shared logical device, one identical non-null pipeline cache, independent swapchains, survivor retention and final zero ownership.
+- `GpuCtrlMultiViewDemo` has no stale isolated-device assumption; its auto-close path remains a lifecycle/zero-resource diagnostic.
+- No open pull requests remain. The current `main` tree contains no temporary workflow directory or merged review-workflow residue.
+
 ### H1 whole-repository static audit
 
-**PASS** on the reviewed H1b tree before publication:
+**PASS** on the reviewed source closure tree before platform validation:
 
-- `git diff --check` clean;
+- published diffs reviewed for the final acceptance correction;
+- package membership for `GpuCtrlPresentationTest` remains `Core`, `CtrlLib`, `GpuRender`, `RenderVulkan`;
 - no stale pre-consolidation includes or `.upp` dependencies for `GpuCtrl`, `GpuTopWindow`, `RenderPresentation`, `RenderCtrlBridge` packages;
 - old top-level integration directories absent;
 - no direct `RenderVulkan` include from generic `render/GpuRender` source;
 - no reverse `RenderRhi` / `RenderVulkan` source include of `GpuRender`;
-- no retired two-device or old idle-cleanup test assumptions;
-- full productization series reviewed from pre-P1 parent `9bd73497a7a4aef779a031b09cffbb65711c5d45` through H1.
+- grouped Vulkan and product-level multi-control acceptance now both require one shared logical device;
+- retained base `.inc` files are intentional implementation-sharing boundaries rather than migration residue;
+- full productization series reviewed from pre-P1 parent `9bd73497a7a4aef779a031b09cffbb65711c5d45` through the final source/test closure.
 
 Temporary execution/review workflows and PRs were not merged into `main`.
 
-H1 result: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
+H1/source result: **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**.
 
 ## Backend Direction
 
@@ -155,17 +166,16 @@ Do not create placeholder Metal/WebGPU implementations before real bring-up slic
 
 ## Remaining Acceptance / Debt
 
-- P5 backend registry + P6 shared-device/cache + H1 cleanup: **consolidated Windows/Vulkan validation pending**.
-- Stage-5 final vector/gradient/AA/SVG `TASK-010-W1` is folded into that same matrix.
-- Renderer Showcase short human property/button interaction smoke is included in the same matrix.
-- No additional H1 architecture work is scheduled unless platform validation exposes a substantive issue.
+- Source implementation, backend decoupling, shared Vulkan device/cache ownership and H1 cleanup are **complete and published**.
+- The only active completion gate is the consolidated Windows/Vulkan validation of P5/P6/H1 plus the folded Stage-5 vector gate and Renderer Showcase interaction smoke.
+- No additional architecture/source cleanup is scheduled unless that validation exposes a substantive defect.
 
 ## Recovery Log
 
-BASE: `9da8f8c416edff3a23f2c1992e27c421617a100e` / `main`
+BASE: `2186c391cbe404ad044ba270643d6a828887745a` / `main`
 TASK: consolidated Windows/Vulkan productization acceptance, including P5/P6/H1 and Stage-5 final vector gate
-TOUCHED/INSPECTED: complete productization delta from `9bd73497...`; `render/GpuRender/*`, `render/RenderRhi/*`, `render/RenderVulkan/*`, `render/RenderGpu2D/*`, package files, focused tests, canonical/diagnostic examples, public architecture/usage/roadmap docs
-STATUS: P1-P6 published; H1a/H1b published; whole-repository H1 static audit PASS; **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
-PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`, `3704238...`, `40703a4...`, `d231cf8...`, `e96bd6f...`, `9da8f8c...`
-VALIDATION: Windows/Vulkan W1 PASS through `b7bd3f3...`; H1 static audit PASS; final P5/P6/H1 + Stage-5 consolidated Windows/Vulkan validation pending
-NEXT: refresh current `main`; run one consolidated Windows/Vulkan acceptance matrix on the published H1 checkpoint; if clean, publish final productization acceptance and move to the next hardening/backend stage.
+TOUCHED/INSPECTED: complete productization delta from `9bd73497...`; `render/GpuRender/*`, `render/RenderRhi/*`, `render/RenderVulkan/*`, `render/RenderGpu2D/*`, package files, focused tests, canonical/diagnostic examples, public architecture/usage/roadmap docs; final `GpuCtrlPresentationTest` product acceptance correction
+STATUS: P1-P6 published; H1a/H1b published; final source/test closure published; whole-repository static audit PASS; **IMPLEMENTATION COMPLETE — PLATFORM VALIDATION PENDING**
+PUBLISHED: `f526a3d...`, `f6af476...`, `df03851...`, `3ecccc6...`, `5438c32...`, `bbf0e8b...`, `b7bd3f3...`, `0101df4...`, `319c8b4...`, `3704238...`, `40703a4...`, `d231cf8...`, `e96bd6f...`, `9da8f8c...`, `778f95d...`, `2186c39...`
+VALIDATION: Windows/Vulkan W1 PASS through `b7bd3f3...`; H1/source static audit PASS through `2186c39...`; final P5/P6/H1 + Stage-5 consolidated Windows/Vulkan validation pending
+NEXT: refresh current `main`; run one consolidated Windows/Vulkan acceptance matrix on the published source-closure checkpoint; if clean, record final productization acceptance and move to the next hardening/backend stage.
