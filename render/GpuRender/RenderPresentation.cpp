@@ -32,7 +32,7 @@ struct GpuContext::Impl {
 		error.Clear();
 		for(ContextEntry& entry : contexts)
 			if(entry.kind == kind)
-				return entry.context;
+				return entry.context.Get();
 
 		GpuPresentationBackend *backend = FindGpuPresentationBackend(kind);
 		if(!backend) {
@@ -51,7 +51,7 @@ struct GpuContext::Impl {
 		ContextEntry& entry = contexts.Add();
 		entry.kind = kind;
 		entry.context = pick(created);
-		return entry.context;
+		return entry.context.Get();
 	}
 
 	Vector<ContextEntry> contexts;
