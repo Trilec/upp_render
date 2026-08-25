@@ -29,7 +29,7 @@ Final acceptance-doc checkpoint: `feab4d9a0f24bed8f9226ff169aabf5ef565a8d8`.
 
 ## Active Objective — UI1 Complete Vulkan U++ Experience
 
-Priority is now the complete Windows/Vulkan U++ UI story before Metal.
+Priority is now the complete Windows/Vulkan U++ UI story before another backend.
 
 Required end state:
 
@@ -47,9 +47,15 @@ Active remote branch:
 
 `supervisor/ui1-vulkan-ui-gallery`
 
-First published branch checkpoint:
+Published implementation checkpoint:
 
 `cb1a2ab6b7470c7839add8b73b09b72911b38e55`
+
+Subsequent branch documentation checkpoints include:
+
+- `bc82f2140502d4676b900224608f4d07bf352a4c` — UI1 recovery checkpoint;
+- `7ff51bcd01b7284a78464711e8da0c9d46af7bff` — example index;
+- `86866b7eea2cc3d1dff1e3d0c2ab1c1ee5b50d86` — project plan reprioritized around complete Vulkan UI, then shared resources, then WebGPU/Metal.
 
 Added:
 
@@ -69,15 +75,17 @@ Current known explicit unsupported boundaries in `RenderCtrlBridge`:
 - native `BeginNative` / direct GDI drawing;
 - invert/XOR/pattern legacy drawing modes.
 
-Also audit the complete `Draw` virtual surface for:
+Full upstream U++ `Draw` dispatch was inspected before adding duplicate adapter code:
 
-- `DrawDataOp`;
-- `DrawDrawingOp`;
-- `DrawPaintingOp`;
-- `Escape`;
-- any scaled/tinted image path not already resolved through `SysDrawImageOp`.
+- scaled/cropped/tinted `DrawImageOp` already resolves through `SysDrawImageOp`, which the recorder implements;
+- default `DrawDrawingOp` recursively replays the serialized `Drawing` into the recorder's existing virtual operations, preserving its scaling/clip semantics;
+- default `DrawPaintingOp` rasterizes through Painter and feeds the result back through the recorder's image path;
+- default `DrawDataOp` uses the registered `DataDrawer` and feeds the rendered result back through the image path;
+- those high-level operations therefore do **not** need duplicate recorder implementations merely to claim coverage.
 
-Do not implement obscure semantics merely to reach a numeric percentage. First run the representative gallery/coverage test and prioritize operations actually emitted by U++/upp_Ui controls. Raster fallback is acceptable for opaque high-level `Drawing`/`Painting` values if it preserves output while keeping native/GDI drawing an explicit boundary.
+`Escape` remains an extension/no-op boundary and should be audited against real control usage before deciding whether to reject it explicitly or support a specific registered extension.
+
+Do not implement obscure semantics merely to reach a numeric percentage. First run the representative gallery/coverage test and prioritize operations actually emitted by U++/upp_Ui controls. Native/GDI and child-HWND exclusion remain architectural boundaries rather than missing drawing primitives.
 
 ## Near-Term Sequence
 
@@ -87,7 +95,7 @@ Build/run the new gallery, embedded-motion demo and coverage test on Windows. Ca
 
 ### UI1-B
 
-Implement the common missing recorder semantics revealed by UI1-A. Independently add low-risk support for broadly useful neutralizable operations such as arcs/rotated text/high-level Drawing/Painting where coherent.
+Implement the common missing recorder semantics revealed by UI1-A. Independently add low-risk support for broadly useful neutralizable operations such as arcs and rotated text once their U++ direction/angle semantics are preserved exactly.
 
 ### UI1-C
 
@@ -106,8 +114,9 @@ Prefer WebGPU before Metal if Windows/browser tooling gives us executable eviden
 BASE: `feab4d9a0f24bed8f9226ff169aabf5ef565a8d8` / `main`
 TASK: UI1 complete Vulkan U++ UI experience
 BRANCH: `supervisor/ui1-vulkan-ui-gallery`
-BRANCH HEAD BEFORE THIS DOC CHECKPOINT: `cb1a2ab6b7470c7839add8b73b09b72911b38e55`
-TOUCHED: new `GpuUiGallery`, `GpuEmbeddedMotion`, `GpuUiCoverageTest`; recorder/top-window/control API inspected; upstream U++ Draw virtual contract inspected
-STATUS: UI1-A implementation checkpoint published on remote branch; Windows compile/runtime and first real control-semantic result pending
+SOURCE CHECKPOINT: `cb1a2ab6b7470c7839add8b73b09b72911b38e55`
+LATEST PRE-DOC BRANCH CHECKPOINT: `86866b7eea2cc3d1dff1e3d0c2ab1c1ee5b50d86`
+TOUCHED/INSPECTED: new `GpuUiGallery`, `GpuEmbeddedMotion`, `GpuUiCoverageTest`; `RenderCtrlBridge`; `GpuTopWindow`; `GpuCtrl`; upstream U++ `Draw`, `Drawing`, `DrawData`, Painter dispatch; examples/project plan
+STATUS: UI1-A implementation/docs published on remote branch; complete upstream Draw dispatch audit narrowed the actual semantic gap list; Windows compile/runtime and first real control-semantic result pending
 VALIDATION: previous Vulkan productization W2-R1 PASS remains accepted baseline; no UI1 validation claimed yet
-NEXT: Windows build `GpuUiCoverageTest`, `GpuUiGallery`, `GpuEmbeddedMotion`; report exact first unsupported Draw semantic or PASS; then supervisor implements UI1-B immediately.
+NEXT: Windows build `GpuUiCoverageTest`, `GpuUiGallery`, `GpuEmbeddedMotion`; report exact first unsupported Draw semantic or PASS; then supervisor implements UI1-B immediately and proceeds to popup/dialog/multi-window UI1-C.
