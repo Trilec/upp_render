@@ -1496,6 +1496,7 @@ struct VulkanSharedDeviceEntry {
 		owner = &candidate_owner;
 		physical_device = candidate_device;
 		if(!device.OpenSharedSurface(candidate_owner.instance, candidate_device, device_info, error)) {
+			cleanup_ok = device.cleanup_ok && device.IsCleared();
 			owner = nullptr;
 			physical_device = VK_NULL_HANDLE;
 			return false;
@@ -1560,10 +1561,13 @@ struct VulkanSharedDeviceRegistry {
 	}
 
 	bool Acquire(VulkanInstanceOwner& owner, VkPhysicalDevice physical_device, const VulkanDeviceInfo& device_info,
-	             String& error, VulkanSharedDeviceEntry*& out_entry, bool& newly_created)
+	             String& error, VulkanSharedDeviceEntry*& out_entry, bool& newly_created,
+	             bool *failure_cleanup_ok = nullptr)
 	{
 		out_entry = nullptr;
 		newly_created = false;
+		if(failure_cleanup_ok)
+			*failure_cleanup_ok = true;
 		error.Clear();
 		if(VulkanSharedDeviceEntry *existing = FindCompatible(owner, physical_device)) {
 			if(!existing->Acquire(owner, physical_device)) {
@@ -1576,6 +1580,8 @@ struct VulkanSharedDeviceRegistry {
 		entries.Add().Create();
 		VulkanSharedDeviceEntry& entry = *entries.Top();
 		if(!entry.Open(owner, physical_device, device_info, error)) {
+			if(failure_cleanup_ok)
+				*failure_cleanup_ok = entry.cleanup_ok;
 			entries.Drop();
 			return false;
 		}
@@ -1633,8 +1639,10 @@ struct VulkanSharedDeviceLease {
 	VkQueue GetQueue(int family_index) const { return IsAcquired() ? entry->device.GetQueue(family_index) : VK_NULL_HANDLE; }
 
 	bool Acquire(VulkanSharedDeviceRegistry& target, VulkanInstanceOwner& owner, VkPhysicalDevice physical_device,
-	             const VulkanDeviceInfo& device_info, String& error, bool *newly_created = nullptr)
+	             const VulkanDeviceInfo& device_info, String& error, bool *newly_created = nullptr,
+	             bool *failure_cleanup_ok = nullptr)
 	{
+		if(failure_cleanup_ok) *failure_cleanup_ok = true;
 		if(IsAcquired()) {
 			error = "shared Vulkan device lease is already acquired";
 			if(newly_created) *newly_created = false;
@@ -1642,8 +1650,10 @@ struct VulkanSharedDeviceLease {
 		}
 		VulkanSharedDeviceEntry *acquired = nullptr;
 		bool created = false;
-		if(!target.Acquire(owner, physical_device, device_info, error, acquired, created)) {
+		bool cleanup_ok = true;
+		if(!target.Acquire(owner, physical_device, device_info, error, acquired, created, &cleanup_ok)) {
 			if(newly_created) *newly_created = false;
+			if(failure_cleanup_ok) *failure_cleanup_ok = cleanup_ok;
 			return false;
 		}
 		registry = &target;
@@ -4840,8 +4850,11 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	}
 
 	bool device_newly_created = false;
+	bool device_acquire_cleanup_ok = true;
 	if(!impl->device_lease.Acquire(impl->group->impl->device_registry, *owner, choice.device->handle,
-	                               choice.device->info, impl->error, &device_newly_created)) {
+	                               choice.device->info, impl->error, &device_newly_created,
+	                               &device_acquire_cleanup_ok)) {
+		impl->report.device_cleanup_ok = device_acquire_cleanup_ok;
 		impl->report.status = VulkanProbeStatus::DeviceCreationFailed;
 		impl->report.device_error = impl->error;
 		impl->report.status_text = StatusText(impl->report.status);
