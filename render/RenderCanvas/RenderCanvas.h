@@ -183,6 +183,7 @@ public:
 	virtual void ConcatTransform(const Transform2D& transform) = 0;
 
 	virtual void FillRect(const Rectf& rect, Rgba8 color) = 0;
+	virtual void InvertRect(const Rectf& rect) = 0;
 	virtual void StrokeRect(const Rectf& rect, double width, Rgba8 color) = 0;
 	virtual void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) = 0;
 	virtual void DrawImage(const Rectf& rect, const Image& image) = 0;
@@ -200,6 +201,7 @@ enum class UiDisplayOpType {
 	ClipRect,
 	ConcatTransform,
 	FillRect,
+	InvertRect,
 	StrokeRect,
 	FillRoundedRect,
 	DrawImage,
@@ -263,6 +265,7 @@ public:
 	void ClipRect(const Rectf& rect) override;
 	void ConcatTransform(const Transform2D& transform) override;
 	void FillRect(const Rectf& rect, Rgba8 color) override;
+	void InvertRect(const Rectf& rect) override;
 	void StrokeRect(const Rectf& rect, double width, Rgba8 color) override;
 	void FillRoundedRect(const struct RoundedRect& rect, Rgba8 color) override;
 	void DrawImage(const Rectf& rect, const Image& image) override;

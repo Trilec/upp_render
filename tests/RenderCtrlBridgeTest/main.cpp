@@ -90,6 +90,16 @@ public:
 	}
 };
 
+class InvertRectCtrl : public Ctrl {
+public:
+	InvertRectCtrl() { SetRect(0, 0, 64, 48); }
+	void Paint(Draw& w) override
+	{
+		w.DrawRect(GetSize(), Color(38, 52, 72));
+		w.DrawRect(10, 10, 20, 20, InvertColor());
+	}
+};
+
 #ifdef PLATFORM_WIN32
 static const Color GLOBAL_STATE_PROBE_COLOR = Color(211, 37, 149);
 class GlobalStateProbeCtrl : public Ctrl {
@@ -228,7 +238,24 @@ GUI_APP_MAIN
 	ImagePainter rotated_painter(rotated_text.GetSize()); rotated_painter.DrawRect(Rect(rotated_text.GetSize()), White());
 	ok &= Check(software.Replay(rotated_list, rotated_painter), "software reference should replay rotated DrawText output");
 	ok &= Check(ImageHasVisibleChange(rotated_painter.GetResult(), White()), "recorded rotated DrawText should produce visible output");
-#ifdef PLATFORM_WIN32
+
+	InvertRectCtrl invert_rect; UiDisplayList invert_list; CtrlDisplayListRecordReport invert_report; error.Clear();
+	ok &= Check(RecordCtrlDisplayList(invert_rect, invert_list, error, &invert_report),
+	            "destination-invert rectangle should record through the neutral display-list contract");
+	ok &= Check(error.IsEmpty() && !invert_report.HasUnsupportedOperation(),
+	            "destination-invert rectangle should not report an unsupported operation");
+	ok &= Check(HasOp(invert_list, UiDisplayOpType::InvertRect),
+	            "destination-invert rectangle should remain a first-class display-list operation");
+	ok &= Check(invert_list.Dump().Find("InvertRect 10 10 30 30") >= 0,
+	            "destination-invert rectangle dump should preserve deterministic geometry");
+	ImagePainter invert_painter(invert_rect.GetSize());
+	invert_painter.DrawRect(Rect(invert_rect.GetSize()), Color(3, 4, 5));
+	ok &= Check(software.Replay(invert_list, invert_painter),
+	            "software reference should replay destination-invert rectangle output");
+	Image invert_output = invert_painter.GetResult();
+	ok &= Check(invert_output[15][15] != invert_output[2][2],
+	            "destination-invert software replay should change pixels inside the inverted region");
+ #ifdef PLATFORM_WIN32
 	NativeDrawCtrl native_draw; UiDisplayList native_draw_list; CtrlDisplayListRecordReport native_draw_report; error.Clear();
 	ok &= Check(!RecordCtrlDisplayList(native_draw, native_draw_list, error, &native_draw_report), "native SystemDraw/GDI semantics should not be silently omitted");
 	ok &= Check(error.Find("native") >= 0 && native_draw_report.HasUnsupportedOperation(), "native drawing boundary should be explicit in evidence");

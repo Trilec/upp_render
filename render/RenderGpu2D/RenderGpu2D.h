@@ -91,6 +91,7 @@ private:
 	struct PipelineEntry : Moveable<PipelineEntry> {
 		GpuFormat format = GpuFormat::Unknown;
 		bool textured = false;
+		GpuBlendMode blend_mode = GpuBlendMode::SourceOver;
 		GpuPipelineId pipeline;
 	};
 
@@ -102,6 +103,7 @@ private:
 
 	enum class BatchKind {
 		Solid,
+		Invert,
 		Image,
 	};
 
@@ -202,7 +204,8 @@ private:
 
 	static Image Unmultiply(const Image& image);
 	bool EnsureShaders(bool textured);
-	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out);
+	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out,
+	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
 	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
@@ -212,7 +215,7 @@ private:
 	                           UiRenderer2DStats& vector_stats);
 	bool BuildGeometry(const UiDisplayList& list, Size target_size);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
-	            GpuPipelineId textured_pipeline);
+	            GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline);
 	bool Fail(const String& message);
 
 	TextImpl& Text();

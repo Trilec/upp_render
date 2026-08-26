@@ -45,21 +45,22 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 	ReplayState state;
 	Vector<ReplayState> stack;
 
-	auto extend_solid_batch = [&](int first, int count) {
+	auto extend_solid_batch = [&](int first, int count, BatchKind kind) {
 		if(count <= 0)
 			return;
-		if(!batches.IsEmpty() && batches.Top().kind == BatchKind::Solid &&
+		if(!batches.IsEmpty() && batches.Top().kind == kind &&
 		   batches.Top().first_vertex + batches.Top().vertex_count == first)
 			batches.Top().vertex_count += count;
 		else {
 			Batch& batch = batches.Add();
-			batch.kind = BatchKind::Solid;
+			batch.kind = kind;
 			batch.first_vertex = first;
 			batch.vertex_count = count;
 		}
 	};
 
-	auto append_polygon = [&](const Vector<Pointf>& source, Rgba8 color) -> bool {
+	auto append_polygon = [&](const Vector<Pointf>& source, Rgba8 color,
+	                          BatchKind kind = BatchKind::Solid) -> bool {
 		Rectf effective_clip = target_clip;
 		if(state.has_clip)
 			effective_clip = IntersectRectf(effective_clip, state.clip);
@@ -97,15 +98,16 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			add_vertex(polygon[i + 1]);
 			stats.triangle_count++;
 		}
-		extend_solid_batch(first, vertices.GetCount() - first);
+		extend_solid_batch(first, vertices.GetCount() - first, kind);
 		stats.emitted_primitive_count++;
 		return true;
 	};
 
-	auto append_rect = [&](const Rectf& rect, Rgba8 color) -> bool {
+	auto append_rect = [&](const Rectf& rect, Rgba8 color,
+	                       BatchKind kind = BatchKind::Solid) -> bool {
 		if(!IsFiniteRect(rect) || rect.right <= rect.left || rect.bottom <= rect.top)
 			return Fail("UiRenderer2D received an invalid rectangle");
-		return append_polygon(TransformRect(rect, state.transform), color);
+		return append_polygon(TransformRect(rect, state.transform), color, kind);
 	};
 
 	auto append_textured = [&](const Rectf& rect, const Rectf& uv, GpuTextureId texture,
@@ -226,6 +228,11 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		case UiDisplayOpType::FillRect:
 			stats.primitive_count++;
 			if(!append_rect(op.rect, op.color))
+				return false;
+			break;
+		case UiDisplayOpType::InvertRect:
+			stats.primitive_count++;
+			if(!append_rect(op.rect, Rgba8(255, 255, 255, 255), BatchKind::Invert))
 				return false;
 			break;
 		case UiDisplayOpType::StrokeRect: {
@@ -380,8 +387,18 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		return false;
 
 	GpuPipelineId solid_pipeline;
+	GpuPipelineId invert_pipeline;
 	GpuPipelineId textured_pipeline;
+	bool has_invert = false;
+	for(const Batch& batch : batches)
+		if(batch.kind == BatchKind::Invert) {
+			has_invert = true;
+			break;
+		}
 	if(!vertices.IsEmpty() && !EnsurePipeline(target.color_format, false, solid_pipeline))
+		return false;
+	if(has_invert && !EnsurePipeline(target.color_format, false, invert_pipeline,
+	                                GpuBlendMode::DestinationInvert))
 		return false;
 	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline))
 		return false;
@@ -402,7 +419,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		if(result != GpuResult::Ok)
 			return Fail("UiRenderer2D textured vertex upload failed: " + DumpGpuResult(result));
 	}
-	return Submit(target, solid_pipeline, textured_pipeline);
+	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline);
 }
 
 bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& frame,

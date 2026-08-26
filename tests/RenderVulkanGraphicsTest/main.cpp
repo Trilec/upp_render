@@ -172,6 +172,12 @@ CONSOLE_APP_MAIN
 			pipeline_desc.vertex_layout = GpuVertexLayout::Position2Color4F;
 			GpuPipelineId pipeline;
 			ok &= Check(device.CreatePipeline(pipeline_desc, pipeline) == GpuResult::Ok, "dynamic-rendering graphics pipeline should create");
+			GpuPipelineDesc invert_pipeline_desc = pipeline_desc;
+			invert_pipeline_desc.blend_mode = GpuBlendMode::DestinationInvert;
+			invert_pipeline_desc.label = "destination-invert graphics pipeline";
+			GpuPipelineId invert_pipeline;
+			ok &= Check(device.CreatePipeline(invert_pipeline_desc, invert_pipeline) == GpuResult::Ok,
+			            "destination-invert graphics pipeline should create");
 			ok &= Check(device.DestroyShader(vertex_shader) == GpuResult::InvalidState,
 			            "shader destruction while referenced by a pipeline should be refused");
 
@@ -192,6 +198,10 @@ CONSOLE_APP_MAIN
 				ok &= Check(device.SetPipeline(commands, pipeline) == GpuResult::Ok, "pipeline should bind");
 				ok &= Check(device.SetVertexBuffer(commands, vertex_buffer) == GpuResult::Ok, "vertex buffer should bind");
 				ok &= Check(device.Draw(commands, 3) == GpuResult::Ok, "real vkCmdDraw recording should succeed");
+				ok &= Check(device.SetPipeline(commands, invert_pipeline) == GpuResult::Ok,
+				            "destination-invert pipeline should bind for a real draw");
+				ok &= Check(device.Draw(commands, 3) == GpuResult::Ok,
+				            "destination-invert pipeline draw should record");
 				ok &= Check(device.DestroyBuffer(vertex_buffer) == GpuResult::InvalidState,
 				            "resource destruction while command work is live should be refused");
 				ok &= Check(device.EndRenderPass(commands) == GpuResult::Ok, "render pass should end");
@@ -362,6 +372,8 @@ CONSOLE_APP_MAIN
 			            "neutral surface/swapchain/frame logical ownership should be fully released");
 
 			ok &= Check(device.DestroyPipeline(swap_pipeline) == GpuResult::Ok, "swapchain pipeline should destroy");
+			ok &= Check(device.DestroyPipeline(invert_pipeline) == GpuResult::Ok,
+			            "destination-invert pipeline should destroy before its shaders");
 			ok &= Check(device.DestroyPipeline(pipeline) == GpuResult::Ok, "pipeline should destroy");
 			ok &= Check(device.DestroyShader(vertex_shader) == GpuResult::Ok, "vertex shader should destroy after pipelines");
 			ok &= Check(device.DestroyShader(fragment_shader) == GpuResult::Ok, "fragment shader should destroy after pipeline");

@@ -324,7 +324,8 @@ public:
 		if(cx <= 0 || cy <= 0 || IsNull(color))
 			return;
 		if(color == InvertColor()) {
-			Fail("invert rectangle drawing is not supported by the neutral compositor");
+			builder.InvertRect(Rectf(x, y, x + cx, y + cy));
+			report.rect_count++;
 			return;
 		}
 		builder.FillRect(Rectf(x, y, x + cx, y + cy), ToRgba8(color));

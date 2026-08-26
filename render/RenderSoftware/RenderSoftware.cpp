@@ -90,6 +90,9 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 		case UiDisplayOpType::FillRect:
 			painter.DrawRect(ToRect(op.rect), op.color.ToColor());
 			break;
+		case UiDisplayOpType::InvertRect:
+			painter.DrawRect(ToRect(op.rect), InvertColor());
+			break;
 		case UiDisplayOpType::StrokeRect:
 			painter.Rectangle(op.rect);
 			painter.Stroke(op.width, ToRgba(op.color));

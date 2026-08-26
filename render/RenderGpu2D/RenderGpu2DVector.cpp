@@ -142,6 +142,9 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 		case UiDisplayOpType::FillRect:
 			builder.FillRect(op.rect, op.color);
 			break;
+		case UiDisplayOpType::InvertRect:
+			builder.InvertRect(op.rect);
+			break;
 		case UiDisplayOpType::StrokeRect:
 			builder.StrokeRect(op.rect, op.width, op.color);
 			break;

@@ -453,6 +453,9 @@ String UiDisplayList::Dump() const
 		case UiDisplayOpType::FillRect:
 			sb << "FillRect " << DumpRect(op.rect) << ' ' << DumpColor(op.color);
 			break;
+		case UiDisplayOpType::InvertRect:
+			sb << "InvertRect " << DumpRect(op.rect);
+			break;
 		case UiDisplayOpType::StrokeRect:
 			sb << "StrokeRect " << DumpRect(op.rect) << ' ' << StableDouble(op.width) << ' '
 			   << DumpColor(op.color);
@@ -574,6 +577,16 @@ void UiDisplayListBuilder::FillRect(const Rectf& rect, Rgba8 color)
 	op.type = UiDisplayOpType::FillRect;
 	op.rect = rect;
 	op.color = color;
+	Append(op);
+}
+
+void UiDisplayListBuilder::InvertRect(const Rectf& rect)
+{
+	if(!CanRecord())
+		return;
+	UiDisplayOp op;
+	op.type = UiDisplayOpType::InvertRect;
+	op.rect = rect;
 	Append(op);
 }
 

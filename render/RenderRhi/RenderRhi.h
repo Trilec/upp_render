@@ -82,6 +82,7 @@ enum class GpuVertexLayout {
 enum class GpuBlendMode {
 	Opaque,
 	SourceOver,
+	DestinationInvert,
 };
 
 enum class GpuSamplerFilter {

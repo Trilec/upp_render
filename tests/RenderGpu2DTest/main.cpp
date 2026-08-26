@@ -196,6 +196,44 @@ CONSOLE_APP_MAIN
 		ok &= Check(!renderer.GetError().IsEmpty(), "renderer failure should retain a diagnostic");
 	}
 
+	{
+		NullGpuDevice invert_device;
+		GpuTextureId invert_target = CreateTarget(invert_device, GpuFormat::RGBA8, size);
+		UiDisplayListBuilder invert_builder;
+		invert_builder.FillRect(Rectf(4, 4, 32, 28), Rgba8(220, 60, 40, 255));
+		invert_builder.InvertRect(Rectf(36, 8, 68, 40));
+		invert_builder.FillRect(Rectf(72, 12, 108, 46), Rgba8(40, 120, 220, 255));
+		UiDisplayList invert_list;
+		ok &= Check(invert_builder.Finish(invert_list), "destination-invert display list should build");
+		UiRenderer2D invert_renderer(invert_device);
+		ok &= Check(invert_renderer.Render(invert_list, MakeTarget(invert_target, GpuFormat::RGBA8, size)),
+		            "ordered solid/invert/solid display list should render");
+		const UiRenderer2DStats& invert_stats = invert_renderer.GetStats();
+		ok &= Check(invert_stats.primitive_count == 3, "destination-invert test should count three logical primitives");
+		ok &= Check(invert_stats.batch_count == 3 && invert_stats.draw_count == 3,
+		            "destination-invert geometry should remain a separate ordered batch and draw");
+		bool found_source_over = false;
+		bool found_destination_invert = false;
+		for(int id = 1; id <= 3; ++id) {
+			GpuPipelineId pipeline; pipeline.value = id;
+			GpuPipelineDesc desc;
+			if(!invert_device.GetPipelineDesc(pipeline, desc))
+				continue;
+			if(desc.blend_mode == GpuBlendMode::SourceOver)
+				found_source_over = desc.sampled_texture_count == 0 && desc.vertex_layout == GpuVertexLayout::Position2Color4F;
+			if(desc.blend_mode == GpuBlendMode::DestinationInvert)
+				found_destination_invert = desc.sampled_texture_count == 0 && desc.vertex_layout == GpuVertexLayout::Position2Color4F;
+		}
+		ok &= Check(found_source_over, "destination-invert scene should retain an unsampled SourceOver pipeline");
+		ok &= Check(found_destination_invert, "destination-invert scene should create an unsampled Position2Color4F pipeline");
+		invert_renderer.Close();
+		ok &= Check(invert_device.GetLiveBufferCount() == 0 && invert_device.GetLiveShaderCount() == 0 &&
+		            invert_device.GetLivePipelineCount() == 0, "destination-invert renderer resources should close cleanly");
+		ok &= Check(invert_device.DestroyTexture(invert_target) == GpuResult::Ok,
+		            "destination-invert target should destroy after renderer shutdown");
+		ok &= Check(invert_device.GetLiveTextureCount() == 0, "destination-invert test should release its target texture");
+	}
+
 	String log = device.DumpLog();
 	ok &= Check(CountText(log, "CreateShader id=") == 2, "solid renderer should keep one persistent shader pair");
 	ok &= Check(CountText(log, "CreatePipeline id=") == 2, "solid renderer should cache one pipeline per target format");
