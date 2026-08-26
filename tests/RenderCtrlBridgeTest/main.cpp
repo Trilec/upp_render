@@ -81,6 +81,15 @@ public:
 	void Paint(Draw& w) override { w.DrawArc(RectC(5, 5, 60, 40), Point(65, 25), Point(5, 25), 2, Red()); }
 };
 
+class RotatedTextCtrl : public Ctrl {
+public:
+	RotatedTextCtrl() { SetRect(0, 0, 130, 120); }
+	void Paint(Draw& w) override
+	{
+		w.DrawText(72, 102, 900, "rotate", SansSerif(18).Bold(), Color(42, 92, 196));
+	}
+};
+
 #ifdef PLATFORM_WIN32
 static const Color GLOBAL_STATE_PROBE_COLOR = Color(211, 37, 149);
 class GlobalStateProbeCtrl : public Ctrl {
@@ -124,6 +133,36 @@ static bool ImageHasVisibleChange(const Image& image, Color background)
 {
 	RGBA reference = background;
 	for(int y = 0; y < image.GetHeight(); y++) for(int x = 0; x < image.GetWidth(); x++) if(image[y][x] != reference) return true;
+	return false;
+}
+static bool Near(double a, double b, double tolerance = 0.01)
+{
+	return fabs(a - b) <= tolerance;
+}
+static bool HasCounterClockwiseArc(const UiDisplayList& list)
+{
+	for(int i = 0; i < list.GetCount(); i++) {
+		const UiDisplayOp& op = list[i];
+		if(op.type != UiDisplayOpType::StrokePath || op.path.GetCount() < 2)
+			continue;
+		const UiPathCommand& move = op.path[0];
+		const UiPathCommand& cubic = op.path[1];
+		if(move.verb == UiPathVerb::MoveTo && cubic.verb == UiPathVerb::CubicTo &&
+		   Near(move.p1.x, 65.0) && Near(move.p1.y, 25.0) && cubic.p1.y < 25.0)
+			return true;
+	}
+	return false;
+}
+static bool HasQuarterTurnTextTransform(const UiDisplayList& list)
+{
+	for(int i = 0; i < list.GetCount(); i++) {
+		if(list[i].type != UiDisplayOpType::ConcatTransform)
+			continue;
+		const Transform2D& m = list[i].transform;
+		if(Near(m.x.x, 0.0, 0.0001) && Near(m.x.y, 1.0, 0.0001) &&
+		   Near(m.y.x, -1.0, 0.0001) && Near(m.y.y, 0.0, 0.0001))
+			return true;
+	}
 	return false;
 }
 
@@ -171,9 +210,24 @@ GUI_APP_MAIN
 	Image output = painter.GetResult();
 	ok &= Check(ImageHasVisibleChange(output, Color(3, 4, 5)), "recorded control replay should produce visible output");
 	ok &= Check(list.Dump() == dump, "software replay must not mutate recorded control intent");
-	ArcCtrl unsupported; UiDisplayList unsupported_list; CtrlDisplayListRecordReport unsupported_report; error.Clear();
-	ok &= Check(!RecordCtrlDisplayList(unsupported, unsupported_list, error, &unsupported_report), "unsupported U++ Draw semantics should fail explicitly");
-	ok &= Check(error.Find("DrawArc") >= 0 && unsupported_report.HasUnsupportedOperation(), "unsupported operation should be named in deterministic evidence");
+
+	ArcCtrl arc; UiDisplayList arc_list; CtrlDisplayListRecordReport arc_report; error.Clear();
+	ok &= Check(RecordCtrlDisplayList(arc, arc_list, error, &arc_report), "DrawArc should record through the neutral vector path contract");
+	if(!error.IsEmpty()) Cout() << "arc record error: " << error << EOL;
+	ok &= Check(!arc_report.HasUnsupportedOperation() && HasOp(arc_list, UiDisplayOpType::StrokePath), "DrawArc should remain semantic and supported");
+	ok &= Check(HasCounterClockwiseArc(arc_list), "DrawArc should preserve Win32/U++ default counter-clockwise direction");
+	ImagePainter arc_painter(arc.GetSize()); arc_painter.DrawRect(Rect(arc.GetSize()), White());
+	ok &= Check(software.Replay(arc_list, arc_painter), "software reference should replay recorded DrawArc output");
+	ok &= Check(ImageHasVisibleChange(arc_painter.GetResult(), White()), "recorded DrawArc should produce visible output");
+
+	RotatedTextCtrl rotated_text; UiDisplayList rotated_list; CtrlDisplayListRecordReport rotated_report; error.Clear();
+	ok &= Check(RecordCtrlDisplayList(rotated_text, rotated_list, error, &rotated_report), "rotated DrawText should record through neutral transform plus text operations");
+	if(!error.IsEmpty()) Cout() << "rotated text record error: " << error << EOL;
+	ok &= Check(!rotated_report.HasUnsupportedOperation() && rotated_report.text_count > 0, "rotated DrawText should remain semantic and supported");
+	ok &= Check(HasOp(rotated_list, UiDisplayOpType::DrawText) && HasQuarterTurnTextTransform(rotated_list), "90-degree U++ text should preserve tenth-degree rotation convention");
+	ImagePainter rotated_painter(rotated_text.GetSize()); rotated_painter.DrawRect(Rect(rotated_text.GetSize()), White());
+	ok &= Check(software.Replay(rotated_list, rotated_painter), "software reference should replay rotated DrawText output");
+	ok &= Check(ImageHasVisibleChange(rotated_painter.GetResult(), White()), "recorded rotated DrawText should produce visible output");
 #ifdef PLATFORM_WIN32
 	NativeDrawCtrl native_draw; UiDisplayList native_draw_list; CtrlDisplayListRecordReport native_draw_report; error.Clear();
 	ok &= Check(!RecordCtrlDisplayList(native_draw, native_draw_list, error, &native_draw_report), "native SystemDraw/GDI semantics should not be silently omitted");
