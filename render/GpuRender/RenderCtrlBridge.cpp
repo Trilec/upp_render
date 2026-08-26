@@ -41,6 +41,18 @@ static Transform2D Translation(Point p)
 	return Transform2D::Translation(p.x, p.y);
 }
 
+static Transform2D TextRotation(Point origin, int angle)
+{
+	const double radians = angle * M_PI / 1800.0;
+	const double sine = sin(radians);
+	const double cosine = cos(radians);
+	Transform2D transform;
+	transform.x = Pointf(cosine, sine);
+	transform.y = Pointf(-sine, cosine);
+	transform.t = Pointf(origin.x, origin.y);
+	return transform;
+}
+
 static UiPath MakeEllipsePath(const Rect& rect)
 {
 	UiPath path;
@@ -57,6 +69,61 @@ static UiPath MakeEllipsePath(const Rect& rect)
 	path.CubicTo(Pointf(cx - rx, cy - k * ry), Pointf(cx - k * rx, cy - ry), Pointf(cx, cy - ry));
 	path.CubicTo(Pointf(cx + k * rx, cy - ry), Pointf(cx + rx, cy - k * ry), Pointf(cx + rx, cy));
 	path.Close();
+	return path;
+}
+
+static Pointf ArcPoint(double cx, double cy, double rx, double ry, double angle)
+{
+	return Pointf(cx + rx * cos(angle), cy - ry * sin(angle));
+}
+
+static Pointf ArcDerivative(double rx, double ry, double angle)
+{
+	return Pointf(-rx * sin(angle), -ry * cos(angle));
+}
+
+static double ArcRadialAngle(Point point, double cx, double cy, double rx, double ry)
+{
+	const double x = rx != 0 ? (point.x - cx) / rx : 0;
+	const double y = ry != 0 ? (cy - point.y) / ry : 0;
+	return atan2(y, x);
+}
+
+static UiPath MakeCounterClockwiseArcPath(const Rect& rect, Point start, Point end)
+{
+	UiPath path;
+	if(rect.IsEmpty())
+		return path;
+	const double cx = (rect.left + rect.right) * 0.5;
+	const double cy = (rect.top + rect.bottom) * 0.5;
+	const double rx = rect.GetWidth() * 0.5;
+	const double ry = rect.GetHeight() * 0.5;
+	if(rx <= 0 || ry <= 0)
+		return path;
+
+	const double start_angle = ArcRadialAngle(start, cx, cy, rx, ry);
+	const double end_angle = ArcRadialAngle(end, cx, cy, rx, ry);
+	const double full_turn = 2.0 * M_PI;
+	double sweep = end_angle - start_angle;
+	while(sweep <= 0)
+		sweep += full_turn;
+	if(start == end)
+		sweep = full_turn;
+
+	const int segment_count = max(1, (int)ceil(sweep / (M_PI * 0.5)));
+	const double segment_sweep = sweep / segment_count;
+	path.MoveTo(ArcPoint(cx, cy, rx, ry, start_angle));
+	for(int i = 0; i < segment_count; i++) {
+		const double a0 = start_angle + i * segment_sweep;
+		const double a1 = a0 + segment_sweep;
+		const double k = (4.0 / 3.0) * tan((a1 - a0) * 0.25);
+		const Pointf p0 = ArcPoint(cx, cy, rx, ry, a0);
+		const Pointf p1 = ArcPoint(cx, cy, rx, ry, a1);
+		const Pointf d0 = ArcDerivative(rx, ry, a0);
+		const Pointf d1 = ArcDerivative(rx, ry, a1);
+		path.CubicTo(Pointf(p0.x + k * d0.x, p0.y + k * d0.y),
+		             Pointf(p1.x - k * d1.x, p1.y - k * d1.y), p1);
+	}
 	return path;
 }
 
@@ -401,9 +468,22 @@ public:
 			Fail("U++ polygon grouping does not consume all supplied geometry");
 	}
 
-	void DrawArcOp(const Rect&, Point, Point, int, Color) override
+	void DrawArcOp(const Rect& r, Point start, Point end, int width, Color color) override
 	{
-		Fail("DrawArc is not yet represented by the neutral control recorder");
+		if(IsNull(color))
+			return;
+		if(color == InvertColor()) {
+			Fail("invert arc drawing is not supported by the neutral compositor");
+			return;
+		}
+		UiStrokeStyle stroke;
+		if(!ConfigureStroke(width, stroke))
+			return;
+		UiPath arc = MakeCounterClockwiseArcPath(r, start, end);
+		if(arc.IsEmpty())
+			return;
+		builder.StrokePath(arc, UiPaint::Solid(ToRgba8(color)), stroke);
+		report.path_count++;
 	}
 
 	void DrawEllipseOp(const Rect& r, Color color, int pen, Color pencolor) override
@@ -432,25 +512,32 @@ public:
 			Fail("invert text drawing is not supported by the neutral compositor");
 			return;
 		}
-		if(angle != 0) {
-			Fail("rotated DrawText is not yet represented by the neutral control recorder");
-			return;
+		const bool rotated = angle != 0;
+		if(rotated) {
+			builder.Save();
+			builder.ConcatTransform(TextRotation(Point(x, y), angle));
+			report.transform_count++;
+			x = 0;
+			y = 0;
 		}
 		if(!dx) {
 			WString value;
 			value.Cat(text, n);
 			builder.DrawText(Pointf(x, y), value, font, ToRgba8(ink));
 			report.text_count++;
-			return;
 		}
-		int advance = 0;
-		for(int i = 0; i < n; i++) {
-			WString glyph;
-			glyph.Cat(text + i, 1);
-			builder.DrawText(Pointf(x + advance, y), glyph, font, ToRgba8(ink));
-			advance += dx[i];
-			report.text_count++;
+		else {
+			int advance = 0;
+			for(int i = 0; i < n; i++) {
+				WString glyph;
+				glyph.Cat(text + i, 1);
+				builder.DrawText(Pointf(x + advance, y), glyph, font, ToRgba8(ink));
+				advance += dx[i];
+				report.text_count++;
+			}
 		}
+		if(rotated)
+			builder.Restore();
 	}
 
 private:
