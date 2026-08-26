@@ -44,6 +44,12 @@ public:
 		w.DrawImage(max(8, sz.cx - 58), 14, badge);
 		w.DrawText(16, 14, "U++ Draw -> display list -> Vulkan", SansSerif(15).Bold(), Color(232, 239, 248));
 		w.DrawText(16, 36, "A normal custom Ctrl; no Vulkan code here.", SansSerif(12), Color(156, 169, 190));
+
+		const Rect arc_box = RectC(18, max(70, sz.cy - 66), 86, 42);
+		w.DrawArc(arc_box, arc_box.RightCenter(), arc_box.LeftCenter(), 2, Color(111, 220, 181));
+		w.DrawText(22, max(54, sz.cy - 22), "DrawArc", SansSerif(11).Bold(), Color(166, 231, 209));
+		w.DrawText(max(110, sz.cx - 18), max(115, sz.cy - 18), 900,
+		           "ROTATED DRAW", SansSerif(11).Bold(), Color(194, 137, 255));
 	}
 
 private:
