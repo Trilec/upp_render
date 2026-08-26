@@ -11,6 +11,7 @@ struct GpuTopWindow::Impl {
 	Impl(GpuTopWindow& _owner) : owner(&_owner) {}
 	~Impl() { destroying = true; StopGpuSession(); }
 	bool IsGpuReady() const { return presenter.IsReady(); }
+	bool HasPresentedFrame() const { return frame_presented; }
 	String GetGpuError() const
 	{
 		if(!api_error.IsEmpty()) return api_error;
@@ -23,6 +24,7 @@ struct GpuTopWindow::Impl {
 	{
 		if(destroying || !owner || !owner->IsOpen()) return;
 		init_attempted = false;
+		frame_presented = false;
 		ClearError();
 #ifdef PLATFORM_WIN32
 		StartGpuSession(owner->GetHWND());
@@ -34,6 +36,7 @@ struct GpuTopWindow::Impl {
 		if(IsGpuReady()) { SetApiError("backend change while open is not supported"); return; }
 		backend_kind = kind;
 		init_attempted = false;
+		frame_presented = false;
 		ClearError();
 		if(kind == GpuBackendKind::Unknown) SetApiError("backend not selected");
 		else if(kind != GpuBackendKind::Vulkan) SetApiError("backend not supported");
@@ -44,6 +47,7 @@ struct GpuTopWindow::Impl {
 		if(IsGpuReady()) { SetApiError("validation change while open is not supported"); return; }
 		validation_requested = validation;
 		init_attempted = false;
+		frame_presented = false;
 		ClearError();
 	}
 #ifdef PLATFORM_WIN32
@@ -51,6 +55,7 @@ struct GpuTopWindow::Impl {
 	{
 		if(destroying || init_attempted || !hwnd || !IsWindow(hwnd)) return;
 		init_attempted = true;
+		frame_presented = false;
 		if(backend_kind != GpuBackendKind::Vulkan) { SetSessionError(backend_kind == GpuBackendKind::Unknown ? "backend not selected" : "backend not supported"); return; }
 		GpuNativeWindowDesc native_window;
 		String native_error;
@@ -79,10 +84,31 @@ struct GpuTopWindow::Impl {
 		if(!owner->BuildGpuFrame(size, list, background, error)) { presentation_error = error.IsEmpty() ? String("root GPU frame build failed") : error; return false; }
 		if(!presenter.Present(size, list, background, error)) { presentation_error = error.IsEmpty() ? presenter.GetError() : error; return false; }
 		presentation_error.Clear();
+		frame_presented = true;
 		return true;
 	}
+	void EnterSoftwareFallback()
+	{
+		String failure = GetGpuError();
+		if(failure.IsEmpty())
+			failure = "root GPU presentation failed";
+		presenter.Close();
+		init_attempted = false;
+		frame_presented = false;
+		session_error.Clear();
+		presentation_error = failure;
+		if(owner && owner->IsOpen())
+			owner->Refresh();
+	}
 #endif
-	void StopGpuSession() { presenter.Close(); init_attempted = false; session_error.Clear(); presentation_error.Clear(); }
+	void StopGpuSession()
+	{
+		presenter.Close();
+		init_attempted = false;
+		frame_presented = false;
+		session_error.Clear();
+		presentation_error.Clear();
+	}
 	void SetApiError(const String& message) { api_error = message; }
 	void SetSessionError(const String& message) { session_error = message; }
 	void ClearError() { api_error.Clear(); session_error.Clear(); presentation_error.Clear(); }
@@ -94,6 +120,7 @@ struct GpuTopWindow::Impl {
 	String presentation_error;
 	bool validation_requested = false;
 	bool init_attempted = false;
+	bool frame_presented = false;
 	bool destroying = false;
 };
 
@@ -120,14 +147,18 @@ void GpuTopWindow::NcCreate(HWND hwnd) { TopWindow::NcCreate(hwnd); if(impl) imp
 void GpuTopWindow::PreDestroy() { if(impl) impl->StopGpuSession(); TopWindow::PreDestroy(); }
 LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	if(message == WM_ERASEBKGND && impl && impl->IsGpuReady()) return 1;
+	if(message == WM_ERASEBKGND && impl && impl->IsGpuReady() && impl->HasPresentedFrame())
+		return 1;
 	if(message == WM_PAINT && impl && impl->IsGpuReady()) {
 		HWND hwnd = GetHWND();
-		if(hwnd && IsWindow(hwnd) && impl->PresentRoot(hwnd)) {
-			PAINTSTRUCT ps;
-			BeginPaint(hwnd, &ps);
-			EndPaint(hwnd, &ps);
-			return 0;
+		if(hwnd && IsWindow(hwnd)) {
+			if(impl->PresentRoot(hwnd)) {
+				PAINTSTRUCT ps;
+				BeginPaint(hwnd, &ps);
+				EndPaint(hwnd, &ps);
+				return 0;
+			}
+			impl->EnterSoftwareFallback();
 		}
 	}
 	return TopWindow::WindowProc(message, wParam, lParam);
