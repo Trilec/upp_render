@@ -1,126 +1,120 @@
 # Active Work Status
 
-Remote `main` is authoritative for all active and accepted `upp_render` work. This repository is developed directly on `main`; do not create supervisor feature/review branches unless Curt explicitly requests one for a genuinely isolated experiment.
+Remote `main` is authoritative for all active and accepted `upp_render` work. Development proceeds directly on `main`; do not create supervisor feature/review branches unless Curt explicitly requests an isolated experiment.
 
-## Current Baseline
+## Current Accepted Baseline
 
-Accepted UI1-A source baseline:
+UI1-R2 accepted source baseline:
 
-`67328ab9b420cbf81779481c2b2028d1cf539d27`
+`2b64964b89324cdd8ce2e1627c942205f783d896`
 
-Main-only workflow checkpoint:
-
-`70c28f7660214af3d7edcf8fbb3be7601d3c61b3`
-
-The Vulkan productization baseline remains PASS / accepted:
+The Vulkan productization/UI baseline is PASS / accepted:
 
 - backend-neutral display-list/software foundation: PASS;
 - RHI + Null backend: PASS;
 - Vulkan bootstrap/resources/presentation: PASS;
-- GPU 2D geometry/clipping/transforms: PASS;
-- images: PASS;
-- text/glyph atlas: PASS;
-- vector/gradient/AA/SVG: PASS;
-- shared presenter/root boundary: PASS;
-- embedded `GpuCtrl` frame source: PASS;
-- CtrlCore semantic recording bridge: PASS for the validated Draw contract;
+- GPU2D geometry, images, text, vector/SVG: PASS;
+- backend registry/provider decoupling: PASS;
+- compatible surfaces share runtime/instance/logical-device/queue domain and pipeline cache while retaining independent surface/swapchain/frame state: PASS;
+- embedded `GpuCtrl`: PASS;
 - `GpuTopWindow` root compositor: PASS;
-- backend registry/decoupling: PASS;
-- compatible Vulkan surfaces share runtime/instance/logical device/queue domain and pipeline cache while retaining independent surface/swapchain/frame state: PASS;
-- Renderer Showcase final smoke: PASS;
+- broad ordinary U++ control-tree recording: PASS;
+- second modal `GpuTopWindow`: PASS;
 - final live Vulkan ownership: ZERO.
 
-## UI1-A — Representative Vulkan U++ UI — PASS
+## UI1-A / UI1-B / UI1-R1 / UI1-R2 — PASS
 
-Validated and promoted to `main`:
+Validated Windows/Vulkan behavior now includes:
 
-- `GpuUiCoverageTest`: PASS — `rect=49 text=16 image=44 path=3 clip=35 transform=30`;
-- `GpuUiGallery`: PASS — broad ordinary U++ controls through one root Vulkan surface;
-- ordinary animated `Ctrl` remained live during interaction and resize;
-- second modal `GpuTopWindow`: PASS;
-- `GpuEmbeddedMotion`: PASS — normal U++ window with embedded `GpuCtrl`;
-- `RenderCtrlBridgeTest`: PASS;
-- `GpuTopWindowPresentationTest`: PASS;
-- `GpuCtrlPresentationTest`: PASS;
-- no Vulkan validation errors, crashes, assertions, blank surfaces or GPU errors.
+- representative U++ controls through one Vulkan root surface;
+- ordinary animated custom `Ctrl` through the root recorder;
+- `DrawArc`: PASS;
+- rotated `DrawText`: PASS;
+- destination-invert rectangle / U++ edit caret: PASS;
+- atomic root fallback after post-record GPU failure: PASS;
+- explicit `RetryGpuInit`: PASS;
+- transformed child clipping fixed at GPU2D replay level;
+- translated-clip base path and text-aware path: PASS;
+- software clip cross-check: PASS;
+- non-axis-aligned rectangular-clip boundary remains explicit;
+- previous GPU2D switch warning removed;
+- 20 repeated cold opens: PASS;
+- full `ArrayCtrl`: PASS;
+- full particle panel: PASS;
+- 60-second animation: PASS;
+- resize/minimize/restore: PASS;
+- modal dialog open/close 5/5: PASS;
+- half-painted/partial root: NOT REPRODUCED after UI1-R2;
+- GPU/software flashing: NOT OBSERVED;
+- no Vulkan validation errors, crashes or assertions;
+- final Vulkan ownership: ZERO.
 
-Popup/menu/tool-tip GPU presentation is not yet accepted.
+The former half-painted gallery failure was caused by GPU2D storing `ClipRect` in local coordinates after child transforms. Clips are now resolved through the current axis-aligned transform when established, matching U++ Painter semantics.
 
-## UI1-B — Useful Draw Semantics — IMPLEMENTED / WINDOWS VALIDATION PENDING
+## UI1-C — Transient / Multi-window GPU Completion — IMPLEMENTED FIRST SLICE / WINDOWS VALIDATION PENDING
 
 Current source/test checkpoint:
 
-`79783630d320f88b38f99bc379e5520ded1587f6`
+`771d9d42fb092d21910d2cf07bba767eb3115cf8`
 
-Published directly on `main`:
+Architecture:
 
-- `DrawArc` now records to the existing neutral `UiPath` / `StrokePath` contract instead of failing;
-- the arc path follows Win32/U++ default counter-clockwise semantics and converts the radial start/end points to the ellipse intersection angles;
-- arcs are split into <= 90-degree cubic Bézier segments; equal start/end draws a full ellipse as Win32 documents;
-- existing U++ pen widths/dash constants continue through `ConfigureStroke`;
-- rotated `DrawText` now remains semantic text: a local neutral transform is applied around U++'s `(x,y)` origin using U++'s tenth-degree angle convention, followed by normal `DrawText` operations;
-- no raster fallback was added for text;
-- native GDI, child-window exclusion, invert/XOR/pattern modes remain explicit boundaries.
+- U++ Win32 `Ctrl::PopUp` creates an owned native `WS_POPUP` HWND;
+- U++ exposes a process-wide `StateHook`, and `StateH(OPEN)` occurs after the HWND exists;
+- `GpuRender` now installs one state hook when the first `GpuTopWindow` is constructed;
+- owned `WS_POPUP` top-level controls whose owner chain reaches a ready `GpuTopWindow` receive a `GpuDisplayPresenter` automatically;
+- each transient native top-level gets its own surface/swapchain, while compatible presenters share the application `GpuContext` / Vulkan logical device;
+- ordinary child controls still do NOT receive native GPU HWNDs;
+- transient GPU failure falls back to stable ordinary U++ painting for that popup;
+- `GpuTopWindow` exposes read-only backend/validation policy so transient surfaces use the same selected backend policy instead of hard-coding Vulkan.
 
-Focused `RenderCtrlBridgeTest` now checks:
+Focused package added:
 
-- ordinary recursive control recording remains deterministic;
-- arc recording succeeds and produces a neutral stroke path;
-- the right-to-left half-ellipse follows the Win32/U++ counter-clockwise/top-half direction;
-- software replay produces visible arc output;
-- 90-degree rotated text records as neutral transform + text operations;
-- software replay produces visible rotated text output;
-- native GDI and native-child exclusion still fail explicitly.
+`tests/GpuTransientPopupPresentationTest`
 
-Platform compile/runtime validation of this checkpoint is still required before UI1-B is marked PASS.
+It is intended to prove repeatedly:
 
-## UI1-C — Transient / Multi-window Completion — ACTIVE NEXT BLOCK
+- one root GPU surface + one popup GPU surface;
+- two independent swapchains;
+- one shared logical device;
+- popup refresh re-records U++ painting;
+- popup close releases only its presentation objects;
+- repeated popup open/close leaves root GPU presentation alive;
+- final close returns Vulkan ownership to zero.
 
-Upstream U++ popup architecture inspection has started.
+Windows validation of this checkpoint is required before transient popup presentation is accepted.
 
-Important finding:
+## UI1-C Continuation After First Gate
 
-- standard `DropList` uses `PopUpList::Popup`, which is an internal `Ctrl` opened as its own native popup window via `Ctrl::PopUp`;
-- it is therefore not part of the parent `GpuTopWindow` root surface;
-- making transient UI fully GPU-presented requires a per-native-top-level/popup presentation decision, not another child-control compositor and not one GPU HWND per ordinary control.
+Once the generic popup host passes:
 
-Next work:
+1. validate real `DropList` popup presentation in `GpuUiGallery`;
+2. validate context/menu popup presentation through the same mechanism;
+3. validate U++ tool-tip popup presentation;
+4. fix only real semantic gaps discovered by those controls;
+5. broaden the Vulkan UI gallery with representative `upp_Ui` controls.
 
-- inspect the Win32 `Ctrl::PopUp` / native-window creation seam and choose the smallest reusable way for U++-created popup windows owned by a GPU top-level to acquire GPU presentation;
-- cover DropList popup, menus/context menus and tool-tips explicitly;
-- retain ordinary separate `GpuTopWindow` dialogs as the already validated multi-top-level model;
-- broaden to representative `upp_Ui` controls after the transient-window seam is proven.
+Do not introduce a second layout/theme/state authority and do not create one native GPU child per ordinary control.
 
 ## UI1-D — Shared Immutable Resources
 
-After UI1-B/C are stable:
+After UI1-C is stable:
 
-- define context-owned image/glyph/vector resource identities;
-- share immutable resources across compatible windows;
-- prove one window can close without invalidating another;
+- define context-owned immutable image/glyph/vector resource identities;
+- share suitable resources across compatible windows;
+- prove closing one window cannot invalidate another;
 - do not globally alias mutable presenter caches without an explicit lifetime contract.
 
 ## Backend Order After UI1
 
 Prefer WebGPU before Metal if Windows/browser tooling gives faster executable evidence. WebGPU renderer/provider work remains separate from the browser/WebAssembly U++ platform host.
 
-## Branch Policy / Cleanup
-
-Current policy:
-
-- work directly on `main`;
-- remote `main` is the source of truth;
-- publish coherent checkpoints frequently;
-- do not create `supervisor/*` branches for ordinary development/validation.
-
-All previously created `supervisor/*` branches were deleted after UI1-A acceptance. No supervisor branch is required for current work.
-
 ## Recovery Log
 
 BASE: current remote `main`
-TASK: UI1-B + UI1-C — complete useful Draw semantics and transient/multi-window Vulkan U++ UI behavior
 WORKING BRANCH: `main`
-STATUS: UI1-A PASS / ACCEPTED; UI1-B source implementation published, Windows validation pending; UI1-C popup architecture audit active
-SOURCE CHECKPOINT: `79783630d320f88b38f99bc379e5520ded1587f6`
-VALIDATION: previous UI1-A and Vulkan productization acceptance remain authoritative; no UI1-B runtime PASS claimed yet
-NEXT: Windows validate `RenderCtrlBridgeTest` plus UI1 gallery regression; meanwhile continue transient-window design from U++ `Ctrl::PopUp`/Win32 creation path.
+ACCEPTED BASELINE: `2b64964b89324cdd8ce2e1627c942205f783d896`
+ACTIVE TASK: UI1-C — transient/pop-up native top-level GPU presentation
+SOURCE CHECKPOINT: `771d9d42fb092d21910d2cf07bba767eb3115cf8`
+STATUS: UI1-A/B/R1/R2 PASS / ACCEPTED; UI1-C generic owned-popup presenter implemented, Windows validation pending
+NEXT: Windows validate `GpuTransientPopupPresentationTest`, then real DropList/menu/tool-tip acceptance using the same presenter seam.
