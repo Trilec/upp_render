@@ -11,6 +11,8 @@ public:
 	~GpuTopWindow() override;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
+	GpuBackendKind GetBackend() const;
+	bool IsValidationRequested() const;
 	void RequestGpuRefresh();
 	GpuTopWindow& RetryGpuInit();
 	GpuTopWindow& SetBackend(GpuBackendKind kind);

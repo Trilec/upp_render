@@ -1,4 +1,5 @@
 #include "GpuTopWindow.h"
+#include "GpuTransientWindows.h"
 #include "RenderCtrlBridge.h"
 
 #ifdef PLATFORM_WIN32
@@ -124,10 +125,16 @@ struct GpuTopWindow::Impl {
 	bool destroying = false;
 };
 
-GpuTopWindow::GpuTopWindow() { impl.Create(*this); }
+GpuTopWindow::GpuTopWindow()
+{
+	EnsureGpuTransientWindowSupport();
+	impl.Create(*this);
+}
 GpuTopWindow::~GpuTopWindow() { if(impl) { impl->destroying = true; impl->StopGpuSession(); } }
 bool GpuTopWindow::IsGpuReady() const { return impl && impl->IsGpuReady(); }
 String GpuTopWindow::GetGpuError() const { return impl ? impl->GetGpuError() : String(); }
+GpuBackendKind GpuTopWindow::GetBackend() const { return impl ? impl->backend_kind : GpuBackendKind::Unknown; }
+bool GpuTopWindow::IsValidationRequested() const { return impl && impl->validation_requested; }
 void GpuTopWindow::RequestGpuRefresh() { if(impl) impl->RequestGpuRefresh(); }
 GpuTopWindow& GpuTopWindow::RetryGpuInit() { if(impl) impl->RetryGpuInit(); return *this; }
 GpuTopWindow& GpuTopWindow::SetBackend(GpuBackendKind kind) { if(impl) impl->SetBackend(kind); return *this; }

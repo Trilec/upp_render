@@ -16,6 +16,8 @@ file
 	GpuCtrl.cpp,
 	GpuTopWindow.h,
 	GpuTopWindow.cpp,
+	GpuTransientWindows.h,
+	GpuTransientWindows.cpp,
 	GpuWindow.h,
 	GpuWindow.cpp,
 	RenderPresentation.h,
