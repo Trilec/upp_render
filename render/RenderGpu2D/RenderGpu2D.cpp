@@ -213,12 +213,17 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		case UiDisplayOpType::ClipRect:
 			if(!IsFiniteRect(op.rect))
 				return Fail("UiRenderer2D received a non-finite clip rectangle");
-			if(!state.has_clip) {
-				state.clip = op.rect;
-				state.has_clip = true;
+			{
+				Rectf resolved_clip;
+				if(!TransformAxisAlignedClipRect(op.rect, state.transform, resolved_clip))
+					return Fail("UiRenderer2D ClipRect under a non-axis-aligned transform is not representable by the current rectangular clip contract");
+				if(!state.has_clip) {
+					state.clip = resolved_clip;
+					state.has_clip = true;
+				}
+				else
+					state.clip = IntersectRectf(state.clip, resolved_clip);
 			}
-			else
-				state.clip = IntersectRectf(state.clip, op.rect);
 			break;
 		case UiDisplayOpType::ConcatTransform:
 			if(!IsFiniteTransform(op.transform))

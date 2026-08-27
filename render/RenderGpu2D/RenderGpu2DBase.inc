@@ -149,6 +149,40 @@ static Vector<Pointf> TransformRect(const Rectf& rect, const Transform2D& transf
 	return out;
 }
 
+static bool TransformAxisAlignedClipRect(const Rectf& rect, const Transform2D& transform, Rectf& out)
+{
+	if(!IsFiniteRect(rect) || !IsFiniteTransform(transform))
+		return false;
+
+	const double epsilon = 1e-9;
+	const bool direct = std::fabs(transform.x.y) <= epsilon && std::fabs(transform.y.x) <= epsilon;
+	const bool swapped = std::fabs(transform.x.x) <= epsilon && std::fabs(transform.y.y) <= epsilon;
+	if(!direct && !swapped)
+		return false;
+
+	if(IsEmptyRectf(rect)) {
+		Pointf p = transform.TransformPoint(Pointf(rect.left, rect.top));
+		if(!IsFinitePoint(p))
+			return false;
+		out = Rectf(p.x, p.y, p.x, p.y);
+		return true;
+	}
+
+	Vector<Pointf> points = TransformRect(rect, transform);
+	double left = points[0].x;
+	double right = points[0].x;
+	double top = points[0].y;
+	double bottom = points[0].y;
+	for(int i = 1; i < points.GetCount(); ++i) {
+		left = min(left, points[i].x);
+		right = max(right, points[i].x);
+		top = min(top, points[i].y);
+		bottom = max(bottom, points[i].y);
+	}
+	out = Rectf(left, top, right, bottom);
+	return true;
+}
+
 enum ClipEdge {
 	ClipLeft,
 	ClipRight,
@@ -642,12 +676,17 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		case UiDisplayOpType::ClipRect:
 			if(!IsFiniteRect(op.rect))
 				return Fail("UiRenderer2D received a non-finite clip rectangle");
-			if(!state.has_clip) {
-				state.clip = op.rect;
-				state.has_clip = true;
+			{
+				Rectf resolved_clip;
+				if(!TransformAxisAlignedClipRect(op.rect, state.transform, resolved_clip))
+					return Fail("UiRenderer2D ClipRect under a non-axis-aligned transform is not representable by the current rectangular clip contract");
+				if(!state.has_clip) {
+					state.clip = resolved_clip;
+					state.has_clip = true;
+				}
+				else
+					state.clip = IntersectRectf(state.clip, resolved_clip);
 			}
-			else
-				state.clip = IntersectRectf(state.clip, op.rect);
 			break;
 		case UiDisplayOpType::ConcatTransform:
 			if(!IsFiniteTransform(op.transform))
@@ -695,6 +734,11 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			if(!append_image(op.rect, op.image))
 				return false;
 			break;
+		case UiDisplayOpType::DrawText:
+		case UiDisplayOpType::FillPath:
+		case UiDisplayOpType::StrokePath:
+		case UiDisplayOpType::DrawSvg:
+			return Fail("UiRenderer2D base replay received an extension operation");
 		}
 	}
 	if(!stack.IsEmpty())

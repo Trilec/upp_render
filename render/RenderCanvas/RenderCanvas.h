@@ -179,6 +179,8 @@ public:
 	virtual void Save() = 0;
 	virtual void Restore() = 0;
 
+	// The rectangle is in the current local coordinate system. The current transform
+	// is applied when the clip is established; later transforms do not move it.
 	virtual void ClipRect(const Rectf& rect) = 0;
 	virtual void ConcatTransform(const Transform2D& transform) = 0;
 

@@ -93,6 +93,19 @@ static bool BuildImageList(const Image& image, UiDisplayList& out)
 	return builder.Finish(out);
 }
 
+static bool BuildTranslatedClipList(bool force_text_path, UiDisplayList& out)
+{
+	UiDisplayListBuilder builder;
+	builder.Save();
+	builder.ConcatTransform(Transform2D::Translation(60, 40));
+	builder.ClipRect(Rectf(0, 0, 24, 20));
+	builder.FillRect(Rectf(0, 0, 24, 20), Rgba8(230, 80, 40, 255));
+	if(force_text_path)
+		builder.DrawText(Pointf(0, 0), WString(), StdFont(), Rgba8(255, 255, 255, 255));
+	builder.Restore();
+	return builder.Finish(out);
+}
+
 static GpuTextureId CreateTarget(NullGpuDevice& device, GpuFormat format, Size size)
 {
 	GpuTextureDesc desc;
@@ -232,6 +245,66 @@ CONSOLE_APP_MAIN
 		ok &= Check(invert_device.DestroyTexture(invert_target) == GpuResult::Ok,
 		            "destination-invert target should destroy after renderer shutdown");
 		ok &= Check(invert_device.GetLiveTextureCount() == 0, "destination-invert test should release its target texture");
+	}
+
+	{
+		UiDisplayList translated;
+		ok &= Check(BuildTranslatedClipList(false, translated), "translated base clip display list should build");
+		const RGBA translated_background = MakeRgba(7, 10, 18, 255);
+		ImagePainter translated_painter(size);
+		translated_painter.DrawRect(Rect(0, 0, size.cx, size.cy), Color(7, 10, 18));
+		SoftwareUiRenderer translated_software;
+		ok &= Check(translated_software.Replay(translated, translated_painter), "translated clip should replay through software reference");
+		ok &= Check(translated_software.GetError().IsEmpty(), "translated software clip replay should retain no error");
+		Image translated_image = translated_painter.GetResult();
+		ok &= Check(translated_image[45][65] != translated_background, "translated software clip should paint inside resolved clip");
+		ok &= Check(translated_image[5][5] == translated_background, "translated software clip should preserve outside background");
+
+		for(int pass = 0; pass < 2; ++pass) {
+			NullGpuDevice translated_device;
+			GpuTextureId translated_target = CreateTarget(translated_device, GpuFormat::RGBA8, size);
+			UiDisplayList translated_list;
+			ok &= Check(BuildTranslatedClipList(pass != 0, translated_list), pass == 0 ?
+			            "translated base clip list should build" : "translated text clip list should build");
+			UiRenderer2D translated_renderer(translated_device);
+			ok &= Check(translated_renderer.Render(translated_list, MakeTarget(translated_target, GpuFormat::RGBA8, size)),
+			            pass == 0 ? "translated base clip should render" : "translated text clip should render");
+			const UiRenderer2DStats& stats = translated_renderer.GetStats();
+			ok &= Check(stats.emitted_primitive_count == 1, pass == 0 ?
+			            "translated clip base path should emit one primitive" : "translated clip text path should emit one primitive");
+			ok &= Check(stats.clipped_primitive_count == 0, pass == 0 ?
+			            "translated clip base path should not clip the child" : "translated clip text path should not clip the child");
+			ok &= Check(stats.triangle_count == 2 && stats.vertex_count == 6, pass == 0 ?
+			            "translated clip base path should emit two triangles and six vertices" :
+			            "translated clip text path should emit two triangles and six vertices");
+			ok &= Check(stats.batch_count == 1 && stats.draw_count == 1, pass == 0 ?
+			            "translated clip base path should use one batch and draw" :
+			            "translated clip text path should use one batch and draw");
+			translated_renderer.Close();
+			ok &= Check(translated_device.DestroyTexture(translated_target) == GpuResult::Ok,
+			            "translated clip target should destroy");
+		}
+
+		UiDisplayList shear_list;
+		UiDisplayListBuilder shear_builder;
+		Transform2D shear = Transform2D::Identity();
+		shear.x.y = 0.25;
+		shear_builder.Save();
+		shear_builder.ConcatTransform(shear);
+		shear_builder.ClipRect(Rectf(0, 0, 24, 20));
+		shear_builder.FillRect(Rectf(0, 0, 24, 20), Rgba8(230, 80, 40, 255));
+		shear_builder.Restore();
+		ok &= Check(shear_builder.Finish(shear_list), "non-axis-aligned clip display list should build");
+		NullGpuDevice shear_device;
+		GpuTextureId shear_target = CreateTarget(shear_device, GpuFormat::RGBA8, size);
+		UiRenderer2D shear_renderer(shear_device);
+		ok &= Check(!shear_renderer.Render(shear_list, MakeTarget(shear_target, GpuFormat::RGBA8, size)),
+		            "non-axis-aligned clip should fail explicitly");
+		ok &= Check(shear_renderer.GetError().Find("non-axis-aligned") >= 0,
+		            "non-axis-aligned clip failure should identify the unsupported transform");
+		shear_renderer.Close();
+		ok &= Check(shear_device.DestroyTexture(shear_target) == GpuResult::Ok,
+		            "non-axis-aligned clip target should destroy");
 	}
 
 	String log = device.DumpLog();
