@@ -131,6 +131,16 @@ GpuTopWindow::GpuTopWindow()
 	impl.Create(*this);
 }
 GpuTopWindow::~GpuTopWindow() { if(impl) { impl->destroying = true; impl->StopGpuSession(); } }
+void GpuTopWindow::Close()
+{
+	if(InLoop()) {
+		TopWindow::Close();
+		return;
+	}
+	if(impl)
+		impl->StopGpuSession();
+	TopWindow::Close();
+}
 bool GpuTopWindow::IsGpuReady() const { return impl && impl->IsGpuReady(); }
 String GpuTopWindow::GetGpuError() const { return impl ? impl->GetGpuError() : String(); }
 GpuBackendKind GpuTopWindow::GetBackend() const { return impl ? impl->backend_kind : GpuBackendKind::Unknown; }
