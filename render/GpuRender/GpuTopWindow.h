@@ -9,6 +9,7 @@ class GpuTopWindow : public TopWindow {
 public:
 	GpuTopWindow();
 	~GpuTopWindow() override;
+	void Close() override;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
 	GpuBackendKind GetBackend() const;

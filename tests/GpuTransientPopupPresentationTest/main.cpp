@@ -65,6 +65,18 @@ static bool IsFinalOwnershipZero(const VulkanTestHooks::VulkanRuntimeDeviceDiagn
 	       d.swapchain_live_count == 0;
 }
 
+static String DumpLiveOwnership(const VulkanTestHooks::VulkanRuntimeDeviceDiagnostics& d)
+{
+	String out;
+	out << "runtime=" << d.runtime_live_count
+	    << " instance=" << d.instance_live_count
+	    << " debug=" << d.debug_messenger_live_count
+	    << " surface=" << d.surface_live_count
+	    << " device=" << d.device_live_count
+	    << " swapchain=" << d.swapchain_live_count;
+	return out;
+}
+
 } // namespace
 
 GUI_APP_MAIN
@@ -125,9 +137,22 @@ GUI_APP_MAIN
 	            "root GPU window should remain ready after repeated popup lifecycle");
 
 	win.Close();
-	ok &= Check(PumpUntil([&] {
+	ok &= Check(!win.IsOpen(),
+	            "root window should be synchronously closed");
+	ok &= Check(!win.IsGpuReady(),
+	            "root GPU presenter should be synchronously closed by Close()");
+
+	bool final_zero = PumpUntil([&] {
 		return IsFinalOwnershipZero(VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics());
-	}), "closing root should return all Vulkan ownership to zero");
+	});
+
+	if(!final_zero)
+		Cout() << "Final Vulkan live ownership: "
+		       << DumpLiveOwnership(VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics())
+		       << EOL;
+
+	ok &= Check(final_zero,
+	            "closing root should return all Vulkan ownership to zero");
 
 	if(ok) {
 		Cout() << "GpuTransientPopupPresentationTest passed" << EOL;
