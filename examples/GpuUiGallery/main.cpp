@@ -1,4 +1,5 @@
 #include <GpuRender/GpuRender.h>
+#include <Ui/UiDropdown.h>
 
 using namespace Upp;
 
@@ -94,7 +95,7 @@ public:
 		mode.Add("Balanced");
 		mode.Add("Quiet");
 		mode.Add("Responsive");
-		mode.SetIndex(0);
+		mode.Select(0);
 
 		level.Range(100);
 		level <<= 58;
@@ -116,7 +117,7 @@ public:
 		table.AddColumn("Control / area");
 		table.AddColumn("Purpose");
 		table.Add("Button + Option", "state / theme");
-		table.Add("EditString + DropList", "text / popup entry point");
+		table.Add("EditString + UiDropdown", "text / upp_Ui popup entry point");
 		table.Add("Slider + Progress", "interactive value drawing");
 		table.Add("ArrayCtrl", "scrollable data view");
 		table.Add("ParticleSceneCtrl", "animated custom Draw path");
@@ -149,7 +150,7 @@ private:
 	Label subheading;
 	EditString name;
 	Option enabled;
-	DropList mode;
+	UiDropdown mode;
 	SliderCtrl level;
 	ProgressIndicator progress;
 	Button apply;
