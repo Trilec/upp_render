@@ -1,153 +1,93 @@
-# Active Work Status
+# Active Work
 
-Remote `main` is authoritative for all active and accepted `upp_render` work. Development proceeds directly on `main`; do not create supervisor feature/review branches unless Curt explicitly requests an isolated experiment.
+Remote `main` is authoritative. This file is only a compact recovery checkpoint, not project history.
 
-## Current Accepted Baseline
+## Recovery
 
-UI1-R2 accepted source baseline:
+- Repository: `Trilec/upp_render`
+- Branch: `main`
+- Validated source checkpoint: `ab7b632e83b7d51de89879d75a1b42879d3031fe`
+- Active milestone: UI1-C — transient/multi-window GPU completion
+- Next milestone: UI1-D — shared immutable GPU resources
+- Windows/U++ validation is performed with `CLANGx64_Vulkan.bm`.
 
-`2b64964b89324cdd8ce2e1627c942205f783d896`
+## Accepted Foundation
 
-The Vulkan productization/UI baseline is PASS / accepted:
+UI1-A / UI1-B / UI1-R1 / UI1-R2 are accepted:
 
-- backend-neutral display-list/software foundation: PASS;
-- RHI + Null backend: PASS;
-- Vulkan bootstrap/resources/presentation: PASS;
-- GPU2D geometry, images, text, vector/SVG: PASS;
-- backend registry/provider decoupling: PASS;
-- compatible surfaces share runtime/instance/logical-device/queue domain and pipeline cache while retaining independent surface/swapchain/frame state: PASS;
-- embedded `GpuCtrl`: PASS;
-- `GpuTopWindow` root compositor: PASS;
-- broad ordinary U++ control-tree recording: PASS;
-- second modal `GpuTopWindow`: PASS;
-- final live Vulkan ownership: ZERO.
+- backend-neutral display-list/software foundation;
+- RHI/provider architecture with Vulkan as the current production backend;
+- GPU2D geometry, images, text, vector/SVG;
+- embedded `GpuCtrl`;
+- `GpuTopWindow` root composition of ordinary U++ controls;
+- modal second `GpuTopWindow`;
+- DrawArc, rotated text and destination-invert caret semantics;
+- transformed child clipping;
+- atomic root software fallback + explicit `RetryGpuInit()`;
+- repeated root/animation/resize/modal acceptance;
+- final Vulkan ownership returns to ZERO.
 
-## UI1-A / UI1-B / UI1-R1 / UI1-R2 — PASS
+Do not reopen accepted areas without a new reproducible regression.
 
-Validated Windows/Vulkan behavior now includes:
+## UI1-C Current State
 
-- representative U++ controls through one Vulkan root surface;
-- ordinary animated custom `Ctrl` through the root recorder;
-- `DrawArc`: PASS;
-- rotated `DrawText`: PASS;
-- destination-invert rectangle / U++ edit caret: PASS;
-- atomic root fallback after post-record GPU failure: PASS;
-- explicit `RetryGpuInit`: PASS;
-- transformed child clipping fixed at GPU2D replay level;
-- translated-clip base path and text-aware path: PASS;
-- software clip cross-check: PASS;
-- non-axis-aligned rectangular-clip boundary remains explicit;
-- previous GPU2D switch warning removed;
-- 20 repeated cold opens: PASS;
-- full `ArrayCtrl`: PASS;
-- full particle panel: PASS;
-- 60-second animation: PASS;
-- resize/minimize/restore: PASS;
-- modal dialog open/close 5/5: PASS;
-- half-painted/partial root: NOT REPRODUCED after UI1-R2;
-- GPU/software flashing: NOT OBSERVED;
-- no Vulkan validation errors, crashes or assertions;
-- final Vulkan ownership: ZERO.
+Implemented architecture:
 
-The former half-painted gallery failure was caused by GPU2D storing `ClipRect` in local coordinates after child transforms. Clips are now resolved through the current axis-aligned transform when established, matching U++ Painter semantics.
+- owned Win32 `WS_POPUP` U++ top-levels are discovered through U++ `StateHook`;
+- each transient top-level receives its own `GpuDisplayPresenter` surface/swapchain;
+- compatible root/transient presenters share the application GPU context/logical device;
+- ordinary child controls do not receive native GPU HWNDs;
+- transient presentation failure falls back to ordinary U++ painting;
+- non-modal `GpuTopWindow::Close()` releases its GPU session synchronously while modal-loop semantics remain intact.
 
-## UI1-C — Transient / Multi-window GPU Completion — GENERIC POPUP PASS / REAL DROPLIST BLOCKED
+Focused generic popup lifecycle: PASS.
 
-Current published source checkpoint:
+Focused real `DropList` probe at `ab7b632...`: Gary reported Debug PASS and Release PASS:
 
-`b8e611c4b0fbdd10e62e2a0b9760660493ed814a`
+- `WhenDrop` fired;
+- real owned popup found, open and visible;
+- popup rect `260 x 47`;
+- live surface/swapchain/device = `2 / 2 / 1`;
+- popup shared the root logical device;
+- final Vulkan ownership = ZERO;
+- no crashes, assertions or `FAIL:` lines.
 
-Architecture:
+Important conclusion: the real U++ `PopUpList` creation + GPU transient attachment path is currently proven. The earlier `GpuUiGallery` click run that showed no popup is not evidence of a renderer defect unless it reproduces with verified real input.
 
-- U++ Win32 `Ctrl::PopUp` creates an owned native `WS_POPUP` HWND;
-- U++ exposes a process-wide `StateHook`, and `StateH(OPEN)` occurs after the HWND exists;
-- `GpuRender` installs one state hook when the first `GpuTopWindow` is constructed;
-- owned `WS_POPUP` top-level controls whose native owner chain reaches a ready `GpuTopWindow` receive a `GpuDisplayPresenter` automatically;
-- each transient native top-level gets its own surface/swapchain, while compatible presenters share the application `GpuContext` / Vulkan logical device;
-- ordinary child controls still do NOT receive native GPU HWNDs;
-- transient GPU failure falls back to stable ordinary U++ painting for that popup;
-- `GpuTopWindow` exposes read-only backend/validation policy so transient surfaces use the same selected backend policy instead of hard-coding Vulkan.
+## Remaining UI1-C Acceptance
 
-Focused package:
+1. Run `GpuUiGallery` and exercise the real DropList through normal user input for 20 open/select/close cycles.
+2. If it passes, close the old DropList blocker without changing renderer code.
+3. If normal input still fails while programmatic `Drop()` passes, diagnose only root input/MultiButton hit-testing/focus/activation before touching transient presentation.
+4. Add/validate real menu or context-menu GPU transient presentation.
+5. Add/validate tooltip GPU transient presentation.
+6. Re-run full root smoke: controls, particle animation, resize/minimize/restore, caret, modal dialog and final Vulkan ownership ZERO.
+7. Mark UI1-C accepted only when the above real-control matrix passes.
 
-`tests/GpuTransientPopupPresentationTest`
+## After UI1-C
 
-Windows validation at the original UI1-C1 checkpoint proved the generic owned-popup path in Debug. Release then exposed a real root-close lifetime bug: ordinary `GpuTopWindow::Close()` could leave the root presenter alive until object destruction because cleanup relied on the later native `PreDestroy()` path.
-
-That lifetime bug is fixed at `b8e611c4b0fbdd10e62e2a0b9760660493ed814a`:
-
-- real non-modal `GpuTopWindow::Close()` now closes its presenter synchronously before `TopWindow::Close()` tears down native state;
-- modal `InLoop()` behavior remains owned by `TopWindow::Close()` so the GPU session remains alive until the later real close;
-- `PreDestroy()` and the destructor remain safety-net cleanup paths;
-- focused diagnostics now print all six live Vulkan ownership counters if final-zero ever fails again.
-
-Gary's UI1-C1-R1 Windows validation on the exact three-file fix reported:
-
-- focused Debug: PASS;
-- focused Release: PASS;
-- immediate `!win.IsOpen()`: PASS;
-- immediate `!win.IsGpuReady()`: PASS;
-- root: 1 surface / 1 swapchain / 1 device;
-- root + popup: 2 surfaces / 2 swapchains / 1 shared device;
-- popup close: 1 surface / 1 swapchain / 1 device;
-- repeated popup lifecycle: PASS, four cycles;
-- root survives repeated popup open/close: PASS;
-- final runtime/instance/debug-messenger/surface/device/swapchain live ownership: all ZERO;
-- `RenderCtrlBridgeTest`: PASS;
-- `RenderGpu2DTest`: PASS;
-- `GpuUiCoverageTest`: PASS;
-- `GpuTopWindowPresentationTest`: PASS;
-- `GpuCtrlPresentationTest`: PASS;
-- `RenderVulkanTest`: PASS;
-- no Vulkan validation errors, crashes or assertions reported.
-
-The next real-control gate is currently blocked:
-
-- `GpuUiGallery` real `DropList` acceptance: FAIL;
-- after a verified foreground click, no DropList popup window appeared;
-- required 20-cycle DropList acceptance therefore stopped at 0/20;
-- full-root/particle/modal/resize/caret follow-up smoke was not run after this substantive failure;
-- menu/context-menu/tool-tip GPU acceptance has NOT started and must not be claimed.
-
-Important source distinction for the next diagnosis:
-
-- the synthetic `Ctrl::PopUp()` host path is proven;
-- U++ `DropList::Drop()` uses `PopUpList`, whose popup opens as an activated/save-bits owned `Ctrl` and may use slide animation before reaching its final size;
-- therefore isolate whether the failure is DropList input/hit-testing, real `PopUpList` creation/activation, or transient-host behavior during that real popup lifecycle before changing architecture.
-
-## UI1-C Continuation
-
-Next bounded task:
-
-1. reproduce the real DropList path independently of mouse hit-testing by invoking `DropList::Drop()` programmatically in a focused Windows probe;
-2. record whether a second U++ top-level popup actually becomes open, its final rect/visibility, and whether Vulkan diagnostics become 2 surfaces / 2 swapchains / 1 device;
-3. compare with an activated synthetic `Ctrl::PopUp()` using the same save-bits/drop-shadow style;
-4. if programmatic DropList works, diagnose root-input/MultiButton hit testing rather than rewriting transient presentation;
-5. if the real popup opens but never gets a second GPU surface, diagnose the state-hook/owner/attach seam;
-6. if it opens and gets a GPU surface but remains invisible/1-pixel/blank, diagnose PopUpList activation/slide-resize presentation;
-7. fix the smallest root cause and rerun real DropList 20-cycle acceptance before menu/context-menu/tool-tip work.
-
-Do not introduce a second layout/theme/state authority and do not create one native GPU child per ordinary control.
-
-## UI1-D — Shared Immutable Resources
-
-After UI1-C is stable:
+UI1-D:
 
 - define context-owned immutable image/glyph/vector resource identities;
-- share suitable resources across compatible windows;
-- prove closing one window cannot invalidate another;
-- do not globally alias mutable presenter caches without an explicit lifetime contract.
+- share only resources with explicit identity/lifetime contracts;
+- prove closing one presenter/window cannot invalidate another.
 
-## Backend Order After UI1
+After UI1-D, move to the next backend milestone. Prefer executable WebGPU work before Metal if Windows/browser tooling remains the fastest validation path.
 
-Prefer WebGPU before Metal if Windows/browser tooling gives faster executable evidence. WebGPU renderer/provider work remains separate from the browser/WebAssembly U++ platform host.
+## Guardrails
+
+- U++ remains the authority for layout, input, focus, state and theme.
+- Public UI/recorder APIs remain backend-neutral; no Vulkan leakage.
+- Do not create one native GPU child per ordinary control.
+- Do not add a second layout/theme/state system.
+- Do not weaken fallback, validation or ownership-zero assertions.
+- Unsupported Draw semantics remain explicit failures until deliberately implemented.
+- Diagnose before fixing; make the smallest coherent change.
+- Review complete touched files/package dependencies and run `git diff --check` before publication.
 
 ## Recovery Log
 
 BASE: current remote `main`
-WORKING BRANCH: `main`
-ACCEPTED BASELINE: `2b64964b89324cdd8ce2e1627c942205f783d896`
-ACTIVE TASK: UI1-C — real DropList transient/pop-up GPU presentation
-SOURCE CHECKPOINT: `b8e611c4b0fbdd10e62e2a0b9760660493ed814a`
-STATUS: UI1-A/B/R1/R2 PASS / ACCEPTED; UI1-C generic owned-popup presenter + synchronous root-close lifetime PASS; real DropList gallery gate FAIL / blocker
-NEXT: focused programmatic DropList probe to isolate input vs PopUpList creation/activation vs GPU transient attachment, then smallest root-cause fix and 20-cycle DropList acceptance.
+TASK: finish UI1-C real transient-control acceptance
+STATUS: foundation PASS; generic popup PASS; real programmatic DropList PASS Debug/Release; gallery normal-input DropList + menu/context-menu + tooltip acceptance remain
+NEXT: real `GpuUiGallery` DropList 20-cycle normal-input acceptance, then menu/context-menu and tooltip
