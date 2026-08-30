@@ -6,10 +6,12 @@ Remote `main` is authoritative. This file is only a compact recovery checkpoint,
 
 - Repository: `Trilec/upp_render`
 - Branch: `main`
-- Validated source checkpoint: `ab7b632e83b7d51de89879d75a1b42879d3031fe`
+- Last validated renderer checkpoint: `ab7b632e83b7d51de89879d75a1b42879d3031fe`
+- Current source: `main`; `GpuUiGallery` now uses `upp_Ui::UiDropdown` and awaits Windows validation.
+- `upp_Ui` API checked against `main` at `0fd8df299bca20d27e19d755693f65eff4dcdca6`.
 - Active milestone: UI1-C — transient/multi-window GPU completion
 - Next milestone: UI1-D — shared immutable GPU resources
-- Windows/U++ validation is performed with `CLANGx64_Vulkan.bm`.
+- Windows/U++ validation uses `CLANGx64_Vulkan.bm`.
 
 ## Accepted Foundation
 
@@ -42,9 +44,8 @@ Implemented architecture:
 
 Focused generic popup lifecycle: PASS.
 
-Focused real `DropList` probe at `ab7b632...`: Gary reported Debug PASS and Release PASS:
+Focused stock-U++ `DropList` compatibility probe at `ab7b632...`: Gary reported Debug PASS and Release PASS:
 
-- `WhenDrop` fired;
 - real owned popup found, open and visible;
 - popup rect `260 x 47`;
 - live surface/swapchain/device = `2 / 2 / 1`;
@@ -52,17 +53,21 @@ Focused real `DropList` probe at `ab7b632...`: Gary reported Debug PASS and Rele
 - final Vulkan ownership = ZERO;
 - no crashes, assertions or `FAIL:` lines.
 
-Important conclusion: the real U++ `PopUpList` creation + GPU transient attachment path is currently proven. The earlier `GpuUiGallery` click run that showed no popup is not evidence of a renderer defect unless it reproduces with verified real input.
+This stock `DropList` test remains a low-level U++ compatibility regression. It is not the product-facing dropdown acceptance target.
+
+`GpuUiGallery` now uses the real `upp_Ui::UiDropdown` from the `Ui` package. This deliberately exercises the control family used by product applications, including its own styled collapsed control and native popup window.
 
 ## Remaining UI1-C Acceptance
 
-1. Run `GpuUiGallery` and exercise the real DropList through normal user input for 20 open/select/close cycles.
-2. If it passes, close the old DropList blocker without changing renderer code.
-3. If normal input still fails while programmatic `Drop()` passes, diagnose only root input/MultiButton hit-testing/focus/activation before touching transient presentation.
-4. Add/validate real menu or context-menu GPU transient presentation.
-5. Add/validate tooltip GPU transient presentation.
-6. Re-run full root smoke: controls, particle animation, resize/minimize/restore, caret, modal dialog and final Vulkan ownership ZERO.
-7. Mark UI1-C accepted only when the above real-control matrix passes.
+1. Build `GpuUiGallery` with the `upp_Ui` assembly path and verify `UiDropdown` records through the Vulkan root.
+2. Exercise the real `UiDropdown` through normal user input for 20 open/select/close cycles across all three choices.
+3. Verify its popup is GPU-presented, visually correct, responsive, and leaves no ownership leak/fallback.
+4. If it fails, diagnose the actual `UiDropdown` popup/input path; do not substitute stock `DropList` as product acceptance.
+5. Keep `GpuDropListPopupPresentationTest` passing as the generic stock-U++ compatibility regression.
+6. Add/validate the relevant real menu/context-menu transient path, preferring `upp_Ui` controls used by applications.
+7. Add/validate tooltip transient presentation used by applications.
+8. Re-run full root smoke: controls, particle animation, resize/minimize/restore, caret, modal dialog and final Vulkan ownership ZERO.
+9. Mark UI1-C accepted only when the real-control matrix passes.
 
 ## After UI1-C
 
@@ -76,6 +81,7 @@ After UI1-D, move to the next backend milestone. Prefer executable WebGPU work b
 
 ## Guardrails
 
+- Product-facing acceptance should use the real `upp_Ui` controls where equivalents exist.
 - U++ remains the authority for layout, input, focus, state and theme.
 - Public UI/recorder APIs remain backend-neutral; no Vulkan leakage.
 - Do not create one native GPU child per ordinary control.
@@ -88,6 +94,6 @@ After UI1-D, move to the next backend milestone. Prefer executable WebGPU work b
 ## Recovery Log
 
 BASE: current remote `main`
-TASK: finish UI1-C real transient-control acceptance
-STATUS: foundation PASS; generic popup PASS; real programmatic DropList PASS Debug/Release; gallery normal-input DropList + menu/context-menu + tooltip acceptance remain
-NEXT: real `GpuUiGallery` DropList 20-cycle normal-input acceptance, then menu/context-menu and tooltip
+TASK: finish UI1-C using real product controls
+STATUS: foundation PASS; generic popup PASS; stock DropList compatibility PASS; `GpuUiGallery` switched to `UiDropdown`, validation pending
+NEXT: build + 20-cycle real `UiDropdown` gallery acceptance, then menu/context-menu and tooltip
