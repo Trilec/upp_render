@@ -5,7 +5,7 @@ Remote `main` is authoritative. This is a compact recovery checkpoint, not proje
 ## Recovery
 
 - Repository: `Trilec/upp_render`; active branch: `main` only.
-- Current source checkpoint: `74605315e439416e89453958a6280fbb60305b3e`.
+- Current source checkpoint: `cbe008a9b324df86201de7df9f66b3ca94127c86`.
 - Current `upp_Ui` popup fix: `1780907a1aa50b3a64a4baf70d573718ebe45161`.
 - Active milestone: UI1-C — transient/multi-window GPU completion.
 - Next milestone: UI1-D — shared immutable GPU resources.
