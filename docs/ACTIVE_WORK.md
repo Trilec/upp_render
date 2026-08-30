@@ -4,9 +4,9 @@ Remote `main` is authoritative. This is a compact recovery checkpoint, not proje
 
 ## Recovery
 
-- Repository: `Trilec/upp_render`; branch: `main`.
-- Last validated renderer checkpoint: `ab7b632e83b7d51de89879d75a1b42879d3031fe`.
-- `upp_Ui` API checked against `main` at `0fd8df299bca20d27e19d755693f65eff4dcdca6`.
+- Repository: `Trilec/upp_render`; active branch: `main` only.
+- Current renderer source checkpoint before this status update: `0795c74101a834b34510136d5ec97b6c68a37ba4`.
+- Current `upp_Ui` popup fix: `1780907a1aa50b3a64a4baf70d573718ebe45161`.
 - Active milestone: UI1-C — transient/multi-window GPU completion.
 - Next milestone: UI1-D — shared immutable GPU resources.
 - Windows/U++ validation uses `CLANGx64_Vulkan.bm`.
@@ -28,35 +28,30 @@ Do not reopen accepted areas without a new reproducible regression.
 
 ## UI1-C Current State
 
-- Owned Win32 `WS_POPUP` U++ top-levels are discovered through U++ `StateHook`.
-- Each transient top-level gets its own `GpuDisplayPresenter` surface/swapchain while compatible presenters share the application GPU context/logical device.
-- Ordinary child controls do not get native GPU HWNDs; transient failure falls back to ordinary U++ painting.
-- Non-modal `GpuTopWindow::Close()` releases its GPU session synchronously; modal-loop semantics remain intact.
-- Generic transient popup lifecycle: PASS.
-- Stock-U++ `GpuDropListPopupPresentationTest`: Debug/Release PASS at `ab7b632...`; real popup visible at `260 x 47`, live surface/swapchain/device `2 / 2 / 1`, final ownership ZERO.
-- Stock `DropList` is compatibility coverage only, not the product-facing dropdown acceptance target.
-- `GpuUiGallery` now uses the real `UiDropdown` from `upp_Ui` / package `Ui`.
-- `GpuUiDropdownPopupPresentationTest` now provides deterministic product-control popup/device/lifetime coverage; Windows validation pending.
+- Generic owned transient popup lifecycle: PASS.
+- Stock U++ `DropList` popup compatibility: Debug/Release PASS; `2 / 2 / 1` surface/swapchain/device; final ownership ZERO.
+- Product-facing `GpuUiGallery` uses real `upp_Ui::UiDropdown`.
+- `GpuUiDropdownPopupPresentationTest`: Debug PASS and Release PASS.
+- Real `UiDropdown` pointer acceptance: `20/20` PASS.
+- Real `UiDropdown` keyboard acceptance: `8/8` PASS.
+- `upp_Ui` keyboard-reopen root cause fixed at `1780907a...`: owner-initiated popup close no longer incorrectly suppresses the next owner click.
+- `upp_Ui` includes `UiDropdownInteractionTest` regression coverage for that bug.
 
-## Remaining UI1-C Acceptance
+UiDropdown acceptance is CLOSED. Do not return to stock `DropList` as the product gate.
 
-1. Build/run `GpuUiDropdownPopupPresentationTest` Debug + Release with the `upp_Ui` assembly path.
-2. Require real `UiDropdown` popup open/visible, valid rect, `2 / 2 / 1` live surface/swapchain/device, repeated close/reopen, collapsed selection still functional, and final ownership ZERO.
-3. Run `GpuUiGallery`; exercise `UiDropdown` through normal input for 20 open/select/close cycles across all three choices.
-4. If `UiDropdown` fails, diagnose its actual popup/input path; do not substitute stock `DropList` as product acceptance.
-5. Add/validate the real application menu/context-menu transient path, preferring `upp_Ui` controls where equivalents exist; then tooltip presentation.
-6. Re-run full root smoke: controls, particle animation, resize/minimize/restore, caret, modal dialog and ownership ZERO.
-7. Mark UI1-C accepted only when the real-control matrix passes.
+## Remaining UI1-C
 
-## After UI1-C
+1. Validate real `upp_Ui::UiMenu` root/context popup and submenu GPU presentation, including shared-device ownership and repeated open/close.
+2. Validate application tooltip transient presentation. No `UiTooltip` control currently exists in `upp_Ui`; use the real U++ tooltip path attached to an `upp_Ui` control unless repository state changes.
+3. Re-run consolidated root smoke: ordinary controls, `UiDropdown`, menu, tooltip, animation, resize/minimize/restore, caret, modal dialog, normal root close and final Vulkan ownership ZERO.
+4. Mark UI1-C accepted, then move immediately to UI1-D.
 
-UI1-D:
+## Repository Hygiene
 
-- define context-owned immutable image/glyph/vector resource identities;
-- share only resources with explicit identity/lifetime contracts;
-- prove closing one presenter/window cannot invalidate another.
-
-Then move to the next backend milestone; prefer executable WebGPU work before Metal if it remains the fastest validation path.
+- New work is directly on `main`; do not create recovery/chatgpt/agent branches unless Curt explicitly requests isolation.
+- `upp_Ui` remote currently has only `main`.
+- `upp_render` still contains historical `chatgpt/*`, `recovery/*` and `agent/*` branches; no open PR uses them.
+- Delete non-main remote branches only after verifying each tip is contained in `origin/main`; do not discard unique commits.
 
 ## Guardrails
 
@@ -64,13 +59,11 @@ Then move to the next backend milestone; prefer executable WebGPU work before Me
 - U++ remains authority for layout, input, focus, state and theme.
 - Public UI/recorder APIs remain backend-neutral; no Vulkan leakage.
 - Do not create one native GPU child per ordinary control or a second layout/theme/state system.
-- Do not weaken fallback, validation or ownership-zero assertions.
-- Unsupported Draw semantics remain explicit failures until deliberately implemented.
 - Diagnose before fixing; smallest coherent change; review complete touched files/package dependencies; run `git diff --check` before publication.
 
 ## Recovery Log
 
 BASE: current remote `main`
-TASK: finish UI1-C using real product controls
-STATUS: foundation PASS; generic popup PASS; stock DropList compatibility PASS; real `UiDropdown` gallery + focused test source present, validation pending
-NEXT: focused `UiDropdown` Debug/Release validation, then 20-cycle gallery input acceptance, then menu/context-menu + tooltip
+TASK: finish UI1-C with `UiMenu`, tooltip and final root smoke
+STATUS: foundation PASS; transient popup PASS; stock DropList compatibility PASS; real `UiDropdown` Debug/Release + pointer `20/20` + keyboard `8/8` PASS
+NEXT: `UiMenu`/submenu acceptance, tooltip acceptance, final UI1-C root smoke; clean historical remote branches after ancestry verification
