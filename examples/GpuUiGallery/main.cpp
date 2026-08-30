@@ -1,5 +1,6 @@
 #include <GpuRender/GpuRender.h>
 #include <Ui/UiDropdown.h>
+#include <Ui/UiMenu.h>
 
 using namespace Upp;
 
@@ -97,6 +98,21 @@ public:
 		mode.Add("Responsive");
 		mode.Select(0);
 
+		UiMenuModel& menu_model = menu.Model();
+		UiMenuNodeRef menu_root = menu_model.Root();
+		UiMenuNodeRef file = menu_model.AddChild(menu_root, UiMenuItem("File"));
+		menu_model.AddChild(file, UiMenuItem("New"));
+		menu_model.AddChild(file, UiMenuItem("Open"));
+		UiMenuNodeRef tools = menu_model.AddChild(menu_root, UiMenuItem("Tools"));
+		menu_model.AddChild(tools, UiMenuItem("Inspect"));
+		UiMenuNodeRef more = menu_model.AddChild(tools, UiMenuItem("More"));
+		menu_model.AddChild(more, UiMenuItem("Export"));
+		menu_model.AddChild(more, UiMenuItem("Settings"));
+		menu.SetMenuBarMode();
+		menu.WhenAction = [=](UiMenuNodeRef, const UiMenuItem& item) {
+			status.SetLabel("UiMenu action: " + item.text);
+		};
+
 		level.Range(100);
 		level <<= 58;
 		progress.Set(58, 100);
@@ -117,7 +133,7 @@ public:
 		table.AddColumn("Control / area");
 		table.AddColumn("Purpose");
 		table.Add("Button + Option", "state / theme");
-		table.Add("EditString + UiDropdown", "text / upp_Ui popup entry point");
+		table.Add("UiDropdown + UiMenu", "upp_Ui transient popup entry points");
 		table.Add("Slider + Progress", "interactive value drawing");
 		table.Add("ArrayCtrl", "scrollable data view");
 		table.Add("ParticleSceneCtrl", "animated custom Draw path");
@@ -132,10 +148,11 @@ public:
 		Add(mode.LeftPos(474, 180).TopPos(92, 28));
 		Add(apply.LeftPos(674, 110).TopPos(90, 32));
 		Add(open_dialog.LeftPos(800, 180).TopPos(90, 32));
-		Add(level.LeftPos(24, 300).TopPos(142, 28));
-		Add(progress.LeftPos(344, 310).TopPos(146, 20));
-		Add(table.LeftPos(24, 440).VSizePos(198, 72));
-		Add(particles.HSizePos(484, 24).VSizePos(198, 72));
+		Add(menu.HSizePos(24, 24).TopPos(132, 34));
+		Add(level.LeftPos(24, 300).TopPos(184, 28));
+		Add(progress.LeftPos(344, 310).TopPos(188, 20));
+		Add(table.LeftPos(24, 440).VSizePos(238, 72));
+		Add(particles.HSizePos(484, 24).VSizePos(238, 72));
 		Add(status.HSizePos(24, 24).BottomPos(40, 24));
 		Add(gpu_state.HSizePos(24, 24).BottomPos(14, 22));
 
@@ -151,6 +168,7 @@ private:
 	EditString name;
 	Option enabled;
 	UiDropdown mode;
+	UiMenu menu;
 	SliderCtrl level;
 	ProgressIndicator progress;
 	Button apply;
