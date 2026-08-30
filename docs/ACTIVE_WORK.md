@@ -5,7 +5,7 @@ Remote `main` is authoritative. This is a compact recovery checkpoint, not proje
 ## Recovery
 
 - Repository: `Trilec/upp_render`; active branch: `main` only.
-- Current renderer source checkpoint before this status update: `0795c74101a834b34510136d5ec97b6c68a37ba4`.
+- Current source checkpoint: `74605315e439416e89453958a6280fbb60305b3e`.
 - Current `upp_Ui` popup fix: `1780907a1aa50b3a64a4baf70d573718ebe45161`.
 - Active milestone: UI1-C — transient/multi-window GPU completion.
 - Next milestone: UI1-D — shared immutable GPU resources.
@@ -30,19 +30,16 @@ Do not reopen accepted areas without a new reproducible regression.
 
 - Generic owned transient popup lifecycle: PASS.
 - Stock U++ `DropList` popup compatibility: Debug/Release PASS; `2 / 2 / 1` surface/swapchain/device; final ownership ZERO.
-- Product-facing `GpuUiGallery` uses real `upp_Ui::UiDropdown`.
-- `GpuUiDropdownPopupPresentationTest`: Debug PASS and Release PASS.
-- Real `UiDropdown` pointer acceptance: `20/20` PASS.
-- Real `UiDropdown` keyboard acceptance: `8/8` PASS.
-- `upp_Ui` keyboard-reopen root cause fixed at `1780907a...`: owner-initiated popup close no longer incorrectly suppresses the next owner click.
-- `upp_Ui` includes `UiDropdownInteractionTest` regression coverage for that bug.
-
-UiDropdown acceptance is CLOSED. Do not return to stock `DropList` as the product gate.
+- Real `upp_Ui::UiDropdown`: focused Debug/Release PASS; pointer `20/20` PASS; keyboard `8/8` PASS.
+- `upp_Ui` keyboard-reopen root cause fixed at `1780907a...` with `UiDropdownInteractionTest` regression coverage.
+- UiDropdown acceptance is CLOSED.
+- `GpuUiGallery` now includes real `UiDropdown` and real `UiMenu` menu-bar/submenu content.
+- `GpuUiMenuPopupPresentationTest` is published and awaits Windows validation; it targets root menu `2 / 2 / 1`, submenu `3 / 3 / 1`, leaf close back to `1 / 1 / 1`, repeated cycles, and final ownership ZERO.
 
 ## Remaining UI1-C
 
-1. Validate real `upp_Ui::UiMenu` root/context popup and submenu GPU presentation, including shared-device ownership and repeated open/close.
-2. Validate application tooltip transient presentation. No `UiTooltip` control currently exists in `upp_Ui`; use the real U++ tooltip path attached to an `upp_Ui` control unless repository state changes.
+1. Build/run `GpuUiMenuPopupPresentationTest` Debug + Release, then exercise `UiMenu` through normal gallery input including submenu selection.
+2. Validate application tooltip transient presentation. No `UiTooltip` currently exists in `upp_Ui`; use the real U++ tooltip path attached to an `upp_Ui` control unless repository state changes.
 3. Re-run consolidated root smoke: ordinary controls, `UiDropdown`, menu, tooltip, animation, resize/minimize/restore, caret, modal dialog, normal root close and final Vulkan ownership ZERO.
 4. Mark UI1-C accepted, then move immediately to UI1-D.
 
@@ -50,8 +47,8 @@ UiDropdown acceptance is CLOSED. Do not return to stock `DropList` as the produc
 
 - New work is directly on `main`; do not create recovery/chatgpt/agent branches unless Curt explicitly requests isolation.
 - `upp_Ui` remote currently has only `main`.
-- `upp_render` still contains historical `chatgpt/*`, `recovery/*` and `agent/*` branches; no open PR uses them.
-- Delete non-main remote branches only after verifying each tip is contained in `origin/main`; do not discard unique commits.
+- `upp_render` has 69 historical non-main remote branches and no open PRs.
+- Delete a non-main branch only after `git merge-base --is-ancestor origin/<branch> origin/main` succeeds; do not discard unique commits.
 
 ## Guardrails
 
@@ -65,5 +62,5 @@ UiDropdown acceptance is CLOSED. Do not return to stock `DropList` as the produc
 
 BASE: current remote `main`
 TASK: finish UI1-C with `UiMenu`, tooltip and final root smoke
-STATUS: foundation PASS; transient popup PASS; stock DropList compatibility PASS; real `UiDropdown` Debug/Release + pointer `20/20` + keyboard `8/8` PASS
-NEXT: `UiMenu`/submenu acceptance, tooltip acceptance, final UI1-C root smoke; clean historical remote branches after ancestry verification
+STATUS: foundation PASS; transient popup PASS; stock DropList compatibility PASS; real `UiDropdown` fully PASS; `UiMenu` acceptance source published, validation pending
+NEXT: clean historical branches after ancestry verification; validate `UiMenu`, tooltip and final UI1-C root smoke
