@@ -157,7 +157,7 @@ GUI_APP_MAIN
 		}
 
 		Rect rr = root_tops[0]->GetScreenRect();
-		ok &= Check(rr.Width() > 1 && rr.Height() > 1,
+		ok &= Check(rr.GetWidth() > 1 && rr.GetHeight() > 1,
 		            "UiMenu root popup should have a non-degenerate rectangle");
 
 		const UiMenu::Style& style = menu.GetStyle();
@@ -186,7 +186,7 @@ GUI_APP_MAIN
 
 		Ctrl *submenu = submenu_tops[0] == root_tops[0] ? submenu_tops[1] : submenu_tops[0];
 		Rect sr = submenu->GetScreenRect();
-		ok &= Check(sr.Width() > 1 && sr.Height() > 1,
+		ok &= Check(sr.GetWidth() > 1 && sr.GetHeight() > 1,
 		            "UiMenu submenu should have a non-degenerate rectangle");
 
 		int actions_before = win.GetActionCount();
