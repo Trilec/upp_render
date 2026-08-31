@@ -24,13 +24,17 @@ Do not reopen accepted areas without a new reproducible regression.
 
 - Generic owned transient popup lifecycle: PASS.
 - Stock U++ `DropList` compatibility: PASS (compatibility coverage only).
-- Real `upp_Ui::UiDropdown`: Debug/Release PASS; pointer `20/20`; keyboard `8/8`; keyboard-reopen defect fixed in `upp_Ui` with regression coverage.
-- Real `upp_Ui::UiMenu`: Debug/Release PASS. Ownership `1/1/1` root -> `2/2/1` menu -> `3/3/1` submenu -> `1/1/1`, shared logical device, four cycles, final ownership ZERO. Leaf-activation use-after-free fixed in `upp_Ui` (`PopupLevel::LeftDown`) with `UiMenuInteractionTest`.
-- Gallery real-input menu coverage: `20/20` pointer cycles (File, Tools, Tools->More submenu, leaf selections), keyboard `2/2`, UiDropdown smoke `2/2`; menus fully painted, actions fire, no stuck popups.
-- Real tooltip: current U++ `ToolTip` (CtrlLib singleton) shown via `Ctrl::PopUp` as an owned top-level popup; attached to a real `upp_Ui` control with `Ctrl::Tip()`. `GpuUiTooltipPresentationTest` Debug/Release PASS: tooltip = `2/2/1`, hide = `1/1/1`, four cycles, final ZERO. Show path requires a foreground owner; the test asserts it.
-- Consolidated `GpuUiGallery` smoke: `17/17` (edit/caret, option, slider/progress, apply, ArrayCtrl, particles, tooltip, menu, submenu, dropdown, resize, minimize/restore, post-restore menu, modal dialog 5x, GPU label stable, normal close).
-- Regression matrix: menu/dropdown/tooltip focused tests Debug+Release PASS; DropList, transient, top-window, ctrl-presentation, UiCoverage, CtrlBridge, Gpu2D, Vulkan Debug PASS.
-- Final Vulkan ownership ZERO on every focused test and the smoke.
+- Real `upp_Ui::UiDropdown`: Debug/Release PASS; pointer `20/20`; keyboard `8/8`; reopen regression covered.
+- Real `upp_Ui::UiMenu`: Debug/Release PASS; root/menu/submenu ownership `1/1/1 -> 2/2/1 -> 3/3/1 -> 1/1/1`, shared device, final ZERO.
+- Real U++ tooltip attached to an `upp_Ui` control: Debug/Release PASS; tooltip `2/2/1`, hide `1/1/1`, final ZERO.
+- Consolidated gallery smoke and renderer regression matrix: PASS; final Vulkan ownership ZERO.
+
+## Product Example
+
+- `GpuUiGallery` is evolving post-acceptance into a useful `upp_Ui` GPU Scene Inspector rather than a static control gallery.
+- Real `UiDropdown`, `UiSlider`, `UiMenu`, `UiButton` and `PropertyEditor` drive one live animated custom-Draw scene.
+- Dropdown/menu switch Orbit/Flow/Pulse/Swirl; slider changes speed live; PropertyEditor changes particle geometry, grid and colours; modal dialog uses `upp_Ui` controls.
+- Source is published; Windows build/runtime validation is the current bounded task. This does not reopen accepted UI1-C.
 
 ## Next Milestone
 
@@ -44,18 +48,18 @@ Durable guidance: `docs/UPP_UI_RENDER_CONVERGENCE.md`.
 
 ## Repository Hygiene
 
-- `upp_render` historical branch cleanup done: 45 merged remote branches and 2 merged local branches deleted after `merge-base --is-ancestor` verification.
-- Preserved (unique commits, not discarded): 24 remote branches (`agent/*` 2, `chatgpt/*` 15, `recovery/*` 7) plus local `task/001-render-foundation` (1 commit). Tips and unique-commit counts recorded in the UI1-C final report.
+- Historical cleanup deleted only branches proven merged into `main`.
+- Unique historical branches remain preserved; do not force-delete them.
 
 ## Guardrails
 
 - U++ / `upp_Ui` remain authority for hierarchy, layout, input, focus, state, theme/model and invalidation.
 - No native GPU child per ordinary control; public recording/UI APIs remain backend-neutral.
-- Product-facing acceptance uses real `upp_Ui` controls; do not substitute stock controls.
+- Product-facing examples use real `upp_Ui` controls where equivalents exist; stock controls remain compatibility coverage only.
 - Diagnose first; smallest coherent change; review touched dependencies/tests; run `git diff --check`.
 
 ## Recovery Log
 
-TASK: finish and close UI1-C
-STATUS: UI1-C ACCEPTED — all gates PASS, final ownership ZERO, branch cleanup done
-NEXT: UI1-D shared immutable GPU resources
+TASK: validate the published `GpuUiGallery` GPU Scene Inspector
+STATUS: UI1-C ACCEPTED; Scene Inspector source published, Windows validation pending
+NEXT: validate useful live `upp_Ui` -> scene interactions, then begin UI1-D

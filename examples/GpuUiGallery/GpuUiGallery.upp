@@ -2,6 +2,7 @@ uses
 	Core,
 	CtrlLib,
 	Ui,
+	Utilities/PropertyEditor,
 	GpuRender;
 
 file
