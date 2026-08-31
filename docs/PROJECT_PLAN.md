@@ -79,18 +79,84 @@ Acceptance/demo targets:
 
 The animated demo is deliberately cheap: a small deterministic calm-particle field at a modest refresh rate. It is intended to look pleasant while making redraw, resize and presentation stalls obvious on low-end hardware.
 
-## UI2 — shared resource evolution
+### UI1-A / UI1-B / UI1-R1 / UI1-R2
 
-After UI1 common-control correctness is stable, define explicit resource identity/lifetime for safe cross-presenter sharing.
+Accepted. See `docs/ACTIVE_WORK.md` for the compact recovery checkpoint.
 
-Candidates:
+### UI1-C — transient and multi-window completion
 
-- immutable image/upload cache;
-- glyph atlas/page cache;
-- immutable vector/SVG raster cache;
+Active until real product-control menu/context-menu, tooltip and consolidated root-smoke acceptance pass.
+
+Do not broaden this milestone into a renderer redesign. Architecture discoveries that do not block transient correctness belong in UI1-D/UI2 planning.
+
+## UI1-D — shared immutable resource evolution
+
+After UI1-C correctness is stable, define explicit resource identity/lifetime for safe cross-presenter and repeated-presentation sharing.
+
+The recent `upp_Ui` / UiNodeGraph software benchmark work strengthens this milestone: repeated immutable presentation work should not be regenerated per item/per frame merely because the GPU can execute it quickly.
+
+Candidate resource classes:
+
+- immutable image/upload identity;
+- glyph/font atlas/page identity;
+- reusable vector/path identity;
+- SVG/vector-source identity;
+- immutable geometry;
+- reusable composed surfaces only where semantics and lifetime justify them;
 - pipeline/material state already compatible with the context/device domain.
 
-Do **not** simply globalize presenter-owned mutable caches. Two windows must be able to share an immutable resource without coupling surface/frame lifetime or allowing stale handles after context/device loss.
+Required design properties:
+
+- stable identity/keying rather than accidental pointer identity;
+- explicit ownership/reference lifetime;
+- context/device compatibility;
+- invalidation/versioning;
+- synchronization/readiness;
+- memory budget and eviction policy;
+- presenter-survivor behavior;
+- device/context loss/recovery behavior.
+
+Do **not** simply globalize presenter-owned mutable caches. Two windows must be able to share an immutable resource without coupling surface/frame lifetime or allowing stale handles after one presenter closes.
+
+UI1-D should preserve the ability to support future normal `upp_Ui` workloads efficiently, including semantic image/text/path reuse, batching/instancing and local damage. It should not force source-rect images, tint, 9-slice or non-rect clipping into awkward backend-specific workarounds.
+
+## UI2 — focused upp_Ui / upp_render convergence
+
+After UI1-C and the UI1-D resource model are stable, define a bounded integration milestone for normal `upp_Ui` presentation rather than gradually accumulating ad-hoc dependencies.
+
+The target dependency direction is:
+
+```text
+upp_Ui software-only operation
+  -> U++ Draw / UiDraw
+
+opt-in GPU composition
+  -> resolved U++ / upp_Ui presentation + damage
+  -> renderer-side integration / RenderCtrlBridge
+  -> UiCanvas / immutable UiDisplayList
+  -> RenderGpu2D / RenderRhi
+  -> backend
+```
+
+`upp_Ui` must remain independently usable and must not acquire a hard dependency on `upp_render` or `RenderVulkan`.
+
+UI2 should explicitly cover:
+
+- renderer-side adapter/integration ownership;
+- dirty-region propagation and partial-damage policy;
+- source-rect image drawing/crop;
+- image opacity/tint/modulation;
+- neutral 9-slice helper strategy;
+- rounded/path clipping or equivalent non-rect clip semantics;
+- DPI/logical-coordinate contract;
+- repeated styled-surface/image/text/path resource reuse;
+- LOD/prepared-presentation boundaries for heavy controls;
+- software-reference parity;
+- one root-composited scene rather than one native GPU surface per ordinary control.
+
+Do not freeze the exact integration mechanism prematurely. `UiCanvas` / `UiDisplayList` remain the renderer-owned neutral vocabulary and should stay semantic enough to preserve batching, instancing and resource-reuse opportunities.
+
+See `docs/UPP_UI_RENDER_CONVERGENCE.md` for the architectural constraints behind UI1-D/UI2.
 
 ## Stage 7 — effects/compute/specialized rendering
 
@@ -101,13 +167,13 @@ Not started as a product stage. Likely scope:
 - compute/storage resources;
 - specialized high-volume views.
 
-Do not let Stage 7 distract from completing UI1/UI2.
+Do not let Stage 7 distract from completing UI1/UI1-D/UI2.
 
 ## Stage 8 — hardening/backends/platform expansion
 
 ### WebGPU
 
-Preferred next backend experiment after the complete Vulkan UI gate if it gives faster executable evidence on the current Windows development machine.
+Preferred next backend experiment after the complete Vulkan UI/resource/integration foundation if it gives faster executable evidence on the current Windows development machine.
 
 Two distinct problems must remain separated:
 
@@ -132,19 +198,22 @@ Once a second backend is executable:
 ## Architecture rules
 
 - no backend-native types in application painter/control APIs;
-- no second U++ theme/layout/input/control-state system;
+- no hard `upp_Ui -> upp_render` or `upp_Ui -> backend` dependency for normal software use;
+- no second U++ theme/layout/input/control-state/model system;
 - one root surface for a GPU-composited top-level UI;
 - embedded native surfaces only for explicitly accelerated `GpuCtrl` content inside ordinary non-root-composited U++ windows;
-- compatible presenters may share expensive backend/device state, but mutable surface/frame and renderer-owned resources require explicit identity/lifetime before sharing;
+- transient native popup/menu/tooltip windows may use additional presentation surfaces while sharing compatible context/device state;
+- compatible presenters may share expensive backend/device state, but reusable renderer resources require explicit identity/lifetime before cross-presenter sharing;
+- preserve UI invalidation/damage information as an integration concept;
+- keep `UiDisplayList` semantic enough for backend-neutral optimization;
 - software replay remains semantic reference/fallback;
 - popup/native-child boundaries must be explicit;
 - diagnose root causes; do not weaken tests to accommodate architecture changes;
-- publish coherent recoverable checkpoints and keep `docs/ACTIVE_WORK.md` current.
+- publish coherent recoverable checkpoints and keep `docs/ACTIVE_WORK.md` compact/current.
 
 ## Current sequence
 
-1. UI1-A: build/run the new full UI gallery, embedded-motion demo and representative control-recording test.
-2. UI1-B: implement missing common Draw semantics revealed by those real controls; add broadly useful arc/rotated-text/Drawing/Painting coverage where coherent.
-3. UI1-C: broaden to modal dialogs, multiple GPU top-level windows, dropdown/menu/popup/tool-tip behavior and representative `upp_Ui` control coverage.
-4. UI2: add explicit shared image/glyph/resource identities and lifetime tests.
-5. Then begin WebGPU provider work on the current machine; Metal follows when executable Apple validation is available.
+1. Finish UI1-C: real `UiMenu`/context-menu, tooltip and consolidated root-smoke acceptance.
+2. UI1-D: explicit shared immutable resource identity/lifetime, reuse and survivor tests.
+3. UI2: focused `upp_Ui` integration/convergence milestone with damage/parity requirements.
+4. Then begin WebGPU provider work on the current machine; Metal follows when executable Apple validation is available.
