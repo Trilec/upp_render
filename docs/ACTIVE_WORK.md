@@ -6,11 +6,10 @@ Remote `main` is authoritative. This file is a recovery checkpoint only, not pro
 
 - Repository: `Trilec/upp_render`; work directly on `main`.
 - Fetch current remote HEAD before work; do not rely on remembered SHAs.
-- Active milestone: UI1-C — transient/multi-window GPU completion.
-- Next milestone: UI1-D — shared immutable GPU resources.
-- Windows/U++ validation: `CLANGx64_Vulkan.bm`.
+- Windows/U++ validation: `CLANGx64_Vulkan.bm` (local machine config; uses the local Vulkan SDK; not committed).
+- After any `upp_Ui` change, rebuild renderer tests with a clean `-ab`/`-abr` build; incremental builds after cross-repo changes can fail GPU init spuriously.
 
-## Accepted Boundary
+## Accepted Foundation
 
 UI1-A / UI1-B / UI1-R1 / UI1-R2 are accepted:
 
@@ -21,41 +20,42 @@ UI1-A / UI1-B / UI1-R1 / UI1-R2 are accepted:
 
 Do not reopen accepted areas without a new reproducible regression.
 
-## UI1-C Current State
+## UI1-C: ACCEPTED
 
 - Generic owned transient popup lifecycle: PASS.
-- Stock U++ `DropList` compatibility: Debug/Release PASS; compatibility coverage only.
-- Real `upp_Ui::UiDropdown`: Debug/Release PASS; pointer `20/20`; keyboard `8/8`.
-- UiDropdown keyboard-reopen defect fixed in `upp_Ui` with regression coverage. UiDropdown acceptance is CLOSED.
-- `GpuUiGallery` includes real `UiDropdown` and `UiMenu` menu/submenu content.
-- `GpuUiMenuPopupPresentationTest` is published; Windows validation pending.
+- Stock U++ `DropList` compatibility: PASS (compatibility coverage only).
+- Real `upp_Ui::UiDropdown`: Debug/Release PASS; pointer `20/20`; keyboard `8/8`; keyboard-reopen defect fixed in `upp_Ui` with regression coverage.
+- Real `upp_Ui::UiMenu`: Debug/Release PASS. Ownership `1/1/1` root -> `2/2/1` menu -> `3/3/1` submenu -> `1/1/1`, shared logical device, four cycles, final ownership ZERO. Leaf-activation use-after-free fixed in `upp_Ui` (`PopupLevel::LeftDown`) with `UiMenuInteractionTest`.
+- Gallery real-input menu coverage: `20/20` pointer cycles (File, Tools, Tools->More submenu, leaf selections), keyboard `2/2`, UiDropdown smoke `2/2`; menus fully painted, actions fire, no stuck popups.
+- Real tooltip: current U++ `ToolTip` (CtrlLib singleton) shown via `Ctrl::PopUp` as an owned top-level popup; attached to a real `upp_Ui` control with `Ctrl::Tip()`. `GpuUiTooltipPresentationTest` Debug/Release PASS: tooltip = `2/2/1`, hide = `1/1/1`, four cycles, final ZERO. Show path requires a foreground owner; the test asserts it.
+- Consolidated `GpuUiGallery` smoke: `17/17` (edit/caret, option, slider/progress, apply, ArrayCtrl, particles, tooltip, menu, submenu, dropdown, resize, minimize/restore, post-restore menu, modal dialog 5x, GPU label stable, normal close).
+- Regression matrix: menu/dropdown/tooltip focused tests Debug+Release PASS; DropList, transient, top-window, ctrl-presentation, UiCoverage, CtrlBridge, Gpu2D, Vulkan Debug PASS.
+- Final Vulkan ownership ZERO on every focused test and the smoke.
 
-## Remaining UI1-C
+## Next Milestone
 
-1. Validate `GpuUiMenuPopupPresentationTest` Debug + Release and normal gallery menu/submenu input.
-2. Validate the real current U++ tooltip path attached to an `upp_Ui` control.
-3. Run consolidated root smoke: controls, dropdown, menu, tooltip, animation, resize/minimize/restore, caret, modal dialog, root close, final ownership ZERO.
-4. If all pass, mark UI1-C accepted and move immediately to UI1-D.
+UI1-D — shared immutable GPU resources:
 
-## Next Architecture
+- context-owned immutable image/glyph/vector resource identities;
+- share only resources with explicit identity/lifetime contracts;
+- prove closing one presenter/window cannot invalidate another.
 
-- Durable convergence guidance: `docs/UPP_UI_RENDER_CONVERGENCE.md`.
-- UI1-D must establish explicit immutable resource identity/lifetime before sharing presenter resources.
-- Later focused `upp_Ui` integration must preserve independent software operation and renderer-side composition.
+Durable guidance: `docs/UPP_UI_RENDER_CONVERGENCE.md`.
 
 ## Repository Hygiene
 
-- Do not create routine recovery/chatgpt/agent branches; `main` is the working line.
-- `upp_render` historical non-main branch cleanup remains pending; delete only branches proven contained in `origin/main`.
+- `upp_render` historical branch cleanup done: 45 merged remote branches and 2 merged local branches deleted after `merge-base --is-ancestor` verification.
+- Preserved (unique commits, not discarded): 24 remote branches (`agent/*` 2, `chatgpt/*` 15, `recovery/*` 7) plus local `task/001-render-foundation` (1 commit). Tips and unique-commit counts recorded in the UI1-C final report.
 
 ## Guardrails
 
 - U++ / `upp_Ui` remain authority for hierarchy, layout, input, focus, state, theme/model and invalidation.
 - No native GPU child per ordinary control; public recording/UI APIs remain backend-neutral.
+- Product-facing acceptance uses real `upp_Ui` controls; do not substitute stock controls.
 - Diagnose first; smallest coherent change; review touched dependencies/tests; run `git diff --check`.
 
 ## Recovery Log
 
-TASK: finish UI1-C without broadening scope
-STATUS: foundation PASS; transient base PASS; real UiDropdown fully PASS; UiMenu validation pending
-NEXT: clean merged historical branches; validate UiMenu, tooltip and final root smoke; then UI1-D
+TASK: finish and close UI1-C
+STATUS: UI1-C ACCEPTED — all gates PASS, final ownership ZERO, branch cleanup done
+NEXT: UI1-D shared immutable GPU resources
