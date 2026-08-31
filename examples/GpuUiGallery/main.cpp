@@ -97,6 +97,7 @@ public:
 		mode.Add("Quiet");
 		mode.Add("Responsive");
 		mode.Select(0);
+		mode.Tip("Real U++ tooltip attached to UiDropdown");
 
 		UiMenuModel& menu_model = menu.Model();
 		UiMenuNodeRef menu_root = menu_model.Root();
