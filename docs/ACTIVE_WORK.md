@@ -31,10 +31,11 @@ Do not reopen accepted areas without a new reproducible regression.
 
 ## Product Example
 
-- `GpuUiGallery` is evolving post-acceptance into a useful `upp_Ui` GPU Scene Inspector rather than a static control gallery.
-- Real `UiDropdown`, `UiSlider`, `UiMenu`, `UiButton` and `PropertyEditor` drive one live animated custom-Draw scene.
+- `GpuUiGallery` is a GPU Scene Inspector: real `UiDropdown`, `UiSlider`, `UiMenu`, `UiButton` and `PropertyEditor` drive one live animated custom-Draw scene.
 - Dropdown/menu switch Orbit/Flow/Pulse/Swirl; slider changes speed live; PropertyEditor changes particle geometry, grid and colours; modal dialog uses `upp_Ui` controls.
-- Source is published; Windows build/runtime validation is the current bounded task. This does not reopen accepted UI1-C.
+- Debug + Release builds PASS. Menu/submenu GPU ownership re-validated after the `upp_Ui` hardening: `1/1/1 -> 2/2/1 -> 3/3/1 -> 1/1/1`, final ZERO.
+- `upp_Ui` hardening during validation: menubar-mode reopen after row activation crashed (stale `PopupLevel` references across event pumps); levels are now closed immediately but destroyed at the next safe teardown point. Regression: `UiMenuInteractionTest` (popup + menubar LeftDown reopen cycles, 26 checks).
+- Real-input gallery interactions individually verified (dropdown mode switches, slider drag, PropertyEditor rows/colours, tooltip, modal, resize/restore); consolidated scripted desktop run is environment-sensitive on a shared desktop, so deterministic focused tests are the authority.
 
 ## Next Milestone
 
@@ -61,5 +62,5 @@ Durable guidance: `docs/UPP_UI_RENDER_CONVERGENCE.md`.
 ## Recovery Log
 
 TASK: validate the published `GpuUiGallery` GPU Scene Inspector
-STATUS: UI1-C ACCEPTED; Scene Inspector source published, Windows validation pending
-NEXT: validate useful live `upp_Ui` -> scene interactions, then begin UI1-D
+STATUS: UI1-C ACCEPTED; Scene Inspector Debug/Release validated; UiMenu menubar reopen crash fixed in `upp_Ui` with regression coverage
+NEXT: UI1-D shared immutable GPU resources
