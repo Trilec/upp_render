@@ -152,7 +152,7 @@ public:
 		}
 
 		String summary = SceneModeName(mode_) + "  |  " + AsString(particle_count_)
-		               + " particles  |  " + Format("%.2fx", speed_);
+		               + " particles  |  " + Format("%.2f", speed_) + "x";
 		if(paused_)
 			summary << "  |  paused";
 
@@ -480,12 +480,12 @@ private:
 	{
 		scene_.SetSpeed(speed_.GetValue());
 		UpdateSpeedLabel();
-		SetStatus(source + " changed animation speed to " + Format("%.2fx", scene_.GetSpeed()) + ".");
+		SetStatus(source + " changed animation speed to " + Format("%.2f", scene_.GetSpeed()) + "x.");
 	}
 
 	void UpdateSpeedLabel()
 	{
-		speed_value_.SetText(Format("%.2fx", scene_.GetSpeed()));
+		speed_value_.SetText(Format("%.2f", scene_.GetSpeed()) + "x");
 	}
 
 	void TogglePause()
