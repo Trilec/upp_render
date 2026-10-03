@@ -72,7 +72,7 @@ struct Surface {
 	}
 };
 
-bool RunCase(int count, bool bounded)
+bool RunCase(int count, bool bounded, int frames = 64, bool entry_limited = false)
 {
 	VulkanSurfaceSessionGroup group;
 	std::vector<std::unique_ptr<Surface>> surfaces;
@@ -85,7 +85,8 @@ bool RunCase(int count, bool bounded)
 		surfaces.emplace_back(new Surface);
 		if(!surfaces.back()->Open(group)) return false;
 		UiRenderer2DCacheLimits limits;
-		limits.image_bytes = bounded ? 16384 : 128 * 1024 * 1024;
+		limits.image_bytes = entry_limited ? 64 * 1024 * 1024 : bounded ? 16384 : 128 * 1024 * 1024;
+		limits.image_entries = entry_limited ? 4 : 4096;
 		surfaces.back()->renderer->SetCacheLimits(limits);
 		if(!surfaces.back()->Draw(shared)) return false;
 		uploads += surfaces.back()->renderer->GetStats().texture_upload_count;
@@ -98,7 +99,7 @@ bool RunCase(int count, bool bounded)
 		Cout() << "gpu=" << info.name << " vendor=" << info.vendor_id
 		       << " driver_raw=" << info.driver_version << " api_raw=" << info.api_version << EOL;
 	}
-	for(int frame = 0; frame < 64; ++frame) {
+	for(int frame = 0; frame < frames; ++frame) {
 		auto begin = std::chrono::steady_clock::now();
 		for(int i = 0; i < count; ++i)
 			if(!surfaces[i]->Draw(Pixels(frame * count + i + 2))) return false;
@@ -116,10 +117,12 @@ bool RunCase(int count, bool bounded)
 	}
 	Sort(durations);
 	Cout() << "policy=" << (bounded ? "bounded" : "baseline-retain")
-	       << " surfaces=" << count << " frames=64 image_pixel_peak=" << peak_payload
+	       << " entry_limited=" << (entry_limited ? 1 : 0)
+	       << " surfaces=" << count << " frames=" << frames << " image_pixel_peak=" << peak_payload
 	       << " native_owned_allocation_peak=" << AsString(peak_allocated)
-	       << " cpu_replay_cycle_ms_p50=" << durations[31]
-	       << " p95=" << durations[60] << " p99=" << durations[63] << EOL;
+	       << " cpu_replay_cycle_ms_p50=" << durations[durations.GetCount() / 2]
+	       << " p95=" << durations[(durations.GetCount() * 95) / 100]
+	       << " p99=" << durations[(durations.GetCount() * 99) / 100] << " max=" << durations.Top() << EOL;
 	for(auto& surface : surfaces)
 		if(!surface->Draw(shared)) return false;
 	// Destroy the first presenter while another retains the same source image.
@@ -148,7 +151,20 @@ bool RunCase(int count, bool bounded)
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
-	for(bool bounded : { false, true })
+	bool soak = false;
+	int cycles = 10;
+	for(const String& arg : CommandLine()) {
+		if(arg == "--soak") soak = true;
+		else if(arg == "--soak-cycles=5") cycles = 5;
+		else { Cout() << "Expected --soak [--soak-cycles=5]" << EOL; SetExitCode(2); return; }
+	}
+	if(soak) {
+		for(int cycle = 0; cycle < cycles && ok; ++cycle) {
+			Cout() << "lifecycle_cycle=" << cycle << EOL;
+			ok = RunCase(10, true, 4096, true);
+		}
+	}
+	else for(bool bounded : { false, true })
 		for(int count : { 1, 2, 10 })
 			ok = RunCase(count, bounded) && ok;
 	Cout() << (ok ? "GpuResourceLoad passed; final ownership ZERO" : "GpuResourceLoad FAILED") << EOL;

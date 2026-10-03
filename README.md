@@ -122,7 +122,7 @@ Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; se
 
 Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Final regression and native release review are recorded separately. Shader modules exist in the internal RHI, but arbitrary application shaders are not yet exposed by `GpuCtrl`.
 
-See [release scope and gates](docs/RELEASE_CANDIDATE.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
+See [release scope and gates](docs/RELEASE_CANDIDATE.md), [sustained RC1 qualification](docs/RC1_QUALIFICATION.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
 
 ## Backend roadmap
 

@@ -19,6 +19,7 @@ struct UiRenderer2DTarget : Moveable<UiRenderer2DTarget> {
 // fail explicitly rather than evicting a texture referenced by that frame.
 struct UiRenderer2DCacheLimits {
 	int64 image_bytes = 64 * 1024 * 1024;
+	int image_entries = 4096;
 	int64 vector_bytes = 32 * 1024 * 1024;
 	int vector_entries = 4096;
 	int64 glyph_bytes = 16 * 1024 * 1024;

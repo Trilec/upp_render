@@ -439,6 +439,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 void UiRenderer2D::SetCacheLimits(const UiRenderer2DCacheLimits& limits)
 {
 	cache_limits.image_bytes = max<int64>(0, limits.image_bytes);
+	cache_limits.image_entries = max(0, limits.image_entries);
 	cache_limits.vector_bytes = max<int64>(0, limits.vector_bytes);
 	cache_limits.vector_entries = max(0, limits.vector_entries);
 	cache_limits.glyph_bytes = max<int64>(0, limits.glyph_bytes);
@@ -466,9 +467,10 @@ int64 UiRenderer2D::VectorCacheBytes() const
 
 bool UiRenderer2D::ReserveImageCache(int64 bytes)
 {
-	if(bytes > cache_limits.image_bytes)
+	if(bytes > cache_limits.image_bytes || cache_limits.image_entries == 0)
 		return Fail("UiRenderer2D image exceeds the configured pixel cache budget");
-	while(ImageCacheBytes() > cache_limits.image_bytes - bytes) {
+	while(ImageCacheBytes() > cache_limits.image_bytes - bytes ||
+	      image_cache.GetCount() >= cache_limits.image_entries) {
 		int oldest = -1;
 		for(int i = 0; i < image_cache.GetCount(); ++i)
 			if(image_cache[i].last_frame != cache_frame &&
@@ -512,7 +514,8 @@ void UiRenderer2D::TrimCaches()
 		DestroyTextExtension();
 	// Only called between replays. Existing backend destruction waits for GPU
 	// completion; this must remain true if submission later becomes asynchronous.
-	for(int i = image_cache.GetCount() - 1; i >= 0 && ImageCacheBytes() > cache_limits.image_bytes; --i)
+	for(int i = image_cache.GetCount() - 1; i >= 0 && (ImageCacheBytes() > cache_limits.image_bytes ||
+	     image_cache.GetCount() > cache_limits.image_entries); --i)
 		if(device->DestroyTexture(image_cache[i].texture) == GpuResult::Ok)
 			image_cache.Remove(i);
 	if(vector_impl)

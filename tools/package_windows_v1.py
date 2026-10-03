@@ -76,7 +76,7 @@ def main():
     notices["LLVM-LICENSE.TXT"] = args.clang / "LICENSE.TXT"
     for name, path in notices.items():
         runtime["licenses/" + name] = path.read_bytes()
-    for name in ("WINDOWS_VULKAN_V1.md", "GPU_CTRL_USAGE.md", "RELEASE_CANDIDATE.md"):
+    for name in ("WINDOWS_VULKAN_V1.md", "GPU_CTRL_USAGE.md", "RELEASE_CANDIDATE.md", "RC1_QUALIFICATION.md"):
         runtime["docs/" + name] = source["docs/" + name]
     runtime["README.txt"] = (
         "Windows/Vulkan v1 local candidate\n"
@@ -85,7 +85,7 @@ def main():
         "Requires Windows x64 with POPCNT and a compatible Vulkan 1.3 GPU/driver "
         "providing vulkan-1.dll. Vulkan SDK is only needed for building; validation "
         "layers are optional and required for --validation.\n"
-        "Gallery: --benchmark / --benchmark-load [--validation] write reports beside "
+        "Gallery: --benchmark / --benchmark-load / --benchmark-soak [--validation] write reports beside "
         "the executable and close automatically. Interactive use stays open.\n"
         "GpuSurfaceDemoRelease.exe --self-test runs deterministic surface checks.\n"
         "GPU client-area composition retains Windows/font/GDI platform dependencies.\n"
@@ -93,11 +93,21 @@ def main():
         "and U++ sources/toolchain are not bundled. See manifest dependency pins.\n"
         "No public release/tag or separate clean-machine installation is implied.\n"
     ).encode()
-    for name in ("GpuUiGallery-normal.txt", "GpuUiGallery-load.txt", "v1-validation.json"):
+    for name in ("GpuUiGallery-normal.txt", "GpuUiGallery-load.txt", "GpuUiGallery-soak.txt",
+                 "GpuSiblingLoad.txt", "v1-validation.json", "rc1-qualification-final.json"):
         path = root / "build" / name
         if not path.is_file():
             raise RuntimeError("Required evidence missing: " + name)
-        runtime["evidence/" + name] = path.read_bytes()
+        data = path.read_bytes()
+        if name.startswith("GpuUiGallery-") and (
+                b"responsiveness=PASS" not in data or b"final_native_ownership=ZERO" not in data):
+            raise RuntimeError("Incomplete or failed Gallery evidence: " + name)
+        if name == "GpuUiGallery-soak.txt" and b"memory_plateau=PASS" not in data:
+            raise RuntimeError("Incomplete or failed memory plateau evidence")
+        if name == "GpuSiblingLoad.txt" and (
+                b"sibling_responsiveness=PASS" not in data or b"final_native_ownership=ZERO" not in data):
+            raise RuntimeError("Incomplete or failed sibling evidence")
+        runtime["evidence/" + name] = data
     manifest = {
         "scope": "Windows/Vulkan v1 local candidate; renderer working-tree snapshot",
         "renderer_dirty": bool(git(root, "status", "--porcelain").strip()),

@@ -1,6 +1,8 @@
 # Windows/Vulkan v1 — local candidate evidence
 
-Updated 2026-10-04. Local candidate implementation, build/regression checks and native reviews are complete.
+Updated 2026-10-04. This records the initial local candidate baseline.
+Sustained qualification found and fixed small-image allocation growth; see
+[RC1 qualification](RC1_QUALIFICATION.md) for current results and pending gates.
 A separate clean-machine installation and public release remain unperformed.
 
 ## Product contract
@@ -20,7 +22,8 @@ dependencies or claim complete coverage of every control in the Ui library.
 
 ## Finished changes
 
-- Image pixel budget: 64 MiB per renderer; old unused entries evict under pressure.
+- Image budget: 64 MiB of pixel payload and 4096 entries per renderer;
+  old unused entries evict under pressure.
 - Vector raster budget: 32 MiB and 4096 entries per renderer.
 - Glyph atlas budget: 16 MiB and 8192 entries; exhausted caches reset between frames.
 - Current-frame textures stay pinned. An oversized active frame fails explicitly.

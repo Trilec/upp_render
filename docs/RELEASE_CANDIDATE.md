@@ -1,8 +1,9 @@
 # Version 1 release candidate preparation
 
-Updated 2026-10-04. Status: **local Windows/Vulkan candidate acceptance complete; clean-machine check and publication remain**.
+Updated 2026-10-04. Status: **sustained Windows/Vulkan qualification in progress; clean-machine check and publication remain**.
 
-See [Windows/Vulkan v1 measured results](WINDOWS_VULKAN_V1.md) for the current source combination and executable evidence.
+See [Windows/Vulkan v1 measured results](WINDOWS_VULKAN_V1.md) for the initial baseline. [RC1 qualification](RC1_QUALIFICATION.md) records the
+small-image allocation fix, sustained measurements and remaining acceptance.
 
 ## Proposed first release scope
 
@@ -22,21 +23,23 @@ Original bytecode generation provenance is unavailable. See the measured report 
 
 ## Candidate gates and present evidence
 
-| Gate | Final local evidence |
+| Gate | Baseline and current qualification evidence |
 | --- | --- |
 | Public API examples | Three product demos and three minimal public tutorials rebuilt |
 | Whole-Ui application | Gallery native colours, controls, menu/tooltip/modal and maximized layout reviewed |
 | Embedded surfaces | Debug/Release 16/16 smoke; native AA toggle, independent pause, hide/show and Randomize reviewed |
 | Regression | 34-target Release baseline plus 22 affected final reruns; 12 focused Debug tests |
 | Build configurations | Clean Debug, clean Release and clean non-BLITZ Gallery builds |
-| Memory and ownership | Bounded caches; immutable image uploaded once across 1/2/10 surfaces; final native ownership ZERO |
-| Responsiveness | Final normal p99 18.88 ms/max 29.99 ms; validation-enabled load p99 18.72 ms/max 29.84 ms |
+| Memory and ownership | Byte/entry-bounded caches; five-minute private mean growth 4.6 MB; 100 surface lifetimes and 409,600 image replays; final native ownership ZERO |
+| Responsiveness | Five-minute validation load p99 20.28 ms/max 50.66 ms; embedded sibling p99 25.87 ms/max 97.91 ms |
 | Distribution | Source/runtime ZIPs, source and binary SHA-256 manifest, dependency pins and third-party notices |
 | Branch hygiene | Only main remains; unique historical commits preserved in verified Git bundle |
 
-The executable evidence is in the candidate's v1-validation.json and timed reports.
+The initial baseline is in v1-validation.json. Current qualification jobs, including
+failed/interrupted attempts, are in rc1-qualification-final.json and the soak/sibling reports.
 A tooltip hover attempt failed once and its isolated same-artifact retry passed;
-both records are retained. Separate clean-machine installation has not been performed.
+both records are retained. The original candidate passed SDK-free Caro embedded and
+normal/load checks; the refreshed final candidate and native review remain pending.
 No public tag or release has been published. Local checks do not certify every driver,
 Ui control or future backend.
 
@@ -57,7 +60,9 @@ Use one reproducible diagnostic harness rather than extra product apps. Fix the 
 
 Report CPU recording/replay time, fence/acquire/present time, UI event/timer delay, per-surface frame age, draw/batch counts, upload bytes/counts, cache entries/hits/misses, live versus cached GPU allocation bytes, retained CPU image/atlas/vector bytes and process private bytes. Process working-set size alone is not GPU memory accounting. Missing GPU timing/byte information must be labelled unavailable, not zero.
 
-Report p50/p95/p99/max, peak/steady retained bytes and post-close counts. Proposed initial interactive target on the declared reference hardware: p99 UI event delay at most 50 ms, maximum at most 100 ms in the agreed sustained workload, with resource caches inside their configured byte budgets. The fixed Gallery workloads passed these targets on the declared reference machine; FPS alone is not acceptance evidence.
+Report p50/p95/p99/max, peak/steady retained bytes and post-close counts. Proposed initial interactive target on the declared reference hardware: p99 UI event delay at most 50 ms, maximum at most 100 ms in the agreed sustained workload, with resource caches inside their configured byte budgets. The five-minute Gallery workload passed these targets after adding an image-entry
+cap; extended lifecycle and embedded-sibling checks remain required. FPS alone is
+not acceptance evidence.
 
 Implement and compare improvements against that baseline: shared immutable content and shader/pipeline identities, bounded cache eviction, reusable staging/buffers, then immutable-frame handoff with finite queue depth and fair scheduling. Keep Ui recording/control access on its owning thread. Retirement must respect GPU completion, not just CPU reference counts.
 

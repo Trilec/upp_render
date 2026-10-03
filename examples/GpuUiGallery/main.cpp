@@ -259,10 +259,13 @@ public:
 		SyncAllControlsFromScene();
 	}
 
-	void StartBenchmark(bool heavy)
+	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300)
 	{
 		scene_.SetParticleCount(heavy ? 512 : 96);
 		benchmark_heavy_ = heavy;
+		benchmark_soak_ = soak;
+		benchmark_seconds_ = seconds;
+		SaveFile(GetExeDirFile(soak ? "GpuUiGallery-soak.txt" : heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt"), "benchmark_status=RUNNING\n");
 		benchmark_started_ = NowMs();
 		benchmark_due_ = benchmark_started_ + 16;
 		SetTimeCallback(-16, [=] { BenchmarkTick(); }, 987);
@@ -574,19 +577,35 @@ private:
 				benchmark_replays_.Add(stats.acquire_ms + stats.replay_ms + stats.present_ms);
 				benchmark_last_frame_ = stats.presented_frames;
 			}
-			benchmark_private_peak_ = max(benchmark_private_peak_, PrivateBytes());
+			const uint64 private_bytes = PrivateBytes();
+			benchmark_private_peak_ = max(benchmark_private_peak_, private_bytes);
+			if(benchmark_soak_ && duration >= benchmark_next_memory_) {
+				benchmark_memory_.Add(private_bytes);
+				benchmark_heap_.Add((uint64)MemoryUsedKb() * 1024);
+				benchmark_next_memory_ = duration + 10000;
+			}
 			benchmark_image_peak_ = max(benchmark_image_peak_, stats.renderer.image_cache_bytes);
+			benchmark_image_entries_ = max(benchmark_image_entries_, stats.renderer.image_cache_entry_count);
 			benchmark_vector_peak_ = max(benchmark_vector_peak_, stats.renderer.vector_cache_bytes);
 		}
 		benchmark_due_ = now + 16;
 		RequestGpuRefresh();
-		if(duration < 24000) return;
+		if(duration < (benchmark_soak_ ? benchmark_seconds_ * 1000 + 4000 : 24000)) return;
 		KillTimeCallback(987);
 		const GpuPresentationStats stats = GetGpuStats();
 		const double p99 = Percentile(benchmark_delays_, 0.99);
 		const double worst = Percentile(benchmark_delays_, 1.0);
 		const bool pass = IsGpuReady() && GetGpuError().IsEmpty() &&
 		                  stats.presented_frames >= 50 && p99 >= 0 && p99 <= 50 && worst <= 100;
+		uint64 early = 0, late = 0;
+		if(benchmark_soak_ && benchmark_memory_.GetCount() >= 8) {
+			const int n = benchmark_memory_.GetCount();
+			for(int i = 0; i < 4; ++i) {
+				early += benchmark_memory_[i]; late += benchmark_memory_[n - 4 + i];
+			}
+			early /= 4; late /= 4;
+		}
+		const bool plateau = !benchmark_soak_ || (early > 0 && late <= early + 32 * 1024 * 1024);
 		String report;
 		report << "GpuUiGallery Windows/Vulkan " << (benchmark_heavy_ ? "512 particles" : "96 particles") << "\n"
 		       << "warmup_ms=4000 measured_ms=" << Format("%.2f", duration - 4000) << "\n"
@@ -601,23 +620,38 @@ private:
 		       << " p99=" << Format("%.2f", Percentile(benchmark_replays_, 0.99))
 		       << " max=" << Format("%.2f", Percentile(benchmark_replays_, 1.0)) << "\n"
 		       << "process_private_peak_bytes=" << AsString(benchmark_private_peak_) << "\n"
+		       << "image_cache_entry_peak=" << benchmark_image_entries_ << "\n"
 		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
 		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"
 		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
 		       << "gpu_timestamp_ms=unavailable\n"
 		       << "gpu_error=" << GetGpuError() << "\n"
 		       << "responsiveness=" << (pass ? "PASS" : "FAIL") << "\n";
-		const String path = GetExeDirFile(benchmark_heavy_ ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		report << "soak=" << (benchmark_soak_ ? 1 : 0) << "\n";
+		if(benchmark_soak_) {
+			report << "memory_sample_interval_ms=10000 early_mean_bytes=" << AsString(early)
+			       << " late_mean_bytes=" << AsString(late) << " allowed_growth_bytes=33554432\n"
+			       << "memory_plateau=" << (plateau ? "PASS" : "FAIL") << "\n";
+			for(uint64 bytes : benchmark_memory_) report << "private_sample_bytes=" << AsString(bytes) << "\n";
+			for(uint64 bytes : benchmark_heap_) report << "upp_heap_sample_bytes=" << AsString(bytes) << "\n";
+		}
+		const String path = GetExeDirFile(benchmark_soak_ ? "GpuUiGallery-soak.txt" : benchmark_heavy_ ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
 		if(!SaveFile(path, report)) SetExitCode(2);
-		else if(!pass) SetExitCode(1);
+		else if(!pass || !plateau) SetExitCode(1);
 		Close();
 	}
 
 	bool benchmark_heavy_ = false;
+	bool benchmark_soak_ = false;
+	int benchmark_seconds_ = 300;
+	Vector<uint64> benchmark_heap_;
+	double benchmark_next_memory_ = 30000;
+	Vector<uint64> benchmark_memory_;
 	double benchmark_started_ = 0;
 	double benchmark_due_ = 0;
 	uint64 benchmark_last_frame_ = 0;
 	uint64 benchmark_private_peak_ = 0;
+	int benchmark_image_entries_ = 0;
 	int64 benchmark_image_peak_ = 0;
 	int64 benchmark_vector_peak_ = 0;
 	Vector<double> benchmark_delays_;
@@ -652,18 +686,25 @@ GUI_APP_MAIN
 {
 	bool benchmark = false;
 	bool heavy = false;
+	bool soak = false;
+	int seconds = 300;
 	bool validation = false;
 	for(const String& arg : CommandLine()) {
 		if(arg == "--benchmark" || arg == "--benchmark-load") {
 			benchmark = true;
 			heavy = arg == "--benchmark-load";
 		}
+		if(arg == "--benchmark-soak") { benchmark = true; heavy = true; soak = true; }
+		if(arg.StartsWith("--benchmark-seconds=")) {
+			seconds = ScanInt(arg.Mid(20));
+			if(IsNull(seconds) || seconds < 20 || seconds > 300) { SetExitCode(2); return; }
+		}
 		if(arg == "--validation") validation = true;
 	}
 	{
 		GpuUiGallery app;
 		if(validation) app.SetValidation();
-		if(benchmark) app.StartBenchmark(heavy);
+		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
 		app.Run();
 	}
 	if(benchmark) {
@@ -671,10 +712,11 @@ GUI_APP_MAIN
 		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&
 		            d.device_live_count == 0 && d.surface_live_count == 0 && d.swapchain_live_count == 0 &&
 		            VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
-		String path = GetExeDirFile(heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		String path = GetExeDirFile(soak ? "GpuUiGallery-soak.txt" : heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
 		String report = LoadFile(path);
 		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
 		SaveFile(path, report);
-		if(!zero) SetExitCode(1);
+		if(!zero || report.Find("responsiveness=PASS") < 0 ||
+		   (soak && report.Find("memory_plateau=PASS") < 0)) SetExitCode(1);
 	}
 }

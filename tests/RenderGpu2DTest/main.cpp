@@ -434,12 +434,13 @@ CONSOLE_APP_MAIN
 		            colour_device.GetLiveTextureCount() == 0, "colour regression should reclaim all textures");
 	}
 
-	{
+	for(bool entry_limited : { false, true }) {
 		NullGpuDevice cache_device;
 		GpuTextureId cache_target = CreateTarget(cache_device, GpuFormat::RGBA8, size);
 		UiRenderer2D renderer(cache_device);
 		UiRenderer2DCacheLimits limits;
-		limits.image_bytes = 32; // two 2x2 RGBA images
+		limits.image_bytes = entry_limited ? 1024 * 1024 : 32; // count limit vs pixel budget
+		limits.image_entries = entry_limited ? 2 : 4096;
 		renderer.SetCacheLimits(limits);
 		UiDisplayList last;
 		for(int i = 0; i < 100; ++i) {
@@ -473,7 +474,8 @@ CONSOLE_APP_MAIN
 		            "failed frame must remain within budget");
 		ok &= Check(renderer.Render(last, MakeTarget(cache_target, GpuFormat::RGBA8, size)),
 		            "a fitting frame must recover after exhaustion");
-		limits.image_bytes = 0;
+		if(entry_limited) limits.image_entries = 0;
+		else limits.image_bytes = 0;
 		renderer.SetCacheLimits(limits);
 		ok &= Check(renderer.GetStats().image_cache_bytes == 0,
 		            "reducing a budget must reclaim retained textures");

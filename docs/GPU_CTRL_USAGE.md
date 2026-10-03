@@ -107,7 +107,7 @@ The option is currently on GpuTopWindow. Embedded GpuCtrl, custom GpuWindow and 
 
 ## Retained memory policy
 
-UiRenderer2D defaults to 64 MiB of image pixel payload, 32 MiB/4096 vector rasters and 16 MiB/8192 glyph entries. It evicts image/vector entries unused by the current frame. Exhausted glyph atlases reset between frames. Content that cannot fit in one active frame fails with a diagnostic; the normal root fallback policy applies.
+UiRenderer2D defaults to 64 MiB/4096 images of pixel payload, 32 MiB/4096 vector rasters and 16 MiB/8192 glyph entries. It evicts image/vector entries unused by the current frame. Exhausted glyph atlases reset between frames. Content that cannot fit in one active frame fails with a diagnostic; the normal root fallback policy applies.
 
 These are pixel payload and entry limits, not total driver VRAM limits. Native allocation alignment, vertex buffers, swapchains, pipelines, transient upload staging and driver storage are separate. Backend diagnostics count explicit native allocations; process private bytes are a separate host metric. See [Windows/Vulkan v1 evidence](WINDOWS_VULKAN_V1.md).
 
