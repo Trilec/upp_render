@@ -5,7 +5,7 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 ## Recovery
 
 - Repository: `Trilec/upp_render`; work on `main`.
-- Current base: `5d7ed27a7221f45a1f4b5b04be81838ee2e3120a`; RC1 qualification changes are local; see the refreshed candidate manifest.
+- Current source: `main`; qualification baseline `5d7ed27`; exact candidate commit is in its manifest.
 - Ui dependency: `b86e59849adfc6992d08ad3eaa09f90b2839c63d`; clean working tree.
 - Build baseline: U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0, Windows x64.
 - After a Ui change, clean rebuild renderer callers with `-ab`/`-abr`.
@@ -79,7 +79,7 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 
 ## Remaining Acceptance
 
-- Initial local acceptance passed; sustained qualification is still in progress.
+- Initial local acceptance and sustained qualification passed; refreshed Caro acceptance pending.
 - Refreshed candidate packages include sustained evidence, hashes and notices; RC1 unpublished.
 - Original candidate passes SDK-free Caro checks; refreshed-candidate/native acceptance pending.
 - WebGPU/Metal, generic shader/compute APIs and full Ui coverage remain later milestones.
