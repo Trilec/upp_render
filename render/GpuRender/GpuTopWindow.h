@@ -10,6 +10,9 @@ public:
 	GpuTopWindow();
 	~GpuTopWindow() override;
 	void Close() override;
+	// Select before opening; GUI recording, one replaceable pending frame.
+	GpuTopWindow& SetAsyncPresentation(bool enabled = true);
+	GpuPresentationStats GetGpuStats() const;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
 	GpuBackendKind GetBackend() const;

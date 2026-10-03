@@ -1,6 +1,8 @@
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderNull/RenderNull.h>
 #include <RenderSoftware/RenderSoftware.h>
+#include <cstring>
+#include <cmath>
 
 using namespace Upp;
 
@@ -378,6 +380,107 @@ CONSOLE_APP_MAIN
 		            "two ordered solid/image/solid frames should issue six draws");
 		ok &= Check(image_device.DestroyTexture(image_target) == GpuResult::Ok,
 		            "image target should destroy after renderer-owned cache shutdown");
+	}
+
+
+	{
+		NullGpuDevice colour_device;
+		Size colour_size(16, 16);
+		GpuTextureId srgb_target = CreateTarget(colour_device, GpuFormat::RGBA8Srgb, colour_size);
+		GpuTextureId unorm_target = CreateTarget(colour_device, GpuFormat::RGBA8, colour_size);
+		ImageBuffer pixels(1, 1);
+		pixels[0][0].r = 123; pixels[0][0].g = 45; pixels[0][0].b = 67; pixels[0][0].a = 255;
+		Image image(pixels);
+		UiDisplayListBuilder b;
+		b.FillRect(Rectf(0, 0, 8, 8), Rgba8(128, 64, 32, 128));
+		b.DrawImage(Rectf(8, 0, 16, 8), image);
+		b.DrawText(Pointf(0, 8), "X", SansSerif(6), Rgba8(128, 64, 32));
+		UiDisplayList colour_list;
+		ok &= Check(b.Finish(colour_list), "colour regression display list should build");
+		UiRenderer2D renderer(colour_device);
+		ok &= Check(renderer.Render(colour_list, MakeTarget(srgb_target, GpuFormat::RGBA8Srgb, colour_size)),
+		            "sRGB colour frame should render");
+		GpuBufferId solid_buffer; solid_buffer.value = 1;
+		String prefix = colour_device.GetBufferWritePrefix(solid_buffer);
+		float vertex[6] = {};
+		if(prefix.GetCount() >= (int)sizeof(vertex)) std::memcpy(vertex, prefix.Begin(), sizeof(vertex));
+		ok &= Check(prefix.GetCount() >= (int)sizeof(vertex) &&
+		            std::abs(vertex[2] - 0.21586f) < 0.0001f &&
+		            std::abs(vertex[3] - 0.051269f) < 0.0001f &&
+		            std::abs(vertex[4] - 0.014444f) < 0.0001f &&
+		            std::abs(vertex[5] - 128.0f / 255.0f) < 0.0001f,
+		            "sRGB solid RGB must decode to linear light while alpha stays unchanged");
+		GpuTextureId image_texture; image_texture.value = 3;
+		GpuTextureDesc desc;
+		ok &= Check(colour_device.GetTextureWritePrefix(image_texture, desc, prefix) &&
+		            desc.format == GpuFormat::BGRA8Srgb && prefix.GetCount() >= 4 &&
+		            (byte)prefix[0] == 67 && (byte)prefix[1] == 45 &&
+		            (byte)prefix[2] == 123 && (byte)prefix[3] == 255,
+		            "asymmetric image pixel bytes and declared BGRA format must agree");
+		ok &= Check(renderer.Render(colour_list, MakeTarget(unorm_target, GpuFormat::RGBA8, colour_size)) &&
+		            renderer.GetStats().texture_upload_count == 1,
+		            "target colour-space change must acquire a matching image texture");
+		prefix = colour_device.GetBufferWritePrefix(solid_buffer);
+		if(prefix.GetCount() >= (int)sizeof(vertex)) std::memcpy(vertex, prefix.Begin(), sizeof(vertex));
+		ok &= Check(std::abs(vertex[2] - 128.0f / 255.0f) < 0.0001f,
+		            "UNORM solid RGB must preserve encoded colour values");
+		image_texture.value = 5;
+		ok &= Check(colour_device.GetTextureWritePrefix(image_texture, desc, prefix) &&
+		            desc.format == GpuFormat::BGRA8,
+		            "UNORM target must sample encoded BGRA without sRGB decoding");
+		renderer.Close();
+		ok &= Check(colour_device.DestroyTexture(srgb_target) == GpuResult::Ok &&
+		            colour_device.DestroyTexture(unorm_target) == GpuResult::Ok &&
+		            colour_device.GetLiveTextureCount() == 0, "colour regression should reclaim all textures");
+	}
+
+	{
+		NullGpuDevice cache_device;
+		GpuTextureId cache_target = CreateTarget(cache_device, GpuFormat::RGBA8, size);
+		UiRenderer2D renderer(cache_device);
+		UiRenderer2DCacheLimits limits;
+		limits.image_bytes = 32; // two 2x2 RGBA images
+		renderer.SetCacheLimits(limits);
+		UiDisplayList last;
+		for(int i = 0; i < 100; ++i) {
+			Image image = MakeTestImage(); // distinct immutable identity
+			UiDisplayList list;
+			BuildImageList(image, list);
+			ok &= Check(renderer.Render(list, MakeTarget(cache_target, GpuFormat::RGBA8, size)),
+			            "bounded image churn should replay");
+			ok &= Check(renderer.GetStats().image_cache_bytes <= 32 &&
+			            renderer.GetStats().image_cache_entry_count <= 2,
+			            "image churn must plateau at the configured budget");
+			ok &= Check(renderer.GetStats().image_upload_bytes == 16,
+			            "pixel upload bytes must be separate from vertex upload bytes");
+			last = pick(list);
+		}
+		ok &= Check(renderer.GetStats().image_cache_eviction_count == 1,
+		            "churn should retire one unused old texture");
+		ok &= Check(renderer.Render(last, MakeTarget(cache_target, GpuFormat::RGBA8, size)) &&
+		            renderer.GetStats().texture_upload_count == 0 &&
+		            renderer.GetStats().image_cache_hit_count == 1,
+		            "warm image must survive eviction and avoid an upload");
+		UiDisplayListBuilder overflow;
+		for(int i = 0; i < 3; ++i)
+			overflow.DrawImage(Rectf(0, 0, 8, 8), MakeTestImage());
+		UiDisplayList oversized;
+		overflow.Finish(oversized);
+		ok &= Check(!renderer.Render(oversized, MakeTarget(cache_target, GpuFormat::RGBA8, size)) &&
+		            renderer.GetError().Find("active image frame") >= 0,
+		            "oversized active frame must fail instead of evicting pinned textures");
+		ok &= Check(renderer.GetStats().image_cache_bytes <= 32,
+		            "failed frame must remain within budget");
+		ok &= Check(renderer.Render(last, MakeTarget(cache_target, GpuFormat::RGBA8, size)),
+		            "a fitting frame must recover after exhaustion");
+		limits.image_bytes = 0;
+		renderer.SetCacheLimits(limits);
+		ok &= Check(renderer.GetStats().image_cache_bytes == 0,
+		            "reducing a budget must reclaim retained textures");
+		renderer.Close();
+		ok &= Check(renderer.GetStats().image_cache_entry_count == 0,
+		            "close must clear resident accounting");
+		cache_device.DestroyTexture(cache_target);
 	}
 
 	if(ok) {

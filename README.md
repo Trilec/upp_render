@@ -53,6 +53,7 @@ Use `GpuTopWindow` when U++ should keep control/layout/input/theme authority whi
 class MainWindow : public GpuTopWindow {
 public:
     MainWindow() {
+        SetAsyncPresentation();
         Add(button.LeftPos(20, 120).TopPos(20, 32));
         button.SetLabel("Ordinary U++ button");
     }
@@ -83,7 +84,7 @@ Stage-5 vector/SVG, productization/H1 and UI1-C have recorded Windows/Vulkan acc
 
 Ordinary presenters use `GpuContext::Default()`. Compatible Vulkan presenters now share the expensive application/device domain: runtime, instance, physical/logical-device ownership, selected queue handles, and one device-level pipeline cache. Each presenter still owns its own native surface, swapchain and frame lifecycle.
 
-`UiRenderer2D` state and image/glyph RHI handles remain presenter/renderer-owned. They have not been promoted into process-wide caches without an explicit resource identity and lifetime contract.
+Logical image/glyph handles and presentation state remain independent. Immutable images now share native allocations under stable identity and reference lifetimes. Image/vector/glyph retention has configured bounds; integer-moving vectors reuse their shape content. Mutable glyph atlases remain renderer-owned.
 
 The generic provider registry lives below the public façade in `RenderRhi`; the Vulkan provider registers itself from `RenderVulkan`. `GpuRender.upp` currently depends on `RenderVulkan` so a normal Windows/Vulkan application still gets the default provider simply by adding the one public package. That is build composition, not a Vulkan dependency in the public drawing or presentation API.
 
@@ -119,7 +120,7 @@ Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; se
 
 ## Version 1 preparation
 
-The project is preparing a Windows/Vulkan release candidate; it is not yet RC-ready. Shared immutable content, bounded memory use and responsiveness under load still need implementation and measured acceptance. Shader modules exist in the internal RHI, but arbitrary application shaders are not yet exposed by `GpuCtrl`.
+Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Final regression and native release review are recorded separately. Shader modules exist in the internal RHI, but arbitrary application shaders are not yet exposed by `GpuCtrl`.
 
 See [release scope and gates](docs/RELEASE_CANDIDATE.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
 
@@ -136,4 +137,4 @@ See `docs/BACKEND_ROADMAP.md`.
 
 Windows/Vulkan is the currently validated platform. Use the repository `CLANGx64_Vulkan.bm` environment/build method and a Vulkan SDK available to the local U++ toolchain. Platform-specific paths belong in local configuration, not application code.
 
-Productization/H1 and UI1-C have recorded Windows/Vulkan acceptance. The current next renderer milestone is UI1-D shared immutable resources. `GpuSurfaceDemo` demonstrates the embedded-control product goal with two adjustable surfaces; its focused checks do not replace the full historical regression matrix. For current validation boundaries, see `docs/ACTIVE_WORK.md`.
+Productization/H1 and UI1-C have recorded Windows/Vulkan acceptance. Current Windows/Vulkan finishing evidence is in [WINDOWS_VULKAN_V1](docs/WINDOWS_VULKAN_V1.md). Broader resource convergence and future backends remain separate work. `GpuSurfaceDemo` demonstrates the embedded-control product goal with two adjustable surfaces; its focused checks do not replace the full historical regression matrix. For current validation boundaries, see `docs/ACTIVE_WORK.md`.

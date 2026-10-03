@@ -22,7 +22,7 @@ Use the installed UMK and Vulkan build method. This checkout requires the `rende
 
 Use `-abr` for a clean Release build. Paths are this workstation's configuration, not portable requirements.
 
-Run with `--self-test` for a bounded native smoke. Expected summary: `GpuSurfaceDemo smoke: 16 checks / 0 failures`. It checks fractional edge coverage, switching AA off/on, both presenters, drawing, independent pause, count/size projection, randomize, sibling destruction/recreation, theme/page switching and close. Compile and runtime evidence do not replace visual review.
+Run with `--self-test` for a bounded native smoke. Expected summary: `GpuSurfaceDemo smoke: 16 checks / 0 failures`. It checks fractional edge coverage, switching AA off/on, both presenters, drawing, independent pause, count/size projection, randomize, sibling destruction/recreation, theme/page switching and close. The smoke waits use actual steady-clock time; queued messages can make GuiSleep return early. Compile and runtime evidence do not replace visual review.
 
 Use `--write-usage <file.cpp>` to save the exact generated Code output for a standalone compile check.
 

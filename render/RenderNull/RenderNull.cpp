@@ -321,6 +321,7 @@ GpuResult NullGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void *d
 		Fail("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size) + " reason=out_of_range");
 		return GpuResult::InvalidArgument;
 	}
+	buffers[index].write_prefix = String((const char *)data, (int)min<int64>(64, size));
 	AppendLog("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size));
 	return GpuResult::Ok;
 }
@@ -399,6 +400,7 @@ GpuResult NullGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDesc
 		Fail("WriteTexture id=" + id.Dump() + " data_size=" + AsString(data_size) + " required=" + AsString(required_size) + " reason=data_too_small");
 		return GpuResult::InvalidArgument;
 	}
+	textures[index].write_prefix = String((const char *)data, (int)min<int64>(64, data_size));
 	AppendLog("WriteTexture id=" + id.Dump() + " origin=" + AsString(desc.origin.x) + "," + AsString(desc.origin.y) +
 	          " size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " row_pitch=" + AsString(desc.row_pitch));
 	return GpuResult::Ok;

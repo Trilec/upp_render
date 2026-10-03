@@ -2,8 +2,19 @@
 
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderRhi/RenderRhi.h>
+#include <RenderGpu2D/RenderGpu2D.h>
 
 namespace Upp {
+
+struct GpuPresentationStats {
+	uint64 presented_frames = 0;
+	uint64 dropped_frames = 0;
+	int pending_frames = 0;
+	double acquire_ms = 0;
+	double replay_ms = 0;
+	double present_ms = 0;
+	UiRenderer2DStats renderer;
+};
 
 // Backend-neutral application GPU context.
 //
@@ -52,6 +63,7 @@ public:
 	          const GpuNativeWindowDesc& native_window, String& error);
 	void Close();
 
+	GpuPresentationStats GetStats() const;
 	bool IsReady() const;
 	GpuBackendKind GetBackend() const;
 	String GetError() const;

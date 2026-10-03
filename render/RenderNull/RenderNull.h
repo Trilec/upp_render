@@ -47,6 +47,16 @@ public:
 	GpuResult EndCommands(GpuCommandListId list) override;
 	GpuResult Submit(GpuCommandListId list) override;
 
+	// Bounded upload evidence for byte-order/colour regression checks.
+	String GetBufferWritePrefix(GpuBufferId id) const {
+		int i = buffers.Find(id.value);
+		return i >= 0 ? buffers[i].write_prefix : String();
+	}
+	bool GetTextureWritePrefix(GpuTextureId id, GpuTextureDesc& desc, String& prefix) const {
+		int i = textures.Find(id.value);
+		if(i < 0) return false;
+		desc = textures[i].desc; prefix = textures[i].write_prefix; return true;
+	}
 	String DumpLog() const;
 	int GetLiveBufferCount() const { return buffers.GetCount(); }
 	int GetLiveTextureCount() const { return textures.GetCount(); }
@@ -63,11 +73,13 @@ public:
 private:
 	struct BufferState : Moveable<BufferState> {
 		GpuBufferDesc desc;
+		String write_prefix;
 		bool alive = true;
 	};
 
 	struct TextureState : Moveable<TextureState> {
 		GpuTextureDesc desc;
+		String write_prefix;
 		bool alive = true;
 		bool swapchain_backbuffer = false;
 		GpuSwapchainId owner_swapchain;

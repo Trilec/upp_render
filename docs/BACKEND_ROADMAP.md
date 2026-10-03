@@ -30,7 +30,7 @@ The productized Vulkan ownership model now provides:
 - queue-scoped per-surface teardown, with device-wide idle retained only for final device destruction;
 - explicit grouped-surface accounting and survivor/final-close tests.
 
-`UiRenderer2D` caches and image/glyph RHI handles remain presenter-owned. Sharing those resources is a future optimization only if a clear identity, synchronization and lifetime policy justifies it.
+Logical image/glyph handles remain presenter-owned. Immutable Image allocations now share in compatible Vulkan device domains through stable identity/reference lifetimes; mutable glyph atlases and vector metadata remain local and bounded. General resource sharing and backend-specific memory policy remain future work. See [Windows/Vulkan v1 evidence](WINDOWS_VULKAN_V1.md).
 
 After the current consolidated Windows/Vulkan acceptance, Vulkan follow-up should focus on output parity/readback, device-loss policy and longer-running multi-surface stress rather than another ownership redesign.
 

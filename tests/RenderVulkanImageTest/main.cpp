@@ -140,10 +140,15 @@ CONSOLE_APP_MAIN
 				clear.red = 0.02f; clear.green = 0.03f; clear.blue = 0.05f; clear.alpha = 1.0f;
 				ok &= Check(renderer.RenderFrame(scene, frame, clear),
 				            "sampled-image scene should render into acquired swapchain image");
-				ok &= Check(renderer.GetStats().texture_upload_count == 0,
-				            "swapchain image render should reuse the already cached U++ Image texture");
+				const bool srgb_frame = frame.color_format == GpuFormat::RGBA8Srgb || frame.color_format == GpuFormat::BGRA8Srgb;
+				ok &= Check(renderer.GetStats().texture_upload_count == (srgb_frame ? 1 : 0),
+				            "swapchain replay must select an image texture matching its actual sampling colour space");
 				ok &= Check(device.Present(frame.frame) == GpuResult::Ok,
 				            "sampled-image swapchain frame should present through session authority");
+				ok &= Check(device.BeginFrame(swapchain, frame) == GpuResult::Ok &&
+				            renderer.RenderFrame(scene, frame, clear) && renderer.GetStats().texture_upload_count == 0,
+				            "warm swapchain replay should reuse its colour-space-correct image texture");
+				ok &= Check(device.Present(frame.frame) == GpuResult::Ok, "warm sampled image frame should present");
 				ok &= Check(device.DestroySwapchain(swapchain) == GpuResult::Ok,
 				            "image-test swapchain should destroy after presentation");
 				ok &= Check(device.DestroySurface(surface) == GpuResult::Ok,

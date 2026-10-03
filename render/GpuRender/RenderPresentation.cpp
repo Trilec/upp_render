@@ -1,4 +1,7 @@
 #include "RenderPresentation.h"
+#include <chrono>
+#include <cmath>
+#include <mutex>
 
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderRhi/RenderRhiBackend.h>
@@ -7,14 +10,28 @@
 namespace Upp {
 
 namespace {
+// Public presentation transactions share Vulkan queues/pipeline caches.
+std::recursive_mutex& PresentationMutex()
+{
+	static std::recursive_mutex mutex;
+	return mutex;
+}
+}
 
-static GpuClearColor ToClearColor(Rgba8 color)
+namespace {
+
+static GpuClearColor ToClearColor(Rgba8 color, GpuFormat format)
 {
 	const float scale = 1.0f / 255.0f;
+	auto channel = [&](byte c) {
+		const float value = c * scale;
+		if(format != GpuFormat::RGBA8Srgb && format != GpuFormat::BGRA8Srgb) return value;
+		return value <= 0.04045f ? value / 12.92f : (float)std::pow((value + 0.055f) / 1.055f, 2.4f);
+	};
 	GpuClearColor out;
-	out.red = color.r * scale;
-	out.green = color.g * scale;
-	out.blue = color.b * scale;
+	out.red = channel(color.r);
+	out.green = channel(color.g);
+	out.blue = channel(color.b);
 	out.alpha = color.a * scale;
 	return out;
 }
@@ -80,6 +97,7 @@ struct GpuDisplayPresenter::Impl {
 	GpuSwapchainId swapchain;
 	Size swapchain_request_size = Size(0, 0);
 	String error;
+	GpuPresentationStats stats;
 
 	GpuDevice *GetDevice() const
 	{
@@ -166,8 +184,14 @@ struct GpuDisplayPresenter::Impl {
 			return GpuResult::InvalidState;
 		}
 
+		using Clock = std::chrono::steady_clock;
+		auto elapsed = [](Clock::time_point from) {
+			return std::chrono::duration<double, std::milli>(Clock::now() - from).count();
+		};
+		auto started = Clock::now();
 		GpuFrameInfo frame;
 		GpuResult result = device->BeginFrame(swapchain, frame);
+		stats.acquire_ms = elapsed(started);
 		if(result != GpuResult::Ok) {
 			error = device->GetLastError();
 			if(error.IsEmpty())
@@ -176,7 +200,8 @@ struct GpuDisplayPresenter::Impl {
 			return result;
 		}
 
-		if(!renderer->RenderFrame(list, frame, ToClearColor(background))) {
+		started = Clock::now();
+		if(!renderer->RenderFrame(list, frame, ToClearColor(background, frame.color_format))) {
 			String render_error = renderer->GetError();
 			device->Present(frame.frame); // Release the acquired frame on the failure path.
 			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
@@ -184,7 +209,11 @@ struct GpuDisplayPresenter::Impl {
 			return GpuResult::InvalidState;
 		}
 
+		stats.replay_ms = elapsed(started);
+		stats.renderer = renderer->GetStats();
+		started = Clock::now();
 		result = device->Present(frame.frame);
+		stats.present_ms = elapsed(started);
 		if(result != GpuResult::Ok) {
 			error = device->GetLastError();
 			if(error.IsEmpty())
@@ -193,6 +222,7 @@ struct GpuDisplayPresenter::Impl {
 			return result;
 		}
 
+		stats.presented_frames++;
 		error.Clear();
 		out_error.Clear();
 		return GpuResult::Ok;
@@ -221,6 +251,7 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
                                const GpuNativeWindowDesc& native_window,
                                String& out_error)
 {
+	std::lock_guard<std::recursive_mutex> guard(PresentationMutex());
 	Close();
 	out_error.Clear();
 	impl->context = &context;
@@ -295,6 +326,7 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 
 void GpuDisplayPresenter::Close()
 {
+	std::lock_guard<std::recursive_mutex> guard(PresentationMutex());
 	if(!impl)
 		return;
 	impl->DestroyPresentationObjects();
@@ -303,6 +335,7 @@ void GpuDisplayPresenter::Close()
 	impl->session.Clear();
 	impl->context = nullptr;
 	impl->backend = GpuBackendKind::Unknown;
+	impl->stats = GpuPresentationStats();
 	impl->error.Clear();
 }
 
@@ -326,9 +359,15 @@ String GpuDisplayPresenter::GetError() const
 	return impl->session ? impl->session->GetError() : String();
 }
 
+GpuPresentationStats GpuDisplayPresenter::GetStats() const
+{
+	return impl ? impl->stats : GpuPresentationStats();
+}
+
 bool GpuDisplayPresenter::Present(Size requested_size, const UiDisplayList& list,
                                   Rgba8 background, String& out_error)
 {
+	std::lock_guard<std::recursive_mutex> guard(PresentationMutex());
 	out_error.Clear();
 	if(requested_size.cx <= 0 || requested_size.cy <= 0)
 		return true;

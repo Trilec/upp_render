@@ -71,13 +71,51 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	if(!FiniteTransform(transform))
 		return Fail("UiRenderer2D vector content has a non-finite transform");
 
+
+	// Cache shape content independently of integer placement. Retaining the
+	// fractional phase preserves subpixel coverage while moving the result
+	// through DrawImage's existing transform/clipping authority.
+	UiDisplayOp key = op;
+	Rectf bounds = op.type == UiDisplayOpType::DrawSvg ? op.rect : op.path.GetControlBounds();
+	if(!std::isfinite(bounds.left) || !std::isfinite(bounds.top))
+		return Fail("UiRenderer2D vector bounds are non-finite");
+	const Pointf placement(floor(bounds.left), floor(bounds.top));
+	if(op.type == UiDisplayOpType::DrawSvg) {
+		key.rect = Rectf(op.rect.left - placement.x, op.rect.top - placement.y,
+		                 op.rect.right - placement.x, op.rect.bottom - placement.y);
+	}
+	else {
+		key.path.Clear();
+		for(int i = 0; i < op.path.GetCount(); ++i) {
+			const UiPathCommand& command = op.path[i];
+			switch(command.verb) {
+			case UiPathVerb::MoveTo: key.path.MoveTo(command.p1 - placement); break;
+			case UiPathVerb::LineTo: key.path.LineTo(command.p1 - placement); break;
+			case UiPathVerb::QuadraticTo:
+				key.path.QuadraticTo(command.p1 - placement, command.p2 - placement); break;
+			case UiPathVerb::CubicTo:
+				key.path.CubicTo(command.p1 - placement, command.p2 - placement,
+				                 command.p3 - placement); break;
+			case UiPathVerb::Close: key.path.Close(); break;
+			}
+		}
+		if(key.paint.kind != UiPaintKind::Solid) {
+			key.paint.p0 -= placement;
+			key.paint.p1 -= placement;
+		}
+	}
+	auto placed = [&](const Rectf& rect) {
+		return Rectf(rect.left + placement.x, rect.top + placement.y,
+		             rect.right + placement.x, rect.bottom + placement.y);
+	};
 	const int raster_scale = VectorRasterScale(transform);
 	VectorImpl& cache = VectorCache();
 	for(int i = 0; i < cache.cache.GetCount(); ++i) {
-		const VectorImpl::CacheEntry& entry = cache.cache[i];
-		if(entry.raster_scale == raster_scale && entry.op == op) {
+		VectorImpl::CacheEntry& entry = cache.cache[i];
+		if(entry.raster_scale == raster_scale && entry.op == key) {
+			entry.last_frame = cache_frame;
 			out.image = entry.image;
-			out.local_rect = entry.local_rect;
+			out.local_rect = placed(entry.local_rect);
 			out.drawable = !entry.image.IsEmpty();
 			vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 			return true;
@@ -88,11 +126,14 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	Image raster;
 	Rectf local_rect;
 	String raster_error;
-	if(!RasterizeUiVectorOp(op, raster_scale, raster, local_rect, raster_error))
+	if(!RasterizeUiVectorOp(key, raster_scale, raster, local_rect, raster_error))
 		return Fail("UiRenderer2D vector rasterization failed: " + raster_error);
 
+	if(!ReserveVectorCache((int64)raster.GetLength() * sizeof(RGBA)))
+		return false;
 	VectorImpl::CacheEntry& stored = cache.cache.Add();
-	stored.op = op;
+	stored.last_frame = cache_frame;
+	stored.op = key;
 	stored.image = raster;
 	stored.local_rect = local_rect;
 	stored.raster_scale = raster_scale;
@@ -101,7 +142,7 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	vector_stats.vector_cache_entry_count = cache.cache.GetCount();
 
 	out.image = stored.image;
-	out.local_rect = stored.local_rect;
+	out.local_rect = placed(stored.local_rect);
 	out.drawable = !stored.image.IsEmpty();
 	return true;
 }

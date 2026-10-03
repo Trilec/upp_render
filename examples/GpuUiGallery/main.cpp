@@ -3,6 +3,13 @@
 #include <Utilities/PropertyEditor/PropertyEditor.h>
 #include <Utilities/PropertyEditor/PropertyValueEditors.h>
 
+#include <RenderVulkan/RenderVulkanTestHooks.h>
+#include <RenderVulkan/RenderVulkanRhi.h>
+#include <chrono>
+#ifdef PLATFORM_WIN32
+#include <psapi.h>
+#endif
+
 using namespace Upp;
 
 namespace {
@@ -47,7 +54,7 @@ public:
 
 	void SetMode(int mode)              { mode_ = clamp(mode, 0, SCENE_MODE_COUNT - 1); Refresh(); }
 	void SetSpeed(double speed)         { speed_ = clamp(speed, 0.10, 4.00); }
-	void SetParticleCount(int count)    { particle_count_ = clamp(count, 6, 96); Refresh(); }
+	void SetParticleCount(int count)    { particle_count_ = clamp(count, 6, 512); Refresh(); }
 	void SetMotionRadius(int radius)    { motion_radius_ = clamp(radius, 20, 100); Refresh(); }
 	void SetParticleSize(int size)      { particle_size_ = clamp(size, 3, 18); Refresh(); }
 	void SetBackground(Color color)     { background_ = color; Refresh(); }
@@ -207,6 +214,7 @@ class GpuUiGallery : public GpuTopWindow {
 public:
 	GpuUiGallery()
 	{
+		SetAsyncPresentation();
 		Title("GpuRender - upp_Ui GPU Scene Inspector")
 		    .Sizeable().Zoomable().SetRect(0, 0, 1220, 760);
 
@@ -249,6 +257,15 @@ public:
 		});
 
 		SyncAllControlsFromScene();
+	}
+
+	void StartBenchmark(bool heavy)
+	{
+		scene_.SetParticleCount(heavy ? 512 : 96);
+		benchmark_heavy_ = heavy;
+		benchmark_started_ = NowMs();
+		benchmark_due_ = benchmark_started_ + 16;
+		SetTimeCallback(-16, [=] { BenchmarkTick(); }, 987);
 	}
 
 	void Layout() override
@@ -520,6 +537,91 @@ private:
 	}
 
 private:
+	static double NowMs()
+	{
+		return std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+
+	static uint64 PrivateBytes()
+	{
+#ifdef PLATFORM_WIN32
+		using Query = BOOL (WINAPI *)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+		auto query = (Query)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo");
+		PROCESS_MEMORY_COUNTERS_EX counters {};
+		counters.cb = sizeof(counters);
+		if(query && query(GetCurrentProcess(), (PPROCESS_MEMORY_COUNTERS)&counters, sizeof(counters)))
+			return counters.PrivateUsage;
+#endif
+		return 0;
+	}
+
+	static double Percentile(Vector<double>& samples, double p)
+	{
+		if(samples.IsEmpty()) return -1;
+		Sort(samples);
+		return samples[min(samples.GetCount() - 1, (int)ceil(p * samples.GetCount()) - 1)];
+	}
+
+	void BenchmarkTick()
+	{
+		const double now = NowMs();
+		const double duration = now - benchmark_started_;
+		if(duration >= 4000) {
+			benchmark_delays_.Add(max(0.0, now - benchmark_due_));
+			const GpuPresentationStats stats = GetGpuStats();
+			if(stats.presented_frames != benchmark_last_frame_) {
+				benchmark_replays_.Add(stats.acquire_ms + stats.replay_ms + stats.present_ms);
+				benchmark_last_frame_ = stats.presented_frames;
+			}
+			benchmark_private_peak_ = max(benchmark_private_peak_, PrivateBytes());
+			benchmark_image_peak_ = max(benchmark_image_peak_, stats.renderer.image_cache_bytes);
+			benchmark_vector_peak_ = max(benchmark_vector_peak_, stats.renderer.vector_cache_bytes);
+		}
+		benchmark_due_ = now + 16;
+		RequestGpuRefresh();
+		if(duration < 24000) return;
+		KillTimeCallback(987);
+		const GpuPresentationStats stats = GetGpuStats();
+		const double p99 = Percentile(benchmark_delays_, 0.99);
+		const double worst = Percentile(benchmark_delays_, 1.0);
+		const bool pass = IsGpuReady() && GetGpuError().IsEmpty() &&
+		                  stats.presented_frames >= 50 && p99 >= 0 && p99 <= 50 && worst <= 100;
+		String report;
+		report << "GpuUiGallery Windows/Vulkan " << (benchmark_heavy_ ? "512 particles" : "96 particles") << "\n"
+		       << "warmup_ms=4000 measured_ms=" << Format("%.2f", duration - 4000) << "\n"
+		       << "presented_frames=" << AsString(stats.presented_frames)
+		       << " dropped_frames=" << AsString(stats.dropped_frames)
+		       << " pending_frames=" << stats.pending_frames << "\n"
+		       << "timer_delay_ms p50=" << Format("%.2f", Percentile(benchmark_delays_, 0.50))
+		       << " p95=" << Format("%.2f", Percentile(benchmark_delays_, 0.95))
+		       << " p99=" << Format("%.2f", p99) << " max=" << Format("%.2f", worst) << "\n"
+		       << "acquire_replay_present_cpu_ms p50=" << Format("%.2f", Percentile(benchmark_replays_, 0.50))
+		       << " p95=" << Format("%.2f", Percentile(benchmark_replays_, 0.95))
+		       << " p99=" << Format("%.2f", Percentile(benchmark_replays_, 0.99))
+		       << " max=" << Format("%.2f", Percentile(benchmark_replays_, 1.0)) << "\n"
+		       << "process_private_peak_bytes=" << AsString(benchmark_private_peak_) << "\n"
+		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
+		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"
+		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
+		       << "gpu_timestamp_ms=unavailable\n"
+		       << "gpu_error=" << GetGpuError() << "\n"
+		       << "responsiveness=" << (pass ? "PASS" : "FAIL") << "\n";
+		const String path = GetExeDirFile(benchmark_heavy_ ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		if(!SaveFile(path, report)) SetExitCode(2);
+		else if(!pass) SetExitCode(1);
+		Close();
+	}
+
+	bool benchmark_heavy_ = false;
+	double benchmark_started_ = 0;
+	double benchmark_due_ = 0;
+	uint64 benchmark_last_frame_ = 0;
+	uint64 benchmark_private_peak_ = 0;
+	int64 benchmark_image_peak_ = 0;
+	int64 benchmark_vector_peak_ = 0;
+	Vector<double> benchmark_delays_;
+	Vector<double> benchmark_replays_;
 	UiLabel heading_;
 	UiLabel subheading_;
 	UiMenu menu_;
@@ -548,5 +650,31 @@ private:
 
 GUI_APP_MAIN
 {
-	GpuUiGallery().Run();
+	bool benchmark = false;
+	bool heavy = false;
+	bool validation = false;
+	for(const String& arg : CommandLine()) {
+		if(arg == "--benchmark" || arg == "--benchmark-load") {
+			benchmark = true;
+			heavy = arg == "--benchmark-load";
+		}
+		if(arg == "--validation") validation = true;
+	}
+	{
+		GpuUiGallery app;
+		if(validation) app.SetValidation();
+		if(benchmark) app.StartBenchmark(heavy);
+		app.Run();
+	}
+	if(benchmark) {
+		const auto d = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&
+		            d.device_live_count == 0 && d.surface_live_count == 0 && d.swapchain_live_count == 0 &&
+		            VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
+		String path = GetExeDirFile(heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		String report = LoadFile(path);
+		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
+		SaveFile(path, report);
+		if(!zero) SetExitCode(1);
+	}
 }

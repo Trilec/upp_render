@@ -195,14 +195,20 @@ CONSOLE_APP_MAIN
 				clear.red = 0.02f; clear.green = 0.03f; clear.blue = 0.05f; clear.alpha = 1.0f;
 				ok &= Check(renderer.RenderFrame(scene, frame, clear),
 				            "mixed vector/text scene should render into acquired swapchain image");
+				const bool srgb_frame = frame.color_format == GpuFormat::RGBA8Srgb || frame.color_format == GpuFormat::BGRA8Srgb;
 				ok &= Check(renderer.GetStats().vector_cache_miss_count == 0 &&
 				            renderer.GetStats().vector_raster_count == 0 &&
-				            renderer.GetStats().texture_upload_count == 0 &&
+				            renderer.GetStats().texture_upload_count == (srgb_frame ? 3 : 0) &&
 				            renderer.GetStats().glyph_cache_miss_count == 0 &&
 				            renderer.GetStats().glyph_atlas_upload_count == 0,
-				            "swapchain Stage-5 render should reuse vector, image and glyph caches");
+				            "swapchain Stage-5 replay should reuse CPU rasters/glyphs and select colour-space-correct image variants");
 				ok &= Check(device.Present(frame.frame) == GpuResult::Ok,
 				            "vector swapchain frame should present through session authority");
+				ok &= Check(device.BeginFrame(swapchain, frame) == GpuResult::Ok && renderer.RenderFrame(scene, frame, clear) &&
+				            renderer.GetStats().texture_upload_count == 0 && renderer.GetStats().vector_cache_miss_count == 0 &&
+				            renderer.GetStats().glyph_cache_miss_count == 0,
+				            "warm swapchain Stage-5 replay must reuse colour-correct images, vector rasters and glyphs");
+				ok &= Check(device.Present(frame.frame) == GpuResult::Ok, "warm vector swapchain frame should present");
 				ok &= Check(device.DestroySwapchain(swapchain) == GpuResult::Ok,
 				            "vector-test swapchain should destroy after presentation");
 				ok &= Check(device.DestroySurface(surface) == GpuResult::Ok,

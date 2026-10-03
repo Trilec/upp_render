@@ -474,40 +474,55 @@ bool UiRenderer2D::EnsureImageTexture(const Image& image, GpuTextureId& out)
 	if((device->GetAdapterInfo().capability_flags & GpuCapability_Textures) == 0)
 		return Fail("UiRenderer2D DrawImage requires texture support");
 
+	const bool srgb = working_color_format == GpuFormat::RGBA8Srgb || working_color_format == GpuFormat::BGRA8Srgb;
+	const GpuFormat image_format = srgb ? GpuFormat::BGRA8Srgb : GpuFormat::BGRA8;
 	const int64 serial = image.GetSerialId();
-	for(const ImageCacheEntry& entry : image_cache) {
-		if(entry.serial == serial && entry.size == image.GetSize()) {
+	for(ImageCacheEntry& entry : image_cache) {
+		if(entry.serial == serial && entry.size == image.GetSize() && entry.format == image_format) {
+			entry.last_frame = cache_frame;
+			frame_image_hits++;
 			out = entry.texture;
 			return true;
 		}
 	}
 
+	if(!ReserveImageCache((int64)image.GetLength() * sizeof(RGBA)))
+		return false;
 	GpuTextureDesc desc;
 	desc.size = image.GetSize();
-	desc.format = GpuFormat::RGBA8Srgb;
+	desc.format = image_format;
 	desc.usage = GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst;
 	desc.label = "UiRenderer2D image";
 	GpuTextureId texture;
-	GpuResult result = device->CreateTexture(desc, texture);
-	if(result != GpuResult::Ok)
-		return Fail("UiRenderer2D image texture creation failed: " + DumpGpuResult(result));
-
 	Image straight = Unmultiply(image);
-	GpuTextureWriteDesc upload;
-	upload.size = straight.GetSize();
-	upload.row_pitch = (int64)straight.GetWidth() * (int)sizeof(RGBA);
-	const int64 byte_count = (int64)straight.GetLength() * (int)sizeof(RGBA);
-	result = device->WriteTexture(texture, upload, straight.Begin(), byte_count);
-	if(result != GpuResult::Ok) {
-		device->DestroyTexture(texture);
-		return Fail("UiRenderer2D image texture upload failed: " + DumpGpuResult(result));
+	const int64 byte_count = (int64)straight.GetLength() * sizeof(RGBA);
+	const void *pixels = straight.Begin();
+#ifdef PLATFORM_MACOS
+	// U++ macOS pixels are ARGB; the texture contract is tightly packed BGRA.
+	Vector<byte> bgra;
+	bgra.SetCount((int)byte_count);
+	for(int i = 0; i < straight.GetLength(); ++i) {
+		const RGBA& p = straight.Begin()[i];
+		bgra[4*i] = p.b; bgra[4*i+1] = p.g; bgra[4*i+2] = p.r; bgra[4*i+3] = p.a;
 	}
+	pixels = bgra.Begin();
+#endif
+	bool uploaded = false;
+	GpuResult result = device->AcquireImmutableTexture((uint64)serial, desc, pixels,
+	                                                   byte_count, texture, uploaded);
+	if(result != GpuResult::Ok)
+		return Fail("UiRenderer2D immutable image acquisition failed: " + DumpGpuResult(result));
 
 	ImageCacheEntry& entry = image_cache.Add();
 	entry.serial = serial;
+	entry.format = image_format;
 	entry.size = image.GetSize();
 	entry.texture = texture;
-	stats.texture_upload_count++;
+	entry.last_frame = cache_frame;
+	if(uploaded) {
+		frame_image_upload_bytes += byte_count;
+		stats.texture_upload_count++;
+	}
 	out = texture;
 	return true;
 }
@@ -564,9 +579,9 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			if(!IsFinitePoint(p))
 				return Fail("UiRenderer2D generated non-finite geometry");
 		const float scale = 1.0f / 255.0f;
-		const float r = color.r * scale;
-		const float g = color.g * scale;
-		const float b = color.b * scale;
+		const float r = ColorChannel(color.r);
+		const float g = ColorChannel(color.g);
+		const float b = ColorChannel(color.b);
 		const float a = color.a * scale;
 		const int first = vertices.GetCount();
 		auto add_vertex = [&](const Pointf& p) {
@@ -835,6 +850,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	if(!target.color_target.IsValid() || target.size.cx <= 0 || target.size.cy <= 0 ||
 	   !IsSupportedColorFormat(target.color_format))
 		return Fail("UiRenderer2D target is invalid or unsupported");
+	working_color_format = target.color_format;
 	if(!BuildGeometry(list, target.size))
 		return false;
 

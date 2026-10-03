@@ -210,7 +210,7 @@ The exact integration mechanism is deliberately not frozen yet.
 
 ## Do not do now
 
-Do not derail UI1-C to redesign the stack.
+UI1-C has recorded acceptance. Preserve these boundaries while extending the current opt-in GpuTopWindow integration and immutable-image sharing contract; broad Ui coverage remains future work.
 
 Do not:
 

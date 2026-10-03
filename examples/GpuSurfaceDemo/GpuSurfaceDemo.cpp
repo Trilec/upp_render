@@ -1,5 +1,6 @@
 #include "GpuSurfaceDemo.h"
 #include <Painter/Painter.h>
+#include <chrono>
 
 namespace Upp {
 
@@ -470,7 +471,9 @@ bool GpuSurfaceDemo::RunSmoke()
         if(!ok) { ++failures; Cout() << "FAIL: " << message << EOL; }
     };
     auto pump = [&](int ms) {
-        for(int i = 0; i < ms / 5; ++i) { Ctrl::ProcessEvents(); Ctrl::GuiSleep(5); }
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        // GuiSleep can return early for a queued message; iteration count is not elapsed time.
+        while(std::chrono::steady_clock::now() < end) { Ctrl::ProcessEvents(); Ctrl::GuiSleep(5); }
     };
     Open();
     for(int i = 0; i < 600 && !(gpu_first.IsGpuReady() && gpu_second && gpu_second->IsGpuReady()); ++i)
@@ -495,6 +498,10 @@ bool GpuSurfaceDemo::RunSmoke()
     int b = gpu_second ? gpu_second->GetTickCountForTest() : 0;
     pump(200);
     check(gpu_first.GetTickCountForTest() == a, "paused A stops its timer");
+    if(gpu_second && gpu_second->GetTickCountForTest() <= b)
+        Cout() << "B timer diagnostic: before=" << b << " after=" << gpu_second->GetTickCountForTest()
+               << " visible=" << gpu_second->IsVisible() << " open=" << gpu_second->IsOpen()
+               << " ready=" << gpu_second->IsGpuReady() << EOL;
     check(gpu_second && gpu_second->GetTickCountForTest() > b, "B animates while A is paused");
     pe_model.SetValue("count", 80);
     pe_model.SetValue("kind", "Oblongs");

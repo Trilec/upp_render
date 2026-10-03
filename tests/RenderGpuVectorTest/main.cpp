@@ -200,6 +200,50 @@ CONSOLE_APP_MAIN
 	ok &= Check(device.GetLiveTextureCount() == 0,
 	            "RenderGpuVectorTest should finish with zero RenderNull textures");
 
+	{
+		NullGpuDevice placement_device;
+		GpuTextureId placement_target = CreateTarget(placement_device, size);
+		UiRenderer2D renderer(placement_device);
+		auto scene_at = [](Pointf p) {
+			UiPath shape;
+			shape.MoveTo(p + Pointf(0, 0)).LineTo(p + Pointf(16, 0))
+			     .LineTo(p + Pointf(16, 16)).LineTo(p + Pointf(0, 16)).Close();
+			UiPaint gradient = UiPaint::Linear(p, p + Pointf(16, 16),
+			                                  Rgba8(255, 0, 0, 255), Rgba8(0, 0, 255, 255));
+			UiDisplayListBuilder builder;
+			builder.FillPath(shape, gradient);
+			UiDisplayList list;
+			builder.Finish(list);
+			return list;
+		};
+		UiDisplayList initial = scene_at(Pointf(4, 4));
+		ok &= Check(renderer.Render(initial, MakeTarget(placement_target, size)),
+		            "initial gradient shape should replay");
+		UiDisplayList moved = scene_at(Pointf(24, 12));
+		ok &= Check(renderer.Render(moved, MakeTarget(placement_target, size)) &&
+		            renderer.GetStats().vector_raster_count == 0 &&
+		            renderer.GetStats().texture_upload_count == 0 &&
+		            renderer.GetStats().vector_cache_entry_count == 1,
+		            "integer translation with translated gradient should reuse one raster and texture");
+		UiDisplayList subpixel = scene_at(Pointf(24.5, 12.5));
+		ok &= Check(renderer.Render(subpixel, MakeTarget(placement_target, size)) &&
+		            renderer.GetStats().vector_raster_count == 1,
+		            "fractional coverage phase must remain part of vector identity");
+		UiRenderer2DCacheLimits limits;
+		limits.vector_entries = 2;
+		renderer.SetCacheLimits(limits);
+		for(int i = 0; i < 20; ++i) {
+			UiDisplayList churn = scene_at(Pointf(4 + i / 32.0, 4));
+			ok &= Check(renderer.Render(churn, MakeTarget(placement_target, size)) &&
+			            renderer.GetStats().vector_cache_entry_count <= 2,
+			            "vector churn must remain inside the entry limit");
+		}
+		renderer.Close();
+		placement_device.DestroyTexture(placement_target);
+		ok &= Check(placement_device.GetLiveTextureCount() == 0,
+		            "placement-cache cleanup should leave zero textures");
+	}
+
 	if(ok) {
 		Cout() << "RenderGpuVectorTest passed" << EOL;
 		return;

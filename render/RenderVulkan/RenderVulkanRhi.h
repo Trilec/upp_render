@@ -19,6 +19,10 @@ public:
 
 	bool IsReady() const;
 	const String& GetError() const;
+	// VkMemoryRequirements-sized exclusive allocations owned by this adapter.
+	// Shared immutable images are counted once by GetSharedImmutableAllocationBytes.
+	// Excludes driver/swapchain memory and temporary upload staging.
+	uint64 GetLiveAllocationBytes() const;
 	int GetLiveBufferCount() const;
 	int GetLiveTextureCount() const;
 	int GetLiveShaderCount() const;
@@ -38,6 +42,10 @@ public:
 	GpuResult DestroyBuffer(GpuBufferId id) override;
 
 	GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) override;
+	GpuResult AcquireImmutableTexture(uint64 identity, const GpuTextureDesc& desc,
+	                                 const void *data, int64 size, GpuTextureId& out,
+	                                 bool& uploaded) override;
+	static uint64 GetSharedImmutableAllocationBytes();
 	GpuResult WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size) override;
 	GpuResult DestroyTexture(GpuTextureId id) override;
 

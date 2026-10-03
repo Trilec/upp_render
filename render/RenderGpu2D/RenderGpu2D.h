@@ -14,6 +14,17 @@ struct UiRenderer2DTarget : Moveable<UiRenderer2DTarget> {
 	GpuClearColor clear_color;
 };
 
+// Retained pixel payload limits, independent of backend allocation alignment.
+// Entries used by a frame are pinned until replay completes; oversized frames
+// fail explicitly rather than evicting a texture referenced by that frame.
+struct UiRenderer2DCacheLimits {
+	int64 image_bytes = 64 * 1024 * 1024;
+	int64 vector_bytes = 32 * 1024 * 1024;
+	int vector_entries = 4096;
+	int64 glyph_bytes = 16 * 1024 * 1024;
+	int glyph_entries = 8192;
+};
+
 struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int display_op_count = 0;
 	int primitive_count = 0;
@@ -40,6 +51,16 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int draw_count = 0;
 	int batch_count = 0;
 	int64 uploaded_bytes = 0;
+	int64 image_upload_bytes = 0;
+	int64 glyph_cache_bytes = 0;
+	int glyph_cache_entry_count = 0;
+	int glyph_cache_reset_count = 0;
+	int64 image_cache_bytes = 0;
+	int64 vector_cache_bytes = 0;
+	int image_cache_entry_count = 0;
+	int image_cache_hit_count = 0;
+	int image_cache_eviction_count = 0;
+	int vector_cache_eviction_count = 0;
 	int64 vertex_buffer_capacity = 0;
 	int64 textured_vertex_buffer_capacity = 0;
 	bool vertex_buffer_grew = false;
@@ -62,6 +83,9 @@ public:
 	bool RenderFrame(const UiDisplayList& list, const GpuFrameInfo& frame,
 	                 const GpuClearColor& clear_color = GpuClearColor());
 	void Close();
+	// Configure between frames. Zero rejects new cached content.
+	void SetCacheLimits(const UiRenderer2DCacheLimits& limits);
+	const UiRenderer2DCacheLimits& GetCacheLimits() const { return cache_limits; }
 
 	bool IsReady() const { return ready; }
 	const String& GetError() const { return error; }
@@ -97,8 +121,10 @@ private:
 
 	struct ImageCacheEntry : Moveable<ImageCacheEntry> {
 		int64 serial = 0;
+		GpuFormat format = GpuFormat::Unknown;
 		Size size = Size(0, 0);
 		GpuTextureId texture;
+		uint64 last_frame = 0;
 	};
 
 	enum class BatchKind {
@@ -170,6 +196,7 @@ private:
 			Image image;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
+			uint64 last_frame = 0;
 		};
 
 		Vector<CacheEntry> cache;
@@ -180,6 +207,8 @@ private:
 		~VectorCleanup();
 	};
 
+	GpuFormat working_color_format = GpuFormat::Unknown;
+	float ColorChannel(byte channel) const;
 	GpuDevice *device = nullptr;
 	bool ready = false;
 	String error;
@@ -197,6 +226,19 @@ private:
 	Vector<TexturedVertex> textured_vertices;
 	Vector<Batch> batches;
 	UiRenderer2DStats stats;
+	UiRenderer2DCacheLimits cache_limits;
+	uint64 cache_frame = 0;
+	int frame_image_hits = 0;
+	int frame_image_evictions = 0;
+	int frame_vector_evictions = 0;
+	int64 frame_image_upload_bytes = 0;
+	bool RenderInternal(const UiDisplayList& list, const UiRenderer2DTarget& target);
+	int64 ImageCacheBytes() const;
+	int64 VectorCacheBytes() const;
+	bool ReserveImageCache(int64 bytes);
+	bool ReserveVectorCache(int64 bytes);
+	void TrimCaches();
+	void UpdateCacheStats();
 	TextImpl *text_impl = nullptr;
 	TextCleanup text_cleanup;
 	VectorImpl *vector_impl = nullptr;

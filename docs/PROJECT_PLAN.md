@@ -92,7 +92,7 @@ Do not broaden this milestone into a renderer redesign. Architecture discoveries
 
 ## UI1-D — shared immutable resource evolution
 
-After UI1-C correctness is stable, define explicit resource identity/lifetime for safe cross-presenter and repeated-presentation sharing.
+Windows/Vulkan v1 implements the immutable-image subset: serial/size/format identity, shared native allocations with independent handles and reference lifetimes, bounded image/vector/glyph retention, and close-first survivor tests. General glyph/vector metadata sharing and the broader requirements below remain future convergence work. See [current measured implementation](WINDOWS_VULKAN_V1.md).
 
 The recent `upp_Ui` / UiNodeGraph software benchmark work strengthens this milestone: repeated immutable presentation work should not be regenerated per item/per frame merely because the GPU can execute it quickly.
 
@@ -204,7 +204,7 @@ Once a second backend is executable:
 - one root surface for a GPU-composited top-level UI;
 - embedded native surfaces only for explicitly accelerated `GpuCtrl` content inside ordinary non-root-composited U++ windows;
 - transient native popup/menu/tooltip windows may use additional presentation surfaces while sharing compatible context/device state;
-- compatible presenters may share expensive backend/device state, but reusable renderer resources require explicit identity/lifetime before cross-presenter sharing;
+- compatible presenters share expensive backend/device state and immutable Image allocations through explicit identity/reference lifetimes; mutable glyph atlases and vector metadata stay local;
 - preserve UI invalidation/damage information as an integration concept;
 - keep `UiDisplayList` semantic enough for backend-neutral optimization;
 - software replay remains semantic reference/fallback;
@@ -216,12 +216,12 @@ Once a second backend is executable:
 
 `GpuSurfaceDemo` follows the UiLabel / UiProgressRing shell and puts one or two bounded Vulkan `GpuCtrl` instances inside an ordinary Ui application. Its inspector changes width/height, shape count/type, speed, grid/text/background and per-surface animation. Randomize and second-surface destruction/recreation make drawing and lifetime behavior visible. The Code page emits a complete minimal public-API application.
 
-Surface ownership independence is already implemented; render-thread isolation is not. Current `GpuCtrl` recording/presentation executes synchronously in the GUI paint handler, including Vulkan frame/fence waits. Future off-thread preparation/render scheduling needs a bounded explicit design for immutable handoff, shared queue synchronization and safe teardown. It must not move ordinary Ui control access onto arbitrary workers.
+Surface ownership independence is implemented. GpuTopWindow now offers opt-in immutable-frame worker replay with one replaceable pending frame and synchronized public presenter transactions. This bounds root admission and protects GUI event processing without guaranteeing independent GPU queues or sibling fairness. Current `GpuCtrl` recording/presentation executes synchronously in the GUI paint handler, including Vulkan frame/fence waits. Future off-thread preparation/render scheduling needs a bounded explicit design for immutable handoff, shared queue synchronization and safe teardown. It must not move ordinary Ui control access onto arbitrary workers.
 
 ## Current sequence
 
 1. Review the embedded `GpuSurfaceDemo` product example and maintain current cross-repository validation; UI1-C is accepted.
-2. UI1-D: explicit shared immutable resource identity/lifetime, reuse and survivor tests.
+2. UI1-D: broaden the implemented immutable-image identity/lifetime/reuse/survivor contract to other resource types when justified.
 3. UI2: focused `upp_Ui` integration/convergence milestone with damage/parity requirements.
 4. Then begin WebGPU provider work on the current machine; Metal follows when executable Apple validation is available.
 

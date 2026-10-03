@@ -61,7 +61,7 @@ The control bridge explicitly reports unsupported operations. They must either g
 
 `upp_Ui` must continue to work independently through normal U++ Draw / UiDraw and must not gain a hard dependency on `upp_render` or `RenderVulkan`.
 
-The future opt-in GPU path should be assembled from the render/integration side:
+The current GpuTopWindow integration and future broader Ui coverage are assembled from the render/integration side:
 
 ```text
 upp_Ui control tree

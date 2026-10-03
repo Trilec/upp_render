@@ -81,10 +81,36 @@ Use `GpuTopWindow` when ordinary U++ controls should remain the logical UI and b
 
 Multiple `GpuCtrl`/window presenters use `GpuContext::Default()` unless an advanced caller opens presentation against a separate context.
 
-On the current Vulkan provider, compatible presenters share one runtime/instance/logical-device domain, queue handles and device-level pipeline cache. Their native surfaces, swapchains, acquired frames, `UiRenderer2D` state and image/glyph RHI handles remain independent.
+On the current Vulkan provider, compatible presenters share one runtime/instance/logical-device domain, queue handles and device-level pipeline cache. Their native surfaces, swapchains, acquired frames and logical image/glyph RHI handles remain independent. Immutable images now share one native allocation under stable image identity while each presenter owns its own handle; mutable glyph atlases remain presenter-owned.
 
 Closing or resizing one surface therefore does not transfer another surface's presentation ownership. Per-surface submitted/presented work is drained through that surface's graphics/present queues before swapchain destruction; the final compatible presenter release performs the final shared-device cleanup.
 
 ## Backend selection
 
 Vulkan is currently the implemented production backend and remains the default package composition for Windows. `SetBackend()` exists for backend selection/testing, but Metal and WebGPU are not yet implemented. Application drawing code should not depend on backend-specific types.
+
+## Responsive whole-Ui presentation
+
+Select the worker before opening:
+
+```cpp
+MainWindow win; // derives from GpuTopWindow
+win.SetAsyncPresentation();
+win.Run();
+```
+
+Ui still records the control tree on its GUI thread. The worker receives only immutable display lists, replays them, and presents. Each root retains at most one pending frame; newer work replaces stale pending work. Closing cancels pending work and joins the worker before destroying its HWND. Public presenter transactions serialize access to shared Vulkan queues and pipeline caches.
+
+The option is currently on GpuTopWindow. Embedded GpuCtrl, custom GpuWindow and transient presenters keep synchronous semantics. A shared device does not provide independent GPU execution queues or guaranteed frame rates under unlimited load.
+
+`GetGpuStats()` reports presented/replaced/pending frames, CPU acquire/replay/present time and renderer cache/upload counters. It returns a worker snapshot in asynchronous mode. GPU timestamp timing is not implemented.
+
+## Retained memory policy
+
+UiRenderer2D defaults to 64 MiB of image pixel payload, 32 MiB/4096 vector rasters and 16 MiB/8192 glyph entries. It evicts image/vector entries unused by the current frame. Exhausted glyph atlases reset between frames. Content that cannot fit in one active frame fails with a diagnostic; the normal root fallback policy applies.
+
+These are pixel payload and entry limits, not total driver VRAM limits. Native allocation alignment, vertex buffers, swapchains, pipelines, transient upload staging and driver storage are separate. Backend diagnostics count explicit native allocations; process private bytes are a separate host metric. See [Windows/Vulkan v1 evidence](WINDOWS_VULKAN_V1.md).
+
+## Colour contract
+
+Authored Ui/Draw colours and Image RGB bytes are sRGB encoded. Replay uses matching BGRA texture formats for U++ pixel storage, converts solid/text RGB for an sRGB target, and leaves alpha linear. UNORM targets preserve encoded RGB values. Images retain separate warm sampling variants when target colour space changes. Low-level GpuClearColor is already a GPU-space value; public presentation converts its Rgba8 background for the acquired target.

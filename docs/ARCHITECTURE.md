@@ -53,7 +53,7 @@ Software replay consumes the same display list and remains the semantic/correctn
 
 ## upp_Ui convergence direction
 
-`upp_Ui` remains independently usable and must not acquire a hard dependency on `upp_render` or a backend package. A future opt-in whole-UI path should adapt resolved U++ / `upp_Ui` presentation on the render/integration side into `UiCanvas` / `UiDisplayList` rather than creating a competing renderer abstraction inside `upp_Ui`.
+`upp_Ui` remains independently usable and must not acquire a hard dependency on `upp_render` or a backend package. The current opt-in GpuTopWindow path adapts resolved U++ / `upp_Ui` presentation on the render/integration side into `UiCanvas` / `UiDisplayList` without creating a competing renderer abstraction inside `upp_Ui`.
 
 Style, layout, model, focus, input and control state stay above the renderer. The renderer receives resolved presentation intent and damage information.
 
@@ -90,7 +90,7 @@ GpuContext
 
 This takes the useful lesson from U++ `GLCtrl`—reuse expensive backend state across controls—without copying OpenGL's global mutable rendering context.
 
-Image/glyph RHI handles and `UiRenderer2D` caches remain presenter-owned today. UI1-D will only promote resources into cross-presenter sharing after defining explicit immutable identity, compatibility, ownership, invalidation, synchronization, memory-budget/eviction and device/context-lifetime rules. Device compatibility alone is not enough, and accidental pointer identity is not a resource contract.
+Logical image/glyph RHI handles remain presenter-owned. Immutable Image serial/size/format identities now share native Vulkan allocations within one compatible device domain, with independent handles and reference lifetimes. Image/vector/glyph caches have bounded retention; mutable glyph atlases and vector metadata remain local. Public presentation transactions serialize shared queue and pipeline-cache use. GpuTopWindow optionally hands immutable frames to a worker with one replaceable pending frame; Ui recording remains on its GUI thread. Embedded/custom/transient presenters remain synchronous. See [current measured contract](WINDOWS_VULKAN_V1.md).
 
 On Vulkan, per-surface teardown waits only the queues used by that surface before destroying submitted/presented swapchain state. The final release of the shared logical device still uses a device-wide idle boundary before destroying device-owned resources. A never-used swapchain that fails during creation can be destroyed directly because no GPU work references it.
 

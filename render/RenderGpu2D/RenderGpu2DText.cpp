@@ -65,6 +65,8 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 		return true;
 	}
 
+	if(text.glyphs.GetCount() >= cache_limits.glyph_entries)
+		return Fail("UiRenderer2D active glyph frame exceeds the configured entry budget");
 	stats.glyph_cache_miss_count++;
 	TextImpl::GlyphEntry entry;
 	entry.advance = max(0, font.GetWidth(ch));
@@ -120,6 +122,9 @@ bool UiRenderer2D::EnsureGlyph(Font font, int ch, GlyphDraw& out)
 		return Fail("UiRenderer2D glyph is larger than the atlas page");
 
 	auto create_page = [&]() -> bool {
+		const int64 page_bytes = (int64)TextImpl::ATLAS_SIZE * TextImpl::ATLAS_SIZE * sizeof(RGBA);
+		if((text.pages.GetCount() + 1) * page_bytes > cache_limits.glyph_bytes)
+			return Fail("UiRenderer2D active glyph frame exceeds the configured atlas budget");
 		GpuTextureDesc desc;
 		desc.size = Size(TextImpl::ATLAS_SIZE, TextImpl::ATLAS_SIZE);
 		desc.format = GpuFormat::RGBA8Srgb;

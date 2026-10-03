@@ -265,6 +265,34 @@ public:
 	virtual GpuResult WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size) = 0;
 	virtual GpuResult DestroyTexture(GpuTextureId id) = 0;
 
+	// identity denotes immutable tight RGBA/BGRA pixels, unique in the device
+	// domain for their lifetime. Each returned handle is independently released
+	// with DestroyTexture. Backends may share the allocation, never handle IDs.
+	virtual GpuResult AcquireImmutableTexture(uint64 identity, const GpuTextureDesc& desc,
+	                                        const void *data, int64 size, GpuTextureId& out,
+	                                        bool& uploaded) {
+		out = GpuTextureId();
+		uploaded = false;
+		if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
+		   size / 4 / desc.size.cx < desc.size.cy)
+			return GpuResult::InvalidArgument;
+		if(desc.format != GpuFormat::RGBA8 && desc.format != GpuFormat::RGBA8Srgb &&
+		   desc.format != GpuFormat::BGRA8 && desc.format != GpuFormat::BGRA8Srgb)
+			return GpuResult::Unsupported;
+		GpuResult result = CreateTexture(desc, out);
+		if(result != GpuResult::Ok) return result;
+		GpuTextureWriteDesc write;
+		write.size = desc.size;
+		write.row_pitch = (int64)desc.size.cx * 4;
+		result = WriteTexture(out, write, data, size);
+		if(result != GpuResult::Ok) {
+			DestroyTexture(out);
+			out = GpuTextureId();
+		}
+		else uploaded = true;
+		return result;
+	}
+
 	virtual GpuResult CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceId& out) = 0;
 	virtual GpuResult DestroySurface(GpuSurfaceId id) = 0;
 

@@ -1,6 +1,8 @@
 # Version 1 release candidate preparation
 
-Updated 2026-10-03. Status: **preparing; not RC-ready**.
+Updated 2026-10-04. Status: **local Windows/Vulkan candidate acceptance complete; clean-machine check and publication remain**.
+
+See [Windows/Vulkan v1 measured results](WINDOWS_VULKAN_V1.md) for the current source combination and executable evidence.
 
 ## Proposed first release scope
 
@@ -14,22 +16,29 @@ Windows/Vulkan accelerated U++ drawing through one public GpuRender package:
 
 Vulkan is the executable backend. Metal, WebGPU, browser hosting, compute/effect breadth and complete platform/control coverage remain roadmap items. This bounds the candidate without claiming every future stage is complete.
 
-Application-authored shader rendering is an open scope decision: our RHI has shader modules, while GpuCtrl's public painter records 2D drawing. A small shader mode is recommended after the custom-pass/ownership contract exists. If deferred from version 1, release notes must state that limitation; if included, it must pass the same two-surface/lifecycle/error gates. Do not advertise a generic programmable Vulkan viewport until that API is usable.
+Generic application shader passes and compute are deferred from v1. The public painter
+records 2D drawing; checked-in internal SPIR-V is used without a runtime compiler.
+Original bytecode generation provenance is unavailable. See the measured report for limits.
 
 ## Candidate gates and present evidence
 
-| Gate | Current evidence | Remaining work |
-| --- | --- | --- |
-| Easy embedded/full-window APIs | Historical accepted foundation/H1; current embedded demo compiled | Build all public tutorials on the exact candidate and verify failure/fallback behavior |
-| Product demo | GpuSurfaceDemo Debug/Release 16 checks / 0 failures; non-BLITZ build; emitted minimal usage compiled | Complete current-source visual/input review, including latest antialias mode; build/review gallery and showcase |
-| Ui/transient regression | Recorded UI1-C historical acceptance | Clean Debug/Release focused matrix on pinned renderer + Ui sources; zero final ownership |
-| Resource reuse and memory budget | Shared device/cache infrastructure; content caches remain per-presenter | UI1-D immutable identity/lifetime; compatible sharing, bounded eviction and byte accounting |
-| Responsiveness under load | Current GUI-thread synchronous path; blocking fence/acquire waits | Timed baseline, bounded admission/scheduling, fair surfaces and measured UI latency |
-| Documentation/demo cleanup | Three product demos indexed; old motion moved to diagnostics; stale demo acceptance wording corrected | Final link/build/package audit and candidate release notes |
-| Reproducible build/shader assets | Repository build method exists; internal SPIR-V bytecode present | Document prerequisites, pin dependencies/toolchain and record shader source/compiler provenance |
-| Candidate packaging | Not produced | License inventory, source/runtime artifact manifest, hashes and clean-machine install/run check |
+| Gate | Final local evidence |
+| --- | --- |
+| Public API examples | Three product demos and three minimal public tutorials rebuilt |
+| Whole-Ui application | Gallery native colours, controls, menu/tooltip/modal and maximized layout reviewed |
+| Embedded surfaces | Debug/Release 16/16 smoke; native AA toggle, independent pause, hide/show and Randomize reviewed |
+| Regression | 34-target Release baseline plus 22 affected final reruns; 12 focused Debug tests |
+| Build configurations | Clean Debug, clean Release and clean non-BLITZ Gallery builds |
+| Memory and ownership | Bounded caches; immutable image uploaded once across 1/2/10 surfaces; final native ownership ZERO |
+| Responsiveness | Final normal p99 18.88 ms/max 29.99 ms; validation-enabled load p99 18.72 ms/max 29.84 ms |
+| Distribution | Source/runtime ZIPs, source and binary SHA-256 manifest, dependency pins and third-party notices |
+| Branch hygiene | Only main remains; unique historical commits preserved in verified Git bundle |
 
-These are gate states, not a whole-project percentage. Current changes are local and uncommitted; historical acceptance does not certify the final candidate. No release/tag/package has been published.
+The executable evidence is in the candidate's v1-validation.json and timed reports.
+A tooltip hover attempt failed once and its isolated same-artifact retry passed;
+both records are retained. Separate clean-machine installation has not been performed.
+No public tag or release has been published. Local checks do not certify every driver,
+Ui control or future backend.
 
 ## Memory and load acceptance protocol
 
@@ -48,7 +57,7 @@ Use one reproducible diagnostic harness rather than extra product apps. Fix the 
 
 Report CPU recording/replay time, fence/acquire/present time, UI event/timer delay, per-surface frame age, draw/batch counts, upload bytes/counts, cache entries/hits/misses, live versus cached GPU allocation bytes, retained CPU image/atlas/vector bytes and process private bytes. Process working-set size alone is not GPU memory accounting. Missing GPU timing/byte information must be labelled unavailable, not zero.
 
-Report p50/p95/p99/max, peak/steady retained bytes and post-close counts. Proposed initial interactive target on the declared reference hardware: p99 UI event delay at most 50 ms, maximum at most 100 ms in the agreed sustained workload, with resource caches inside their configured byte budgets. These are proposed release targets pending an actual baseline; do not claim a pass from FPS alone or weaken a target silently.
+Report p50/p95/p99/max, peak/steady retained bytes and post-close counts. Proposed initial interactive target on the declared reference hardware: p99 UI event delay at most 50 ms, maximum at most 100 ms in the agreed sustained workload, with resource caches inside their configured byte budgets. The fixed Gallery workloads passed these targets on the declared reference machine; FPS alone is not acceptance evidence.
 
 Implement and compare improvements against that baseline: shared immutable content and shader/pipeline identities, bounded cache eviction, reusable staging/buffers, then immutable-frame handoff with finite queue depth and fair scheduling. Keep Ui recording/control access on its owning thread. Retirement must respect GPU completion, not just CPU reference counts.
 

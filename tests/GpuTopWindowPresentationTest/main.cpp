@@ -291,6 +291,31 @@ GUI_APP_MAIN
 		}
 	}
 
+	for(int cycle = 0; cycle < 3; ++cycle) {
+		RootPresentationWindow win;
+		win.SetAsyncPresentation();
+		win.Open();
+		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
+			PumpEvents(1);
+		ok &= Check(win.IsGpuReady() && win.GetGpuStats().presented_frames > 0 &&
+		            win.GetGpuError().IsEmpty(),
+		            "async root must present a recorded control tree");
+		for(int i = 0; i < 50; ++i) {
+			win.RequestGpuRefresh();
+			Ctrl::ProcessEvents();
+		}
+		ok &= Check(win.GetGpuStats().pending_frames <= 1,
+		            "async admission must retain at most one pending frame");
+		win.SetRect(120, 120, 740 + cycle * 10, 430);
+		PumpEvents(20);
+		win.Close(); // drain/cancel before HWND destruction
+		PumpEvents(20);
+		const auto closed = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+		ok &= Check(closed.runtime_live_count == 0 && closed.device_live_count == 0 &&
+		            closed.surface_live_count == 0 && closed.swapchain_live_count == 0,
+		            "async close/reopen cycles must leave zero native ownership");
+	}
+
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 	ok &= Check(final_diag.runtime_live_count == 0 && final_diag.instance_live_count == 0 &&
 	            final_diag.debug_messenger_live_count == 0 && final_diag.surface_live_count == 0 &&

@@ -18,6 +18,14 @@
 
 namespace Upp {
 
+float UiRenderer2D::ColorChannel(byte channel) const
+{
+	const float value = channel / 255.0f;
+	if(working_color_format != GpuFormat::RGBA8Srgb && working_color_format != GpuFormat::BGRA8Srgb)
+		return value;
+	return value <= 0.04045f ? value / 12.92f : (float)std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
+
 bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 {
 	bool has_text = false;
@@ -79,9 +87,9 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			if(!IsFinitePoint(p))
 				return Fail("UiRenderer2D generated non-finite geometry");
 		const float scale = 1.0f / 255.0f;
-		const float r = color.r * scale;
-		const float g = color.g * scale;
-		const float b = color.b * scale;
+		const float r = ColorChannel(color.r);
+		const float g = ColorChannel(color.g);
+		const float b = ColorChannel(color.b);
 		const float a = color.a * scale;
 		const int first = vertices.GetCount();
 		auto add_vertex = [&](const Pointf& p) {
@@ -146,9 +154,9 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 				return Fail(String("UiRenderer2D generated non-finite ") + kind + " geometry");
 
 		const float scale = 1.0f / 255.0f;
-		const float r = tint.r * scale;
-		const float g = tint.g * scale;
-		const float b = tint.b * scale;
+		const float r = ColorChannel(tint.r);
+		const float g = ColorChannel(tint.g);
+		const float b = ColorChannel(tint.b);
 		const float a = tint.a * scale;
 		const int first = textured_vertices.GetCount();
 		auto add_vertex = [&](const TexturedPoint& p) {
@@ -336,8 +344,9 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 	return true;
 }
 
-bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& target)
+bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DTarget& target)
 {
+	working_color_format = target.color_format;
 	bool has_vector = false;
 	for(int i = 0; i < list.GetCount(); ++i) {
 		const UiDisplayOpType type = list[i].type;
@@ -359,7 +368,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		UiRenderer2DStats vector_stats;
 		if(!MaterializeVectorList(list, materialized, vector_stats))
 			return false;
-		if(!Render(materialized, target))
+		if(!RenderInternal(materialized, target))
 			return false;
 
 		stats.display_op_count = list.GetCount();
@@ -427,6 +436,126 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline);
 }
 
+void UiRenderer2D::SetCacheLimits(const UiRenderer2DCacheLimits& limits)
+{
+	cache_limits.image_bytes = max<int64>(0, limits.image_bytes);
+	cache_limits.vector_bytes = max<int64>(0, limits.vector_bytes);
+	cache_limits.vector_entries = max(0, limits.vector_entries);
+	cache_limits.glyph_bytes = max<int64>(0, limits.glyph_bytes);
+	cache_limits.glyph_entries = max(0, limits.glyph_entries);
+	TrimCaches();
+	UpdateCacheStats();
+}
+
+int64 UiRenderer2D::ImageCacheBytes() const
+{
+	int64 bytes = 0;
+	for(const ImageCacheEntry& entry : image_cache)
+		bytes += (int64)entry.size.cx * entry.size.cy * sizeof(RGBA);
+	return bytes;
+}
+
+int64 UiRenderer2D::VectorCacheBytes() const
+{
+	int64 bytes = 0;
+	if(vector_impl)
+		for(const VectorImpl::CacheEntry& entry : vector_impl->cache)
+			bytes += (int64)entry.image.GetLength() * sizeof(RGBA);
+	return bytes;
+}
+
+bool UiRenderer2D::ReserveImageCache(int64 bytes)
+{
+	if(bytes > cache_limits.image_bytes)
+		return Fail("UiRenderer2D image exceeds the configured pixel cache budget");
+	while(ImageCacheBytes() > cache_limits.image_bytes - bytes) {
+		int oldest = -1;
+		for(int i = 0; i < image_cache.GetCount(); ++i)
+			if(image_cache[i].last_frame != cache_frame &&
+			   (oldest < 0 || image_cache[i].last_frame < image_cache[oldest].last_frame))
+				oldest = i;
+		if(oldest < 0)
+			return Fail("UiRenderer2D active image frame exceeds the configured pixel cache budget");
+		GpuResult result = device->DestroyTexture(image_cache[oldest].texture);
+		if(result != GpuResult::Ok)
+			return Fail("UiRenderer2D cache retirement failed: " + DumpGpuResult(result));
+		image_cache.Remove(oldest);
+		frame_image_evictions++;
+	}
+	return true;
+}
+
+bool UiRenderer2D::ReserveVectorCache(int64 bytes)
+{
+	if(bytes > cache_limits.vector_bytes || cache_limits.vector_entries == 0)
+		return Fail("UiRenderer2D vector exceeds the configured raster cache budget");
+	while(VectorCacheBytes() > cache_limits.vector_bytes - bytes ||
+	      vector_impl->cache.GetCount() >= cache_limits.vector_entries) {
+		int oldest = -1;
+		for(int i = 0; i < vector_impl->cache.GetCount(); ++i)
+			if(vector_impl->cache[i].last_frame != cache_frame &&
+			   (oldest < 0 || vector_impl->cache[i].last_frame < vector_impl->cache[oldest].last_frame))
+				oldest = i;
+		if(oldest < 0)
+			return Fail("UiRenderer2D active vector frame exceeds the configured raster cache budget");
+		vector_impl->cache.Remove(oldest);
+		frame_vector_evictions++;
+	}
+	return true;
+}
+
+void UiRenderer2D::TrimCaches()
+{
+	if(text_impl && ((int64)text_impl->pages.GetCount() * TextImpl::ATLAS_SIZE *
+	                  TextImpl::ATLAS_SIZE * sizeof(RGBA) > cache_limits.glyph_bytes ||
+	                  text_impl->glyphs.GetCount() > cache_limits.glyph_entries))
+		DestroyTextExtension();
+	// Only called between replays. Existing backend destruction waits for GPU
+	// completion; this must remain true if submission later becomes asynchronous.
+	for(int i = image_cache.GetCount() - 1; i >= 0 && ImageCacheBytes() > cache_limits.image_bytes; --i)
+		if(device->DestroyTexture(image_cache[i].texture) == GpuResult::Ok)
+			image_cache.Remove(i);
+	if(vector_impl)
+		while(!vector_impl->cache.IsEmpty() &&
+		      (VectorCacheBytes() > cache_limits.vector_bytes ||
+		       vector_impl->cache.GetCount() > cache_limits.vector_entries))
+			vector_impl->cache.Remove(0);
+}
+
+void UiRenderer2D::UpdateCacheStats()
+{
+	stats.glyph_cache_bytes = text_impl ? (int64)text_impl->pages.GetCount() *
+	                         TextImpl::ATLAS_SIZE * TextImpl::ATLAS_SIZE * sizeof(RGBA) : 0;
+	stats.glyph_cache_entry_count = text_impl ? text_impl->glyphs.GetCount() : 0;
+	stats.image_cache_bytes = ImageCacheBytes();
+	stats.vector_cache_bytes = VectorCacheBytes();
+	stats.image_cache_entry_count = image_cache.GetCount();
+	stats.image_cache_hit_count = frame_image_hits;
+	stats.image_cache_eviction_count = frame_image_evictions;
+	stats.vector_cache_eviction_count = frame_vector_evictions;
+	stats.image_upload_bytes = frame_image_upload_bytes;
+	if(vector_impl)
+		stats.vector_cache_entry_count = vector_impl->cache.GetCount();
+}
+
+bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& target)
+{
+	++cache_frame;
+	frame_image_hits = frame_image_evictions = frame_vector_evictions = 0;
+	frame_image_upload_bytes = 0;
+	// Reset an exhausted atlas only between frames. Never invalidate glyph
+	// handles already referenced by the frame currently being recorded.
+	bool reset_glyphs = text_impl &&
+		((int64)text_impl->pages.GetCount() * TextImpl::ATLAS_SIZE *
+		 TextImpl::ATLAS_SIZE * sizeof(RGBA) >= cache_limits.glyph_bytes ||
+		 text_impl->glyphs.GetCount() >= cache_limits.glyph_entries);
+	if(reset_glyphs) DestroyTextExtension();
+	bool result = RenderInternal(list, target);
+	stats.glyph_cache_reset_count = reset_glyphs ? 1 : 0;
+	UpdateCacheStats();
+	return result;
+}
+
 bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& frame,
                                const GpuClearColor& clear_color)
 {
@@ -445,6 +574,7 @@ void UiRenderer2D::Close()
 	DestroyVectorExtension();
 	DestroyTextExtension();
 	CloseBase();
+	stats = UiRenderer2DStats();
 }
 
 }

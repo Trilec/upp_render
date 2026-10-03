@@ -1,89 +1,77 @@
 # Active Work
 
-Remote `main` is authoritative. This file is a recovery checkpoint only, not project history.
+Use `main`; candidate source identity is recorded in the artifact manifest. This file is a recovery checkpoint, not project history.
 
 ## Recovery
 
-- Repository: `Trilec/upp_render`; work directly on `main`.
-- Fetch current remote HEAD before work; do not rely on remembered SHAs.
-- Windows/U++ validation: `CLANGx64_Vulkan.bm` is tracked as the current build-method baseline; its machine-specific paths need local configuration and a compatible installed Vulkan SDK.
-- After any `upp_Ui` change, rebuild renderer tests with a clean `-ab`/`-abr` build; incremental builds after cross-repo changes can fail GPU init spuriously.
+- Repository: `Trilec/upp_render`; work on `main`.
+- Current base: `d2a96a0dcc8c3a1400eac87cb94cf61a18ea4e28`; finishing changes are included in the candidate; see its exact manifest identity.
+- Ui dependency: `b86e59849adfc6992d08ad3eaa09f90b2839c63d`; clean working tree.
+- Build baseline: U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0, Windows x64.
+- After a Ui change, clean rebuild renderer callers with `-ab`/`-abr`.
+- Fetch remote main before new work; preserve uncommitted work and recovery journals.
 
 ## Accepted Foundation
 
-UI1-A / UI1-B / UI1-R1 / UI1-R2 are accepted:
+- UI1-A/B/R1/R2: neutral canvas/list/software reference/RHI, images/text/vector/SVG,
+  embedded/root presentation, compatible device domain and ownership-zero cleanup.
+- UI1-C: real UiDropdown, UiMenu/submenu and tooltip lifecycle/input; historical
+  Debug/Release acceptance. Representative Ui control coverage, not the entire library.
+- GpuSurfaceDemo: two adjustable embedded surfaces, Randomize, pause/lifecycle,
+  optional cached antialias coverage. Public usage emitted and compiled.
+- GpuUiGallery: real Ui controls and PropertyEditor drive a Vulkan-composited window.
 
-- backend-neutral `UiCanvas` / immutable display list / software reference / RHI stack;
-- Vulkan GPU2D images, text, vector/SVG and root composition;
-- embedded `GpuCtrl`, `GpuTopWindow`, modal second GPU window and shared compatible device domain;
-- common Draw semantics, transformed child clipping, software fallback and ownership-zero cleanup.
+## Windows/Vulkan v1 Finishing — 2026-10-04
 
-Do not reopen accepted areas without a new reproducible regression.
+- Image/vector caches now have pixel budgets and eviction of unused old entries.
+- Current-frame resources stay pinned; oversized active content fails explicitly.
+- Glyph atlas bytes/entries are bounded; exhausted atlases reset between frames.
+- Integer vector placement is separate from shape/gradient identity. Fractional
+  coverage phase remains part of the key; moving a shape reuses its raster/texture.
+- Immutable images share native allocations across compatible Vulkan adapters;
+  logical texture handles remain independent. Mutable glyph atlases stay local.
+- GpuTopWindow has opt-in worker replay with one replaceable pending immutable frame.
+  Ui recording/control access stays on its owning thread; close joins before HWND teardown.
+- Public presentation transactions serialize shared Vulkan queue/pipeline-cache use.
+  Embedded/custom/transient paths remain synchronous; no independent queue guarantee.
+- Gallery enables the worker. Normal/load timed modes measure UI delay, replay CPU
+  time, private bytes, cache payloads and final native ownership.
+- Real Vulkan 1/2/10-surface test: identical image uploads once; 4096 native bytes;
+  bounded unique-image churn; surviving surface after first close; final ZERO.
+- Before shape reuse: 96-particle p99 UI delay 274.29 ms, private peak 1.56 GB.
+  After reuse: p99 27.63 ms, private peak 272 MB (pre-final-sharing run).
+- Final Release 512-particle run, validation ON: p99 UI delay 18.72 ms, max 29.84 ms;
+  178 presented, 937 stale frames replaced, at most one pending; final ZERO.
+- GPU timestamps are unavailable. Acquire/replay/present timings are CPU elapsed time.
+- Cache churn/warm/exhaustion/recovery, vector translation/gradient phase and async
+  resize/close/reopen regressions passed. 34-target Release baseline and 22 affected final reruns passed.
+- Clean Debug, clean Release and clean non-BLITZ gallery builds passed.
+- Twelve focused Debug tests and Debug/Release embedded smoke (16/16 each) passed.
+- All three product demos and three public tutorials rebuilt successfully.
+- Native gallery and embedded demo reviews passed after app approval: controls,
+  scene colours, antialias switching, independent pause and secondary hide/show.
+- Product demos remain SurfaceDemo, Gallery, Showcase; old motion under diagnostics.
+- Scope/build/measurement notes: `docs/WINDOWS_VULKAN_V1.md`.
 
-## UI1-C: ACCEPTED
+## Branch Hygiene
 
-- Generic owned transient popup lifecycle: PASS.
-- Stock U++ `DropList` compatibility: PASS (compatibility coverage only).
-- Real `upp_Ui::UiDropdown`: Debug/Release PASS; pointer `20/20`; keyboard `8/8`; reopen regression covered.
-- Real `upp_Ui::UiMenu`: Debug/Release PASS; root/menu/submenu ownership `1/1/1 -> 2/2/1 -> 3/3/1 -> 1/1/1`, shared device, final ZERO.
-- Real U++ tooltip attached to an `upp_Ui` control: Debug/Release PASS; tooltip `2/2/1`, hide `1/1/1`, final ZERO.
-- Consolidated gallery smoke and renderer regression matrix: PASS; final Vulkan ownership ZERO.
+- User explicitly requested only main on 2026-10-03.
+- All 24 historical remote branches and one local branch contained unique commits.
+- Complete verified archive: `build/branches-before-cleanup-2026-10-03.bundle`.
+- SHA-256: `c00c2ae7060ce55f7d09ca76f5a5d7c8828aca25c93b4bb1918021c351934cec`.
+- Atomic exact-head remote deletion and local removal completed; only main remains.
+- Preserve the archive separately when cleaning build outputs.
 
-## Product Example
+## Remaining Acceptance
 
-- `GpuUiGallery` is a GPU Scene Inspector: real `UiDropdown`, `UiSlider`, `UiMenu`, `UiButton` and `PropertyEditor` drive one live animated custom-Draw scene.
-- Dropdown/menu switch Orbit/Flow/Pulse/Swirl; slider changes speed live; PropertyEditor changes particle geometry, grid and colours; modal dialog uses `upp_Ui` controls.
-- Debug + Release builds PASS. Menu/submenu GPU ownership re-validated after the `upp_Ui` hardening: `1/1/1 -> 2/2/1 -> 3/3/1 -> 1/1/1`, final ZERO.
-- `upp_Ui` hardening during validation: menubar-mode reopen after row activation crashed (stale `PopupLevel` references across event pumps); levels are now closed immediately but destroyed at the next safe teardown point. Regression: `UiMenuInteractionTest` (popup + menubar LeftDown reopen cycles, 26 checks).
-- Real-input gallery interactions individually verified (dropdown mode switches, slider drag, PropertyEditor rows/colours, tooltip, modal, resize/restore); consolidated scripted desktop run is environment-sensitive on a shared desktop, so deterministic focused tests are the authority.
-
-## Embedded Surface Demo — 2026-10-03
-
-- TASK: demonstrate the primary product goal: a small Vulkan control inside a normal Ui app.
-- TOUCHED: `examples/GpuSurfaceDemo` and `examples/README.md`; existing examples retained.
-- STATUS: implementation complete locally; initial light/dark/input review is partial, full native visual acceptance pending.
-- VALIDATION: clean Debug BLITZ + Release + non-BLITZ baselines built; latest antialias changes build in all three configurations. Debug/Release native smoke: 16 checks / 0 failures each; exact generated minimal usage compiled unchanged.
-- DEPENDENCY FIX: local `upp_Ui/Ui/UiRangeSegmentsPaintParts.cpp` helper renamed to avoid a BLITZ `PaletteInk` collision with UiMediaCard.
-- CONTRACT: two per-instance scenes/timers and independent presenters; current painting/presentation is GUI-thread synchronous, not one worker thread per surface.
-- ANTIALIAS: Inspector switch defaults on; finite cached Painter coverage sprites replay through Vulkan. Off uses direct single-sample geometry. This is demo-level coverage, not renderer MSAA; no per-frame rasterization or fresh image identities on Randomize at fixed DPI.
-- MEMORY: compatible presenters share runtime/instance/device/queues/device pipeline cache; image, glyph and vector caches are per-presenter. General cache budget/eviction and cross-presenter immutable sharing remain UI1-D work; no measured memory/performance acceptance yet.
-- PREVIEW: the capture session ended at the Execute preview's 180-second timeout (exit 124), not a recorded crash. Launch the executable directly for an untimed session.
-- NEXT: finish visual/interaction review; implement UI1-D identities/lifetimes plus budget/eviction and measured reuse/resident-memory tests; keep async scheduling a separate milestone.
-- PUBLISHED: not committed or pushed. Prior accepted renderer milestones below remain historical acceptance.
-
-## Version 1 Preparation — 2026-10-03
-
-- BGFX reference reviewed at `Trilec/bgfx` master `abf165d8a78f962ad05da05f10adf0380bce286d`; see `docs/BGFX_REVIEW.md`. Shader packaging, shared program/geometry across swapchains, deferred resource retirement, budgeted allocation recycling and stress metrics inform the next contracts. BGFX was not built or adopted as a dependency.
-- Product demo set: `GpuSurfaceDemo`, `GpuUiGallery`, `RendererShowcase`; three minimal API tutorials retained. Older `GpuEmbeddedMotion` moved to `examples/diagnostics` without source changes; relocated Debug build PASS.
-- Documentation: README/examples/demo roadmap reconciled; diagnostics index and `docs/RELEASE_CANDIDATE.md` added. Candidate not ready: measured memory budgets/resource reuse, bounded responsiveness, exact final-source matrix/visual acceptance and reproducible packaging remain open.
-- Shader mode: recommended small animated gradient/ripple using the existing shell; public custom-pass/program/uniform ownership is not yet implemented. Current painter demo is not a programmable shader showcase.
-- CHECKS: relocated motion Debug build PASS; Release `RenderGpu2DTest` PASS (Null backend warm-image/vertex reuse, not a Vulkan load benchmark); 20 local links across 15 Markdown files valid; `git diff --check` PASS.
-- Cleanup is local, uncommitted and unpublished. Recovery journals preserved.
-
-## Next Milestone
-
-UI1-D — shared immutable GPU resources:
-
-- context-owned immutable image/glyph/vector resource identities;
-- share only resources with explicit identity/lifetime contracts;
-- prove closing one presenter/window cannot invalidate another.
-
-Durable guidance: `docs/UPP_UI_RENDER_CONVERGENCE.md`.
-
-## Repository Hygiene
-
-- Historical cleanup deleted only branches proven merged into `main`.
-- Unique historical branches remain preserved; do not force-delete them.
+- Local implementation, regression/build and native review acceptance is complete.
+- Candidate packages contain evidence, hashes and notices; no public tag/release issued.
+- Separate clean-machine install/run acceptance remains unperformed.
+- WebGPU/Metal, generic shader/compute APIs and full Ui coverage remain later milestones.
 
 ## Guardrails
 
-- U++ / `upp_Ui` remain authority for hierarchy, layout, input, focus, state, theme/model and invalidation.
-- No native GPU child per ordinary control; public recording/UI APIs remain backend-neutral.
-- Product-facing examples use real `upp_Ui` controls where equivalents exist; stock controls remain compatibility coverage only.
-- Diagnose first; smallest coherent change; review touched dependencies/tests; run `git diff --check`.
-
-## Recovery Log
-
-TASK: validate the published `GpuUiGallery` GPU Scene Inspector
-STATUS: UI1-C ACCEPTED; Scene Inspector Debug/Release validated; UiMenu menubar reopen crash fixed in `upp_Ui` with regression coverage
-NEXT: UI1-D shared immutable GPU resources
+- Ui owns hierarchy/layout/input/focus/state/theme/invalidation.
+- Public application drawing APIs stay backend-neutral.
+- Representative GPU control rendering still uses Windows hosting/font APIs.
+- Tests and native review are separate evidence. Never infer latency from FPS.

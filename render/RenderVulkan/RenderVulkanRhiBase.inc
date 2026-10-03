@@ -2,6 +2,9 @@
 
 #include <cstring>
 #include <limits>
+#include <map>
+#include <mutex>
+#include <tuple>
 
 namespace Upp {
 
@@ -182,10 +185,33 @@ struct VulkanGpuDevice::Impl {
 		RawBuffer raw;
 	};
 
+	struct ImmutableAllocation {
+		VkDevice device = VK_NULL_HANDLE;
+		VkImage image = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkDeviceSize bytes = 0;
+		PFN_vkDestroyImage destroy_image = nullptr;
+		PFN_vkFreeMemory free_memory = nullptr;
+		~ImmutableAllocation()
+		{
+			if(image) destroy_image(device, image, nullptr);
+			if(memory) free_memory(device, memory, nullptr);
+		}
+	};
+	using ImmutableKey = std::tuple<uintptr_t, uint64, int, int, int>;
+	static std::map<ImmutableKey, std::weak_ptr<ImmutableAllocation>>& ImmutableCache()
+	{
+		static std::map<ImmutableKey, std::weak_ptr<ImmutableAllocation>> cache;
+		return cache;
+	}
+	static std::mutex& ImmutableMutex() { static std::mutex mutex; return mutex; }
+
 	struct TextureState : Moveable<TextureState> {
 		GpuTextureDesc desc;
 		VkImage image = VK_NULL_HANDLE;
 		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkDeviceSize allocation_size = 0;
+		std::shared_ptr<ImmutableAllocation> immutable;
 		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		bool initialized = false;
 		bool borrowed_swapchain = false;
@@ -814,9 +840,10 @@ struct VulkanGpuDevice::Impl {
 		frames.Clear();
 		swapchains.Clear();
 		surfaces.Clear();
+		std::lock_guard<std::mutex> immutable_guard(ImmutableMutex());
 		while(textures.GetCount()) {
 			TextureState& state = textures[textures.GetCount() - 1];
-			if(!state.borrowed_swapchain) {
+			if(!state.borrowed_swapchain && !state.immutable) {
 				if(state.image) destroy_image(device, state.image, nullptr);
 				if(state.memory) free_memory(device, state.memory, nullptr);
 			}
@@ -874,6 +901,17 @@ VulkanGpuDevice::~VulkanGpuDevice()
 
 bool VulkanGpuDevice::IsReady() const { return impl && impl->ready && impl->session && impl->session->IsReady(); }
 const String& VulkanGpuDevice::GetError() const { return impl->error; }
+uint64 VulkanGpuDevice::GetLiveAllocationBytes() const
+{
+	uint64 bytes = 0;
+	if(impl) {
+		for(const Impl::BufferState& buffer : impl->buffers.GetValues())
+			bytes += buffer.raw.allocation_size;
+		for(const Impl::TextureState& texture : impl->textures.GetValues())
+			if(!texture.immutable) bytes += texture.allocation_size;
+	}
+	return bytes;
+}
 int VulkanGpuDevice::GetLiveBufferCount() const { return impl ? impl->buffers.GetCount() : 0; }
 int VulkanGpuDevice::GetLiveTextureCount() const { return impl ? impl->textures.GetCount() : 0; }
 int VulkanGpuDevice::GetLiveShaderCount() const { return impl ? impl->shaders.GetCount() : 0; }
@@ -948,7 +986,79 @@ GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureI
 	if(!impl->AllocateImageMemory(image, memory)) { impl->destroy_image(impl->device, image, nullptr); return GpuResult::InvalidState; }
 	GpuTextureId id; id.value = impl->next_texture_id++;
 	Impl::TextureState& state = impl->textures.Add(id.value, Impl::TextureState());
-	state.desc = desc; state.image = image; state.memory = memory; out = id;
+	state.desc = desc; state.image = image; state.memory = memory;
+	VkMemoryRequirements requirements {};
+	impl->get_image_memory_requirements(impl->device, image, &requirements);
+	state.allocation_size = requirements.size;
+	out = id;
+	return GpuResult::Ok;
+}
+
+uint64 VulkanGpuDevice::GetSharedImmutableAllocationBytes()
+{
+	std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+	uint64 bytes = 0;
+	auto& cache = Impl::ImmutableCache();
+	for(auto it = cache.begin(); it != cache.end();) {
+		if(auto allocation = it->second.lock()) {
+			bytes += allocation->bytes;
+			++it;
+		}
+		else it = cache.erase(it);
+	}
+	return bytes;
+}
+
+GpuResult VulkanGpuDevice::AcquireImmutableTexture(uint64 identity, const GpuTextureDesc& desc,
+                                                   const void *data, int64 size, GpuTextureId& out,
+                                                   bool& uploaded)
+{
+	out = GpuTextureId();
+	uploaded = false;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
+	   size / 4 / desc.size.cx < desc.size.cy)
+		return GpuResult::InvalidArgument;
+	if(desc.format != GpuFormat::RGBA8 && desc.format != GpuFormat::RGBA8Srgb &&
+	   desc.format != GpuFormat::BGRA8 && desc.format != GpuFormat::BGRA8Srgb)
+		return GpuResult::Unsupported;
+	if(desc.usage != (GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst))
+		return GpuResult::InvalidArgument;
+	std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+	auto& cache = Impl::ImmutableCache();
+	for(auto it = cache.begin(); it != cache.end();)
+		if(it->second.expired()) it = cache.erase(it);
+		else ++it;
+	const Impl::ImmutableKey key((uintptr_t)impl->device, identity,
+	                             desc.size.cx, desc.size.cy, (int)desc.format);
+	auto found = cache.find(key);
+	std::shared_ptr<Impl::ImmutableAllocation> allocation;
+	if(found != cache.end()) allocation = found->second.lock();
+	if(allocation) {
+		GpuTextureId id; id.value = impl->next_texture_id++;
+		auto& state = impl->textures.Add(id.value, Impl::TextureState());
+		state.desc = desc; state.image = allocation->image; state.memory = allocation->memory;
+		state.allocation_size = allocation->bytes; state.immutable = allocation;
+		state.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; state.initialized = true;
+		out = id;
+		return GpuResult::Ok;
+	}
+	GpuResult result = CreateTexture(desc, out);
+	if(result != GpuResult::Ok) return result;
+	GpuTextureWriteDesc write;
+	write.size = desc.size; write.row_pitch = (int64)desc.size.cx * 4;
+	result = WriteTexture(out, write, data, size);
+	if(result != GpuResult::Ok) {
+		DestroyTexture(out); out = GpuTextureId(); return result;
+	}
+	auto& state = impl->textures.Get(out.value);
+	allocation = std::make_shared<Impl::ImmutableAllocation>();
+	allocation->device = impl->device; allocation->image = state.image; allocation->memory = state.memory;
+	allocation->bytes = state.allocation_size;
+	allocation->destroy_image = impl->destroy_image; allocation->free_memory = impl->free_memory;
+	state.immutable = allocation;
+	cache[key] = allocation;
+	uploaded = true;
 	return GpuResult::Ok;
 }
 
@@ -958,6 +1068,7 @@ GpuResult VulkanGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDe
 	int index = impl->textures.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "WriteTexture received an unknown texture"; return GpuResult::InvalidHandle; }
 	Impl::TextureState& state = impl->textures[index];
+	if(state.immutable) { impl->error = "WriteTexture cannot mutate an immutable shared texture"; return GpuResult::InvalidState; }
 	if(state.borrowed_swapchain) { impl->error = "WriteTexture cannot write a borrowed swapchain backbuffer"; return GpuResult::InvalidState; }
 	if(!data || data_size <= 0 || desc.origin.x < 0 || desc.origin.y < 0 || desc.size.cx <= 0 || desc.size.cy <= 0 || desc.row_pitch <= 0) {
 		impl->error = "WriteTexture received an invalid write layout"; return GpuResult::InvalidArgument;
@@ -985,8 +1096,14 @@ GpuResult VulkanGpuDevice::DestroyTexture(GpuTextureId id)
 	VkResult vr = impl->queue_wait_idle(impl->graphics_queue);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkQueueWaitIdle", vr); return GpuResult::InvalidState; }
 	Impl::TextureState& state = impl->textures[index];
-	if(state.image) impl->destroy_image(impl->device, state.image, nullptr);
-	if(state.memory) impl->free_memory(impl->device, state.memory, nullptr);
+	if(state.immutable) {
+		std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+		state.immutable.reset();
+	}
+	else {
+		if(state.image) impl->destroy_image(impl->device, state.image, nullptr);
+		if(state.memory) impl->free_memory(impl->device, state.memory, nullptr);
+	}
 	impl->textures.Remove(index);
 	return GpuResult::Ok;
 }
