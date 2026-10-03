@@ -77,7 +77,7 @@ The accepted/implemented stack includes:
 - full-window custom `GpuWindow` presentation;
 - U++ control-tree recording and `GpuTopWindow` root composition.
 
-Stage-5 vector/SVG implementation is complete; its final consolidated Windows/Vulkan acceptance is tracked together with the productization validation in `docs/ACTIVE_WORK.md`.
+Stage-5 vector/SVG, productization/H1 and UI1-C have recorded Windows/Vulkan acceptance in `docs/ACTIVE_WORK.md`. Direct geometry remains single-sample; cached Painter coverage provides vector/SVG antialiasing.
 
 ## Shared application GPU context
 
@@ -109,18 +109,23 @@ See `render/README.md` for the dependency map.
 
 ## Examples
 
-Start with:
+The three product demonstrations are:
 
-- `examples/GpuRenderEmbedded`
-- `examples/GpuRenderWindow`
-- `examples/GpuRenderUiWindow`
-- `examples/RendererShowcase`
+- [GpuSurfaceDemo](examples/GpuSurfaceDemo/README.md) — adjustable embedded Vulkan surfaces in the Ui shell;
+- `examples/GpuUiGallery` — ordinary Ui controls composed into a full GPU window, including transient UI;
+- `examples/RendererShowcase` — rendering capabilities and software/GPU comparison.
 
-Historical bring-up/lifecycle probes are under `examples/diagnostics`; they remain useful for validation and resource-lifetime accounting rather than as competing user entry points.
+Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; see [examples](examples/README.md). Historical bring-up and stock-control compatibility probes are indexed under [diagnostics](examples/diagnostics/README.md).
+
+## Version 1 preparation
+
+The project is preparing a Windows/Vulkan release candidate; it is not yet RC-ready. Shared immutable content, bounded memory use and responsiveness under load still need implementation and measured acceptance. Shader modules exist in the internal RHI, but arbitrary application shaders are not yet exposed by `GpuCtrl`.
+
+See [release scope and gates](docs/RELEASE_CANDIDATE.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
 
 ## Backend roadmap
 
-Vulkan is the current production/validation backend. Metal and WebGPU are first-class planned backends and the public API is intentionally kept free of Vulkan types.
+Vulkan is the currently validated backend. Metal and WebGPU are first-class planned backends and the public API is intentionally kept free of Vulkan types.
 
 - Metal: macOS first, while keeping the design viable for iOS/iPadOS presentation models.
 - WebGPU: native/browser backend, with a longer-term goal of allowing U++ rendering/control intent to run in a WebAssembly/browser host. This requires browser platform/event/input work in addition to the renderer backend itself.
@@ -131,4 +136,4 @@ See `docs/BACKEND_ROADMAP.md`.
 
 Windows/Vulkan is the currently validated platform. Use the repository `CLANGx64_Vulkan.bm` environment/build method and a Vulkan SDK available to the local U++ toolchain. Platform-specific paths belong in local configuration, not application code.
 
-The productization/H1 implementation is complete in code and awaiting the final consolidated Windows/Vulkan acceptance matrix. For exact accepted SHAs and the active validation boundary, see `docs/ACTIVE_WORK.md`.
+Productization/H1 and UI1-C have recorded Windows/Vulkan acceptance. The current next renderer milestone is UI1-D shared immutable resources. `GpuSurfaceDemo` demonstrates the embedded-control product goal with two adjustable surfaces; its focused checks do not replace the full historical regression matrix. For current validation boundaries, see `docs/ACTIVE_WORK.md`.

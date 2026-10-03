@@ -1,30 +1,35 @@
 # Demo Roadmap
 
-The ordinary developer path is now represented by the canonical examples:
+## Version 1 demo set
 
-- `examples/GpuRenderEmbedded` — embedded `GpuCtrl` drawing through `GpuPainter`;
-- `examples/GpuRenderWindow` — whole custom GPU client area;
-- `examples/GpuRenderUiWindow` — U++ control tree composited through one root GPU surface;
-- `examples/RendererShowcase` — interactive rendering-capability/property showcase.
+Keep three product demonstrations:
 
-Historical bring-up probes remain under `examples/diagnostics`. They are validation tools rather than competing user APIs: several provide auto-close modes, validation output, lifecycle stress and zero-live-resource accounting that the canonical examples intentionally omit.
+1. `GpuSurfaceDemo`: bounded Vulkan control inside the normal Ui shell.
+2. `GpuUiGallery`: ordinary Ui controls and transient UI composed through Vulkan.
+3. `RendererShowcase`: supported drawing features and software/GPU comparison.
 
-| Diagnostic / future demo | Purpose | Proves | Interactive | Compare to `RenderSoftware` |
-| --- | --- | --- | --- | --- |
-| `examples/diagnostics/GpuCtrlLifecycleDemo` | Lifecycle probe | open/retry/resize/hide-show/clean close | Automated | No |
-| `examples/diagnostics/GpuCtrlBasicDemo` | Embedded host probe | ready/error reporting and automatic cleanup evidence | Interactive/auto-close | No |
-| `examples/diagnostics/GpuCtrlMultiViewDemo` | Multi-surface probe | independent presentation targets over compatible shared device state | Interactive | No |
-| Resize stress | Resize/present robustness | swapchain recreation and survivor isolation | Interactive | No |
-| Texture viewer | Image upload/display | texture handling and sampling | Interactive | Maybe |
-| Vector shapes | GPU 2D primitives | fills, strokes, transforms, clipping | Interactive | Yes |
-| Mandelbrot | Specialized shader example | shader/uniform/update cadence | Interactive | No |
-| Offscreen rendering | Render-to-texture | offscreen targets and reuse | Interactive | Maybe |
-| Compute buffer example | Compute plumbing | buffer dispatch and results | Interactive | No |
-| UI theme/control gallery | U++/upp_Ui integration | theme-driven control rendering | Interactive | Yes |
+Keep the three minimal source tutorials for embedded, custom whole-window and root-composited use. The [examples index](../examples/README.md) is the current entry point.
+
+`GpuEmbeddedMotion` has moved to `examples/diagnostics/GpuEmbeddedMotion`. Its earlier motion role is covered by the new surface demo; its stock-U++/GDI compatibility coverage is still useful. Existing lifecycle/ownership probes stay in diagnostics. Do not remove tests or shared `RendererShowcaseScene` support merely because they are not product demos.
+
+## Shader showcase
+
+Candidate: an animated gradient/ripple field in a small surface, with time, speed, scale and colour uniforms. Reuse the existing shell, size controls and two-surface lifetime controls. A fragment shader over a quad is sufficient; Mandelbrot, compute and 3D are not prerequisites.
+
+This is planned, not implemented. First define neutral program/uniform/resource ownership and a custom-pass contract for the owned surface, including resize, failure and teardown. The internal RHI has shader modules and pipelines; the current public `GpuCtrl` painter callback is still a 2D display-list API. Keep shader sources and reproducible compiler recipes alongside generated backend artifacts. Show an explicit unavailable/error state instead of disguising a CPU raster as a programmable shader.
+
+[BGFX review](BGFX_REVIEW.md) records shader packaging, multi-window reuse and scheduling patterns from the user's fork.
+
+## Load diagnostic
+
+The small product demo shows behavior, not performance acceptance. Use fixed-seed, fixed-duration runs with identical and unique images/text/vector content, cold and warm caches, and one/two/ten surfaces. Vary item count and surface size separately.
+
+Collect CPU recording/replay time, fence/acquire/present time, UI event/timer delay, upload bytes/counts and retained memory/resource counts. Report p50/p95/p99/max and final cleanup. Exercise resize, hide/show and close/recreate under load, with a deliberately heavy sibling surface. A render thread still needs backpressure and fair per-surface scheduling.
+
+The existing renderer statistics cover draw/batch counts, cache misses, uploads and vertex capacity in part; they do not yet establish complete resident GPU bytes or UI responsiveness. See [release gates](RELEASE_CANDIDATE.md) for acceptance requirements.
 
 ## Current sequence
 
-1. Keep the four canonical examples small and representative of the public API.
-2. Keep lifecycle/multi-surface/resource-accounting probes under `examples/diagnostics`.
-3. Complete the consolidated productization/Stage-5 Windows acceptance.
-4. Add new specialized demos only when their underlying product capability exists; do not create placeholder API commitments for future effects/compute/backends.
+Productization/H1, Stage 5 and UI1-C have recorded acceptance; they are not unstarted work. Establish fresh evidence on the final renderer/Ui source combination, finish UI1-D shared immutable resources and memory policy, then validate bounded scheduling under load. Complete visual review and documentation/build reproducibility before naming a release candidate.
+
+Offscreen effects, compute demos, Metal/WebGPU and browser hosting remain future scopes.

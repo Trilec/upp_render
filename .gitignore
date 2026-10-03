@@ -68,3 +68,5 @@ Testing/
 .cache/
 /upp_guides
 /out
+.klick-patch.lock
+/.klick-patch

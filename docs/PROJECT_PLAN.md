@@ -74,7 +74,8 @@ Required completion:
 Acceptance/demo targets:
 
 - `GpuUiGallery` — full root-composited U++ UI with a lightweight animated custom `Ctrl`;
-- `GpuEmbeddedMotion` — ordinary U++ window with a lightweight animated `GpuCtrl`;
+- `GpuSurfaceDemo` — ordinary Ui shell with one/two adjustable embedded `GpuCtrl` surfaces;
+- `examples/diagnostics/GpuEmbeddedMotion` — retained stock-U++/GDI compatibility probe;
 - `GpuUiCoverageTest` — representative standard-control tree must record without unsupported common Draw operations and replay through the software reference.
 
 The animated demo is deliberately cheap: a small deterministic calm-particle field at a modest refresh rate. It is intended to look pleasant while making redraw, resize and presentation stalls obvious on low-end hardware.
@@ -85,7 +86,7 @@ Accepted. See `docs/ACTIVE_WORK.md` for the compact recovery checkpoint.
 
 ### UI1-C — transient and multi-window completion
 
-Active until real product-control menu/context-menu, tooltip and consolidated root-smoke acceptance pass.
+**PASS / accepted.** Real product-control menus, dropdowns, tooltip and consolidated root-smoke acceptance are recorded in `docs/ACTIVE_WORK.md`.
 
 Do not broaden this milestone into a renderer redesign. Architecture discoveries that do not block transient correctness belong in UI1-D/UI2 planning.
 
@@ -211,9 +212,19 @@ Once a second backend is executable:
 - diagnose root causes; do not weaken tests to accommodate architecture changes;
 - publish coherent recoverable checkpoints and keep `docs/ACTIVE_WORK.md` compact/current.
 
+## Embedded-surface product demonstration
+
+`GpuSurfaceDemo` follows the UiLabel / UiProgressRing shell and puts one or two bounded Vulkan `GpuCtrl` instances inside an ordinary Ui application. Its inspector changes width/height, shape count/type, speed, grid/text/background and per-surface animation. Randomize and second-surface destruction/recreation make drawing and lifetime behavior visible. The Code page emits a complete minimal public-API application.
+
+Surface ownership independence is already implemented; render-thread isolation is not. Current `GpuCtrl` recording/presentation executes synchronously in the GUI paint handler, including Vulkan frame/fence waits. Future off-thread preparation/render scheduling needs a bounded explicit design for immutable handoff, shared queue synchronization and safe teardown. It must not move ordinary Ui control access onto arbitrary workers.
+
 ## Current sequence
 
-1. Finish UI1-C: real `UiMenu`/context-menu, tooltip and consolidated root-smoke acceptance.
+1. Review the embedded `GpuSurfaceDemo` product example and maintain current cross-repository validation; UI1-C is accepted.
 2. UI1-D: explicit shared immutable resource identity/lifetime, reuse and survivor tests.
 3. UI2: focused `upp_Ui` integration/convergence milestone with damage/parity requirements.
 4. Then begin WebGPU provider work on the current machine; Metal follows when executable Apple validation is available.
+
+## Version 1 release preparation
+
+The release candidate is Windows/Vulkan-first. Current RC scope, measured memory/responsiveness requirements, shader boundary and demo distribution are recorded in [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md). BGFX is a design reference ([BGFX_REVIEW.md](BGFX_REVIEW.md)); no backend replacement or dependency adoption is implied.

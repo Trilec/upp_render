@@ -1,16 +1,29 @@
 # Examples
 
-Start here:
+## Product demonstrations
 
-- `GpuRenderEmbedded` — minimal `GpuCtrl` inside a normal U++ layout.
-- `GpuEmbeddedMotion` — ordinary U++/GDI controls surrounding a lightweight animated `GpuCtrl`; demonstrates the bounded accelerated-surface use case.
-- `GpuRenderWindow` — use `GpuWindow` when the whole client area is custom GPU content.
-- `GpuRenderUiWindow` — minimal `GpuTopWindow` example for ordinary U++ controls on one root GPU surface.
-- `GpuUiGallery` — broader full-UI acceptance/demo: standard U++ controls, `ArrayCtrl`, slider/progress, animated custom `Ctrl`, and a second modal `GpuTopWindow` surface.
-- `RendererShowcase` — renderer capability showcase and software/GPU comparison.
+| Package | Purpose |
+| --- | --- |
+| `GpuSurfaceDemo` | Embedded Vulkan controls in the Ui shell: adjustable size, randomized shapes, optional antialiasing, pause and second-surface lifetime. See its [README](GpuSurfaceDemo/README.md). |
+| `GpuUiGallery` | Whole-window GPU composition of ordinary Ui controls, animated Draw content, menus, dropdowns, tooltip and modal window. |
+| `RendererShowcase` | Rendering capabilities and software/GPU comparison. |
 
-The two motion/gallery examples deliberately stay lightweight. `GpuUiGallery` draws its animated panel through ordinary U++ `Draw`, proving the control-recording/root-compositor path. `GpuEmbeddedMotion` draws through `GpuPainter`, proving the separate native child-surface path.
+These are the product demo set for version 1 preparation. They demonstrate different public use cases. The surface demo's current smoke is not a load benchmark; full current-source visual/regression acceptance remains in [ACTIVE_WORK](../docs/ACTIVE_WORK.md).
 
-`RendererShowcaseScene` is shared showcase/test scene data, not a separate user-facing API.
+## Minimal source tutorials
 
-Older bring-up, lifecycle and low-level demonstrations live under `diagnostics/`. They are useful for renderer/backend development but are not competing public APIs.
+| Package | Entry point |
+| --- | --- |
+| `GpuRenderEmbedded` | `GpuCtrl` inside an ordinary U++ layout |
+| `GpuRenderWindow` | `GpuWindow` for custom whole-window drawing |
+| `GpuRenderUiWindow` | `GpuTopWindow` for the root-composited control tree |
+
+Tutorials remain small copyable source examples, rather than additional showcase apps.
+
+## Development support
+
+`RendererShowcaseScene` is shared scene data used by both the showcase and `tests/RendererShowcaseTest`; retain it wherever either package is built.
+
+Older bring-up/lifecycle probes and the stock-control `GpuEmbeddedMotion` compatibility example are under [diagnostics](diagnostics/README.md). They are development tools, not product demos.
+
+A future shader mode belongs in `GpuSurfaceDemo` after the custom-render contract exists. Load testing belongs in a diagnostic harness with reproducible metrics. See [demo roadmap](../docs/DEMO_ROADMAP.md) and [release gates](../docs/RELEASE_CANDIDATE.md).

@@ -1,0 +1,15 @@
+uses
+    Core,
+    CtrlLib,
+    Ui,
+    GpuRender,
+    Painter,
+    Utilities/PropertyEditor;
+
+file
+    GpuSurfaceDemo.h,
+    GpuSurfaceDemo.cpp,
+    main.cpp;
+
+mainconfig
+    "" = "GUI";
