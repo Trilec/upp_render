@@ -42,8 +42,8 @@ both records are retained. The final candidate passed SDK-free Caro embedded 16/
 normal, load and five-minute soak checks. The owner manually confirmed AA and app
 operation with no observed problems and accepted PASS. The agent's remote native
 checklist could not run; that tool limitation is retained rather than relabelled.
-No public tag or release has been published. Local checks do not certify every driver,
-Ui control or future backend.
+The RC1 tag identifies the final source snapshot; release publication is a separate
+step. These checks do not certify every driver, Ui control or future backend.
 
 ## Memory and load acceptance protocol
 
