@@ -6,7 +6,7 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 
 - Repository: `Trilec/upp_render`; work on `main`.
 - Current source: `main`; qualification baseline `5d7ed27`; exact candidate commit is in its manifest.
-- Ui dependency: `b86e59849adfc6992d08ad3eaa09f90b2839c63d`; clean working tree.
+- Ui dependency: `b86e59849adfc6992d08ad3eaa09f90b2839c63d`; qualified dependency pin.
 - Build baseline: U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0, Windows x64.
 - After a Ui change, clean rebuild renderer callers with `-ab`/`-abr`.
 - Fetch remote main before new work; preserve uncommitted work and recovery journals.

@@ -43,6 +43,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ui", type=Path, required=True)
     parser.add_argument("--animation", type=Path, required=True)
+    parser.add_argument("--ui-ref", help="Explicit qualified Ui commit; do not package its working tree")
+    parser.add_argument("--animation-ref", help="Explicit qualified Animation commit")
     parser.add_argument("--uppsrc", type=Path, required=True)
     parser.add_argument("--clang", type=Path, required=True, help="Bundled clang root for runtime notices")
     parser.add_argument("--name", required=True, help="New output folder name within build")
@@ -56,17 +58,18 @@ def main():
     if git(root, "status", "--porcelain").strip():
         raise RuntimeError("Renderer source must be clean for RC1 packaging")
     source = source_files(root)
-    for dependency in (args.ui, args.animation):
-        if git(dependency, "status", "--porcelain").strip():
+    for dependency, ref in ((args.ui, args.ui_ref), (args.animation, args.animation_ref)):
+        if ref is None and git(dependency, "status", "--porcelain").strip():
             raise RuntimeError("Dependency must be clean for a pinned candidate: " + str(dependency))
     runtime = {}
     for name in ("GpuUiGallery", "GpuSurfaceDemoRelease", "RendererShowcase"):
         runtime[name + ".exe"] = (root / "build" / (name + ".exe")).read_bytes()
     notices = {
         "LICENSE-renderer.txt": root / "LICENSE",
-        "LICENSE-Ui.txt": args.ui / "LICENSE",
-        "LICENSE-Animation.txt": args.animation / "LICENSE",
+
     }
+    runtime["licenses/LICENSE-Ui.txt"] = git(args.ui, "show", (args.ui_ref or "HEAD") + ":LICENSE")
+    runtime["licenses/LICENSE-Animation.txt"] = git(args.animation, "show", (args.animation_ref or "HEAD") + ":LICENSE")
     for package in ("Core", "Draw", "Painter", "CtrlCore", "CtrlLib", "RichText",
                     "plugin/bmp", "plugin/png", "plugin/z"):
         notices["Upp-" + package.replace("/", "-") + "-Copying.txt"] = args.uppsrc / package / "Copying"
@@ -128,8 +131,8 @@ def main():
         "scope": "Windows/Vulkan v1 RC1; renderer source snapshot",
         "renderer_dirty": bool(git(root, "status", "--porcelain").strip()),
         "renderer_base": git(root, "rev-parse", "HEAD").decode().strip(),
-        "ui": git(args.ui, "rev-parse", "HEAD").decode().strip(),
-        "animation": git(args.animation, "rev-parse", "HEAD").decode().strip(),
+        "ui": git(args.ui, "rev-parse", args.ui_ref or "HEAD").decode().strip(),
+        "animation": git(args.animation, "rev-parse", args.animation_ref or "HEAD").decode().strip(),
         "toolchain": "U++ 18468; clang 21.1.1; C++17; Vulkan SDK 1.4.350.0; Windows x64",
         "source_files": {name: digest(data) for name, data in sorted(source.items())},
         "runtime_files": {name: digest(data) for name, data in sorted(runtime.items())},
