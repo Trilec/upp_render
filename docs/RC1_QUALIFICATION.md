@@ -1,5 +1,5 @@
 # Windows/Vulkan RC1 qualification
-Updated 2026-10-04. Qualification is in progress; RC1 is not tagged or published.
+Updated 2026-10-04. Qualification acceptance is complete. RC1 publication is tracked separately.
 
 ## Sustained memory and responsiveness
 The earlier 20-second load result was insufficient to establish a memory plateau.
@@ -70,21 +70,39 @@ This is a declared bounded workload, not independently scheduled GPU queues.
 - Clean non-BLITZ Release Gallery: PASS. Refreshed embedded smoke: 16/16 PASS.
 - Refreshed normal/load runs: p99/max 20.70/26.45 ms and 25.00/29.49 ms; final ZERO.
 - Packaging requires the complete passing reports and verifies ZIP CRC/entry hashes.
-- Separate Windows runtime test: original candidate passes Caro embedded 16/16,
-  normal and load modes without SDK/toolchain. Final refreshed candidate remains pending.
+- Final separate Windows runtime checks: embedded 16/16, normal, load and five-minute soak PASS.
+- Owner manual acceptance on 2026-10-04: AA works, app runs, no observed problems; PASS.
 
 ## Second-machine check
-KlickCaro Render is project-ED940563C935, primary root C:/GitHub/upp_render.
-Machine selection relies on the user's chosen connection configuration.
-The initial candidate at renderer 5d7ed27 was copied as a runtime ZIP only.
-Its SHA-256 is 1c799f5e2df27141a266d47bc27f51546ec87889bc2da17c9d0d0d3ce8a4fff1.
-All three extracted executable hashes match its candidate manifest.
-The user confirms neither U++ nor Vulkan SDK is installed on Caro. The extracted
-original candidate passes embedded 16/16, normal p99 26.71 ms/max 30.76 ms and
-load p99 29.54 ms/max 31.09 ms. Both Gallery reports end with ownership ZERO.
-This establishes SDK-free execution of the original candidate; final-candidate
-sustained and native acceptance is still pending.
-The post-soak fix requires a refreshed candidate before final RC1 qualification.
+The final refreshed binaries were verified against the qualification manifest:
+Gallery SHA-256 828a28039a724ea01ae2f9d0646b3ae5f58df379c3cf19335e4477c4fbbaba7c.
+Surface SHA-256 0d2ca7c6686ebaca9615d4f8fc49afd5c5d81939ed339287a3fa793ac86e074c.
+Showcase SHA-256 41e507e343e5ecc859b9fff5357692d6d8cb39e220f36e3f4573098742c4c30f.
+
+The second machine runs Windows 11 Pro build 26200, Intel i7-13700H and Iris Xe,
+driver 31.0.101.3688 (2022-10-06), Vulkan GPU API 1.3.226. Neither U++ nor Vulkan
+SDK is installed; no toolchain, SDK or driver installation was needed.
+
+| Final SDK-free run | UI p99 / max | Private peak bytes | Result |
+| --- | --- | --- | --- |
+| Embedded self-test | 16/16 checks | — | PASS |
+| Gallery normal | 29.60 / 31.31 ms | 241,844,224 | PASS |
+| Gallery load | 24.73 / 31.97 ms | 561,094,656 | PASS |
+| Gallery 300 s soak | 29.74 / 38.36 ms | 667,029,504 | PASS |
+
+The soak has 28 memory samples: first/last four means 568,559,616/561,989,632
+bytes, growth -6,569,984 bytes, and final native ownership ZERO. Heavy scene
+presentation is approximately 10 frames/s on Iris Xe; no frame-rate gate was
+defined. UI responsiveness acceptance does not establish smooth heavy-scene animation.
+
+The first hidden-launch soak presented zero frames and failed; the visible rerun
+of the same binary passed with exit zero. Both attempts remain in the evidence.
+The remote agent could not initialize Computer Use, so its native checklist was
+not performed. The owner then manually ran the app, confirmed aliasing/antialiasing
+works and no observed problems, and explicitly accepted PASS on 2026-10-04.
+This records the owner's acceptance, without asserting independent completion of
+each menu, keyboard, resize or Showcase checklist item. Earlier development-machine
+native review covers representative controls, colours, AA and lifecycle.
 
 No compiler or Vulkan SDK is needed to run the product executables. An installed
 Vulkan 1.3-capable graphics driver/runtime is required. Validation layers are
@@ -92,7 +110,8 @@ optional; omit --validation on a machine without them. Confirm Windows/GPU/drive
 compiler/SDK absence, native input/AA/resize/lifecycle and normal shutdown.
 
 ## Publication
-RC1 remains withheld until the sustained checks and second-machine runtime/native
-review pass. Keep source/runtime packages and third-party notices, checksum records
+Sustained and second-machine acceptance have passed. The RC1 distribution uses the
+same qualified executable hashes; final documentation and packaging changes require
+no renderer rebuild. The tag/release is a separate publication step. Keep source/runtime packages and third-party notices, checksum records
 and known limitations together. Do not publish the branch-history bundle as a
 product release asset. Only main remains; no extra development branch is required.

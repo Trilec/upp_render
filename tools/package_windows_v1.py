@@ -46,12 +46,15 @@ def main():
     parser.add_argument("--uppsrc", type=Path, required=True)
     parser.add_argument("--clang", type=Path, required=True, help="Bundled clang root for runtime notices")
     parser.add_argument("--name", required=True, help="New output folder name within build")
+    parser.add_argument("--qualification", type=Path, required=True, help="Final SDK-free evidence folder including acceptance.json")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if Path(args.name).name != args.name or args.name in (".", ".."):
         parser.error("--name must be a single folder name")
     output = root / "build" / args.name
     output.mkdir(exist_ok=False)
+    if git(root, "status", "--porcelain").strip():
+        raise RuntimeError("Renderer source must be clean for RC1 packaging")
     source = source_files(root)
     for dependency in (args.ui, args.animation):
         if git(dependency, "status", "--porcelain").strip():
@@ -79,7 +82,7 @@ def main():
     for name in ("WINDOWS_VULKAN_V1.md", "GPU_CTRL_USAGE.md", "RELEASE_CANDIDATE.md", "RC1_QUALIFICATION.md"):
         runtime["docs/" + name] = source["docs/" + name]
     runtime["README.txt"] = (
-        "Windows/Vulkan v1 local candidate\n"
+        "Windows/Vulkan v1 release candidate\n"
         "Run GpuUiGallery.exe for the whole-Ui application, GpuSurfaceDemoRelease.exe "
         "for embedded surfaces, or RendererShowcase.exe for rendering comparisons.\n"
         "Requires Windows x64 with POPCNT and a compatible Vulkan 1.3 GPU/driver "
@@ -91,7 +94,7 @@ def main():
         "GPU client-area composition retains Windows/font/GDI platform dependencies.\n"
         "Source archive contains the renderer working tree; external Ui, Animation "
         "and U++ sources/toolchain are not bundled. See manifest dependency pins.\n"
-        "No public release/tag or separate clean-machine installation is implied.\n"
+        "See evidence/second-machine/acceptance.json for final SDK-free owner acceptance.\n"
     ).encode()
     for name in ("GpuUiGallery-normal.txt", "GpuUiGallery-load.txt", "GpuUiGallery-soak.txt",
                  "GpuSiblingLoad.txt", "v1-validation.json", "rc1-qualification-final.json"):
@@ -108,8 +111,21 @@ def main():
                 b"sibling_responsiveness=PASS" not in data or b"final_native_ownership=ZERO" not in data):
             raise RuntimeError("Incomplete or failed sibling evidence")
         runtime["evidence/" + name] = data
+    acceptance = None
+    if args.qualification:
+        acceptance = json.loads((args.qualification / "acceptance.json").read_text(encoding="utf-8"))
+        if acceptance["status"] != "PASS":
+            raise RuntimeError("Second-machine acceptance has not passed")
+        if set(acceptance["executables"]) != {"GpuUiGallery.exe", "GpuSurfaceDemoRelease.exe", "RendererShowcase.exe"}:
+            raise RuntimeError("Qualification must identify all three product executables")
+        for name, expected in acceptance["executables"].items():
+            if digest(runtime[name]) != expected:
+                raise RuntimeError("Qualified executable identity mismatch: " + name)
+        for path in sorted(args.qualification.iterdir()):
+            if path.is_file():
+                runtime["evidence/second-machine/" + path.name] = path.read_bytes()
     manifest = {
-        "scope": "Windows/Vulkan v1 local candidate; renderer working-tree snapshot",
+        "scope": "Windows/Vulkan v1 RC1; renderer source snapshot",
         "renderer_dirty": bool(git(root, "status", "--porcelain").strip()),
         "renderer_base": git(root, "rev-parse", "HEAD").decode().strip(),
         "ui": git(args.ui, "rev-parse", "HEAD").decode().strip(),
@@ -118,7 +134,7 @@ def main():
         "source_files": {name: digest(data) for name, data in sorted(source.items())},
         "runtime_files": {name: digest(data) for name, data in sorted(runtime.items())},
         "shader_contract": "Checked-in SPIR-V arrays; no runtime shader compiler. Original generation provenance unavailable.",
-        "clean_machine_install": "Not performed",
+        "clean_machine_install": acceptance or "Not performed",
     }
     encoded = json.dumps(manifest, indent=2).encode() + b"\n"
     source["candidate-manifest.json"] = encoded
@@ -131,7 +147,7 @@ def main():
     if digest(bundle.read_bytes()) != "c00c2ae7060ce55f7d09ca76f5a5d7c8828aca25c93b4bb1918021c351934cec":
         raise RuntimeError("Branch archive identity mismatch")
     (output / bundle.name).write_bytes(bundle.read_bytes())
-    hashes = {path.name: digest(path.read_bytes()) for path in sorted(output.iterdir())}
+    hashes = {path.name: digest(path.read_bytes()) for path in sorted(output.iterdir()) if path.suffix != ".bundle"}
     (output / "SHA256SUMS.txt").write_text(
         "".join(value + "  " + name + "\n" for name, value in hashes.items()), encoding="utf-8")
     print(json.dumps({"output": str(output), "source_files": len(source),

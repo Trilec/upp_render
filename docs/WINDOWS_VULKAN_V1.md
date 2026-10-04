@@ -2,8 +2,8 @@
 
 Updated 2026-10-04. This records the initial local candidate baseline.
 Sustained qualification found and fixed small-image allocation growth; see
-[RC1 qualification](RC1_QUALIFICATION.md) for current results and pending gates.
-A separate clean-machine installation and public release remain unperformed.
+[RC1 qualification](RC1_QUALIFICATION.md) for current results and owner acceptance.
+Final SDK-free second-machine qualification passed; public publication is tracked separately.
 
 ## Product contract
 
