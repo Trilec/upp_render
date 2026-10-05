@@ -7,6 +7,9 @@
 
 namespace Upp {
 
+// Explicit composition anchor: retain the provider in ordinary static-library builds.
+void EnsureVulkanPresentationBackend();
+
 using VulkanProcResolver = FARPROC (WINAPI *)(HMODULE, LPCSTR);
 
 enum class VulkanProbeStatus {

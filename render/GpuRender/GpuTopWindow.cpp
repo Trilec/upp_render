@@ -171,6 +171,13 @@ struct GpuTopWindow::Impl {
 		frame_presented = true;
 		return true;
 	}
+	void EnterRequiredGpuFailure()
+	{
+		String failure = GetGpuError();
+		if(failure.IsEmpty()) failure = "required root GPU presentation failed";
+		StopGpuSession();
+		presentation_error = failure;
+	}
 	void EnterSoftwareFallback()
 	{
 		String failure = GetGpuError();
@@ -204,6 +211,8 @@ struct GpuTopWindow::Impl {
 	String api_error;
 	String session_error;
 	String presentation_error;
+	bool require_gpu = false;
+	uint64 software_fallback_count = 0;
 	bool validation_requested = false;
 	bool init_attempted = false;
 	std::atomic<bool> frame_presented { false };
@@ -244,6 +253,23 @@ GpuTopWindow& GpuTopWindow::SetAsyncPresentation(bool enabled)
 	}
 	return *this;
 }
+GpuTopWindow& GpuTopWindow::SetRequireGpu(bool required)
+{
+	if(impl) {
+		if(IsOpen()) impl->SetApiError("GPU requirement must be selected before opening");
+		else impl->require_gpu = required;
+	}
+	return *this;
+}
+void GpuTopWindow::ReportGpuFailure(const String& error)
+{
+	if(impl && impl->require_gpu) {
+		impl->SetSessionError(error);
+		impl->RequestGpuRefresh();
+	}
+}
+bool GpuTopWindow::IsGpuRequired() const { return impl && impl->require_gpu; }
+uint64 GpuTopWindow::GetSoftwareFallbackCount() const { return impl ? impl->software_fallback_count : 0; }
 GpuPresentationStats GpuTopWindow::GetGpuStats() const { return impl ? impl->GetStats() : GpuPresentationStats(); }
 bool GpuTopWindow::IsGpuReady() const { return impl && impl->IsGpuReady(); }
 String GpuTopWindow::GetGpuError() const { return impl ? impl->GetGpuError() : String(); }
@@ -268,6 +294,20 @@ void GpuTopWindow::NcCreate(HWND hwnd) { TopWindow::NcCreate(hwnd); if(impl) imp
 void GpuTopWindow::PreDestroy() { if(impl) impl->StopGpuSession(); TopWindow::PreDestroy(); }
 LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
+	if(impl && impl->require_gpu) {
+		if(message == WM_ERASEBKGND) return 1;
+		if(message == WM_PAINT) {
+			HWND hwnd = GetHWND();
+			if(hwnd && IsWindow(hwnd)) {
+				if(impl->IsGpuReady() && (!impl->GetGpuError().IsEmpty() || !impl->PresentRoot(hwnd)))
+					impl->EnterRequiredGpuFailure();
+				PAINTSTRUCT ps;
+				BeginPaint(hwnd, &ps);
+				EndPaint(hwnd, &ps);
+			}
+			return 0;
+		}
+	}
 	if(message == WM_ERASEBKGND && impl && impl->IsGpuReady() && impl->HasPresentedFrame())
 		return 1;
 	if(message == WM_PAINT && impl && impl->IsGpuReady()) {
@@ -282,6 +322,7 @@ LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 			impl->EnterSoftwareFallback();
 		}
 	}
+	if(message == WM_PAINT && impl) ++impl->software_fallback_count;
 	return TopWindow::WindowProc(message, wParam, lParam);
 }
 #endif

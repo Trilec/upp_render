@@ -5,8 +5,8 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 ## Recovery
 
 - Repository: `Trilec/upp_render`; work on `main`.
-- Current source: `main`; qualification baseline `5d7ed27`; exact candidate commit is in its manifest.
-- Ui dependency: `b86e59849adfc6992d08ad3eaa09f90b2839c63d`; qualified dependency pin.
+- Current source: main; RC1 source and dependencies remain pinned in its manifest.
+- RC1 Ui pin: b86e598; UI2 uses the current development dependency snapshot.
 - Build baseline: U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0, Windows x64.
 - After a Ui change, clean rebuild renderer callers with `-ab`/`-abr`.
 - Fetch remote main before new work; preserve uncommitted work and recovery journals.
@@ -38,10 +38,6 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
   time, private bytes, cache payloads and final native ownership.
 - Real Vulkan 1/2/10-surface test: identical image uploads once; 4096 native bytes;
   bounded unique-image churn; surviving surface after first close; final ZERO.
-- Before shape reuse: 96-particle p99 UI delay 274.29 ms, private peak 1.56 GB.
-  After reuse: p99 27.63 ms, private peak 272 MB (pre-final-sharing run).
-- Final Release 512-particle run, validation ON: p99 UI delay 18.72 ms, max 29.84 ms;
-  178 presented, 937 stale frames replaced, at most one pending; final ZERO.
 - GPU timestamps are unavailable. Acquire/replay/present timings are CPU elapsed time.
 - Cache churn/warm/exhaustion/recovery, vector translation/gradient phase and async
   resize/close/reopen regressions passed. 34-target Release baseline and 22 affected final reruns passed.
@@ -78,10 +74,22 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 - Atomic exact-head remote deletion and local removal completed; only main remains.
 - Preserve the archive separately when cleaning build outputs.
 
+## UI2 Drawing Integration — 2026-10-05
+
+- Working on main after the preserved v1.0.0-rc1 tag at 501fb1f.
+- Drawing/host audit: docs/UI2_DRAWING_AUDIT.md; reproducible 55-control source inventory.
+- Added required GPU mode and owned-transient failure propagation; default fallback retained.
+- GpuUiGallery --require-gpu reports failure and exits; benchmark counts root fallback.
+- Debug/Release root/worker/startup/retry/owned-popup fault tests PASS; default/required popup lifecycle PASS.
+- Non-BLITZ provider registration was omitted by static linking; fixed with an explicit composition anchor.
+- Required Gallery normal/load PASS: UI p99 18.42/18.03 ms, zero fallback and final ZERO.
+- Gallery development build uses the current Ui tree, separate from RC1 dependency pins.
+- Next drawing gap: source-rectangle images and mask tint/opacity, then portable text/host.
+- RC1 publication is owner-managed; do not infer publication from the Git tag.
+
 ## Remaining Acceptance
 
 - Local, sustained and final Caro qualification accepted; owner manual PASS recorded.
-- Refreshed candidate packages include sustained evidence, hashes and notices; RC1 unpublished.
 - RC1 publication remains separate; heavy Iris Xe soak about 10 FPS is a measured limit.
 - WebGPU/Metal, generic shader/compute APIs and full Ui coverage remain later milestones.
 

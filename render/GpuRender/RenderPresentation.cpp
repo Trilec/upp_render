@@ -5,6 +5,7 @@
 
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderRhi/RenderRhiBackend.h>
+#include <RenderVulkan/RenderVulkan.h>
 #include <memory>
 
 namespace Upp {
@@ -258,6 +259,7 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 	impl->backend = backend;
 	impl->native_window = native_window;
 
+	if(backend == GpuBackendKind::Vulkan) EnsureVulkanPresentationBackend();
 	GpuPresentationBackend *provider = FindGpuPresentationBackend(backend);
 	if(!provider) {
 		impl->error = backend == GpuBackendKind::Unknown ? String("backend not selected")

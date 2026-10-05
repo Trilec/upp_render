@@ -14,6 +14,12 @@ using namespace Upp;
 
 namespace {
 
+static String BenchmarkReportPath(bool heavy, bool soak, bool required)
+{
+	return GetExeDirFile(String("GpuUiGallery-") + (required ? "required-" : "") +
+	                     (soak ? "soak" : heavy ? "load" : "normal") + ".txt");
+}
+
 enum SceneMode {
 	SCENE_ORBIT = 0,
 	SCENE_FLOW,
@@ -202,6 +208,9 @@ public:
 		Add(message_.HSizePos(22, 22).TopPos(22, 30));
 		Add(note_.HSizePos(22, 22).TopPos(70, 32));
 		Add(close_.RightPos(22, 100).BottomPos(20, 34));
+		SetTimeCallback(-250, [=] {
+			if(IsGpuRequired() && !GetGpuError().IsEmpty()) { SetExitCode(1); Close(); }
+		});
 	}
 
 private:
@@ -253,7 +262,12 @@ public:
 
 		SetTimeCallback(-250, [=] {
 			String e = GetGpuError();
-			gpu_state_.SetText(e.IsEmpty() ? "Vulkan root compositor active" : "GPU compositor: " + e);
+			gpu_state_.SetText(e.IsEmpty() ? String(IsGpuReady() ? "Vulkan root compositor active" : "GPU initialization pending") : "GPU compositor: " + e);
+			if(IsGpuRequired() && !e.IsEmpty()) {
+				SaveFile(GetExeDirFile("GpuUiGallery-gpu-failure.txt"), e + "\n");
+				SetExitCode(1);
+				Close();
+			}
 		});
 
 		SyncAllControlsFromScene();
@@ -265,7 +279,7 @@ public:
 		benchmark_heavy_ = heavy;
 		benchmark_soak_ = soak;
 		benchmark_seconds_ = seconds;
-		SaveFile(GetExeDirFile(soak ? "GpuUiGallery-soak.txt" : heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt"), "benchmark_status=RUNNING\n");
+		SaveFile(BenchmarkReportPath(heavy, soak, IsGpuRequired()), "benchmark_status=RUNNING\n");
 		benchmark_started_ = NowMs();
 		benchmark_due_ = benchmark_started_ + 16;
 		SetTimeCallback(-16, [=] { BenchmarkTick(); }, 987);
@@ -530,6 +544,7 @@ private:
 	void OpenDialog()
 	{
 		GalleryDialog dlg;
+		dlg.SetRequireGpu(IsGpuRequired());
 		dlg.Run();
 		SetStatus("Modal GpuTopWindow closed; the scene state was preserved.");
 	}
@@ -596,7 +611,7 @@ private:
 		const double p99 = Percentile(benchmark_delays_, 0.99);
 		const double worst = Percentile(benchmark_delays_, 1.0);
 		const bool pass = IsGpuReady() && GetGpuError().IsEmpty() &&
-		                  stats.presented_frames >= 50 && p99 >= 0 && p99 <= 50 && worst <= 100;
+		                  stats.presented_frames >= 50 && (!IsGpuRequired() || GetSoftwareFallbackCount() == 0) && p99 >= 0 && p99 <= 50 && worst <= 100;
 		uint64 early = 0, late = 0;
 		if(benchmark_soak_ && benchmark_memory_.GetCount() >= 8) {
 			const int n = benchmark_memory_.GetCount();
@@ -623,6 +638,8 @@ private:
 		       << "image_cache_entry_peak=" << benchmark_image_entries_ << "\n"
 		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
 		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"
+		       << "gpu_required=" << (IsGpuRequired() ? 1 : 0) << "\n"
+		       << "software_fallback_count=" << AsString(GetSoftwareFallbackCount()) << "\n"
 		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
 		       << "gpu_timestamp_ms=unavailable\n"
 		       << "gpu_error=" << GetGpuError() << "\n"
@@ -635,7 +652,7 @@ private:
 			for(uint64 bytes : benchmark_memory_) report << "private_sample_bytes=" << AsString(bytes) << "\n";
 			for(uint64 bytes : benchmark_heap_) report << "upp_heap_sample_bytes=" << AsString(bytes) << "\n";
 		}
-		const String path = GetExeDirFile(benchmark_soak_ ? "GpuUiGallery-soak.txt" : benchmark_heavy_ ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		const String path = BenchmarkReportPath(benchmark_heavy_, benchmark_soak_, IsGpuRequired());
 		if(!SaveFile(path, report)) SetExitCode(2);
 		else if(!pass || !plateau) SetExitCode(1);
 		Close();
@@ -689,6 +706,7 @@ GUI_APP_MAIN
 	bool soak = false;
 	int seconds = 300;
 	bool validation = false;
+	bool require_gpu = false;
 	for(const String& arg : CommandLine()) {
 		if(arg == "--benchmark" || arg == "--benchmark-load") {
 			benchmark = true;
@@ -700,10 +718,12 @@ GUI_APP_MAIN
 			if(IsNull(seconds) || seconds < 20 || seconds > 300) { SetExitCode(2); return; }
 		}
 		if(arg == "--validation") validation = true;
+		if(arg == "--require-gpu") require_gpu = true;
 	}
 	{
 		GpuUiGallery app;
 		if(validation) app.SetValidation();
+		if(require_gpu) app.SetRequireGpu();
 		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
 		app.Run();
 	}
@@ -712,7 +732,7 @@ GUI_APP_MAIN
 		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&
 		            d.device_live_count == 0 && d.surface_live_count == 0 && d.swapchain_live_count == 0 &&
 		            VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
-		String path = GetExeDirFile(soak ? "GpuUiGallery-soak.txt" : heavy ? "GpuUiGallery-load.txt" : "GpuUiGallery-normal.txt");
+		String path = BenchmarkReportPath(heavy, soak, require_gpu);
 		String report = LoadFile(path);
 		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
 		SaveFile(path, report);

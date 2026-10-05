@@ -103,4 +103,10 @@ static bool s_vulkan_backend_registered =
 
 } // namespace
 
+void EnsureVulkanPresentationBackend()
+{
+	if(!IsGpuPresentationBackendRegistered(GpuBackendKind::Vulkan))
+		RegisterGpuPresentationBackend(GpuBackendKind::Vulkan, s_vulkan_backend);
+}
+
 }

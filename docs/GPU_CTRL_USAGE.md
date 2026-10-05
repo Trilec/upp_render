@@ -114,3 +114,20 @@ These are pixel payload and entry limits, not total driver VRAM limits. Native a
 ## Colour contract
 
 Authored Ui/Draw colours and Image RGB bytes are sRGB encoded. Replay uses matching BGRA texture formats for U++ pixel storage, converts solid/text RGB for an sRGB target, and leaves alpha linear. UNORM targets preserve encoded RGB values. Images retain separate warm sampling variants when target colour space changes. Low-level GpuClearColor is already a GPU-space value; public presentation converts its Rgba8 background for the acquired target.
+
+Ordinary static-library builds explicitly retain the Vulkan presentation provider
+through GpuRender; application code does not need provider-registration calls.
+
+## Required GPU acceptance mode
+
+Call GpuTopWindow::SetRequireGpu() before opening when software fallback must be
+considered a failure. GetGpuError() retains startup/record/replay failures; explicit
+RetryGpuInit() is needed to retry a failed root. Owned transient presenters inherit
+the requirement and propagate failures to the root. Default applications retain
+software fallback. GetSoftwareFallbackCount() counts root native paint dispatches
+to TopWindow software painting, not CPU rasterization or total GDI use.
+
+GpuUiGallery --require-gpu --benchmark exercises this mode and writes gpu_required
+and software_fallback_count in its report. Required runs write the separate
+GpuUiGallery-required-normal/load/soak.txt reports. This mode still uses Windows hosting
+and font APIs. See [UI2 drawing audit](UI2_DRAWING_AUDIT.md) for remaining portability work.

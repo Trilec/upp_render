@@ -146,6 +146,12 @@ private:
 	bool fail_after_record = false;
 };
 
+class UnsupportedPopupCtrl : public Ctrl {
+public:
+	int paints = 0;
+	void Paint(Draw& w) override { ++paints; w.BeginNative(); w.EndNative(); }
+};
+
 } // namespace
 
 GUI_APP_MAIN
@@ -314,6 +320,83 @@ GUI_APP_MAIN
 		ok &= Check(closed.runtime_live_count == 0 && closed.device_live_count == 0 &&
 		            closed.surface_live_count == 0 && closed.swapchain_live_count == 0,
 		            "async close/reopen cycles must leave zero native ownership");
+	}
+
+
+	// Required mode must consume native paint without entering software rendering,
+	// including startup failure, post-record failure and asynchronous admission.
+	for(int async = 0; async < 2; ++async) {
+		FallbackPresentationWindow win;
+		win.SetRequireGpu().SetAsyncPresentation(async != 0);
+		win.Open();
+		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
+			PumpEvents(1);
+		ok &= Check(win.IsGpuReady() && win.GetGpuStats().presented_frames > 0,
+		            "required GPU mode must successfully present before fault injection");
+		ok &= Check(win.IsGpuRequired() && win.GetSoftwareFallbackCount() == 0,
+		            "required GPU startup must never enter root software painting");
+		const int left_before = win.GetLeftPaintCount();
+		const int right_before = win.GetRightPaintCount();
+		win.ArmPostRecordFailure();
+		win.RefreshLeftProbe();
+		PumpEvents(100);
+		ok &= Check(!win.IsGpuReady() &&
+		            win.GetGpuError().Find("intentional post-record root frame failure") >= 0,
+		            "required GPU failure must stop presentation and retain its diagnostic");
+		ok &= Check(win.GetSoftwareFallbackCount() == 0 &&
+		            win.GetLeftPaintCount() == left_before + 1 &&
+		            win.GetRightPaintCount() == right_before + 1,
+		            "failed recording must not be followed by a software repaint");
+		const int failed = win.GetFailedBuildCount();
+		win.RequestGpuRefresh();
+		PumpEvents(30);
+		ok &= Check(win.GetFailedBuildCount() == failed && win.GetSoftwareFallbackCount() == 0,
+		            "required failure must remain stable without retry or software oscillation");
+		win.ArmPostRecordFailure(false);
+		win.RetryGpuInit();
+		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
+			PumpEvents(1);
+		ok &= Check(win.IsGpuReady() && win.GetGpuError().IsEmpty() &&
+		            win.GetGpuStats().presented_frames > 0 && win.GetSoftwareFallbackCount() == 0,
+		            "explicit required-mode retry must restore GPU presentation");
+		win.Close();
+		PumpEvents(20);
+	}
+	{
+		RootPresentationWindow win;
+		win.SetRequireGpu().SetBackend(GpuBackendKind::Metal);
+		win.Open();
+		PumpEvents(30);
+		ok &= Check(!win.IsGpuReady() && !win.GetGpuError().IsEmpty() &&
+		            win.GetSoftwareFallbackCount() == 0 && win.GetRootPaintCount() == 0,
+		            "unsupported required backend must not silently paint through software");
+		win.Close();
+		PumpEvents(20);
+	}
+
+
+	{
+		RootPresentationWindow win;
+		win.SetRequireGpu();
+		win.Open();
+		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
+			PumpEvents(1);
+		UnsupportedPopupCtrl popup;
+		popup.SetRect(200, 200, 120, 60);
+		popup.PopUp(&win, true, false, false, false);
+		PumpEvents(100);
+		ok &= Check(win.GetGpuError().Find("native SystemDraw/GDI") >= 0 &&
+		            !win.IsGpuReady() && win.GetSoftwareFallbackCount() == 0,
+		            "required popup failure must propagate to its root without software fallback");
+		ok &= Check(popup.paints == 1,
+		            "unsupported required popup must record once and never repaint in software");
+		popup.Refresh();
+		PumpEvents(30);
+		ok &= Check(popup.paints == 1,
+		            "failed required popup must consume further paint without retrying");
+		popup.Close();
+		win.Close();
+		PumpEvents(20);
 	}
 
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();

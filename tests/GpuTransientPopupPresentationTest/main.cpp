@@ -85,6 +85,9 @@ GUI_APP_MAIN
 	bool ok = true;
 
 	OwnerWindow win;
+	bool required = false;
+	for(const String& arg : CommandLine()) if(arg == "--require-gpu") required = true;
+	if(required) win.SetRequireGpu();
 	win.Open();
 	ok &= Check(win.IsOpen(), "GPU owner window should open");
 	if(!win.IsOpen()) {
@@ -136,6 +139,9 @@ GUI_APP_MAIN
 	ok &= Check(win.IsGpuReady() && win.GetGpuError().IsEmpty(),
 	            "root GPU window should remain ready after repeated popup lifecycle");
 
+	if(required)
+		ok &= Check(win.GetSoftwareFallbackCount() == 0,
+		            "required owner/popup lifecycle must not enter root software painting");
 	win.Close();
 	ok &= Check(!win.IsOpen(),
 	            "root window should be synchronously closed");

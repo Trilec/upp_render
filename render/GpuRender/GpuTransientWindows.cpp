@@ -9,8 +9,6 @@
 namespace Upp {
 
 #ifdef PLATFORM_WIN32
-namespace {
-
 class GpuTransientWindowHost;
 
 static VectorMap<HWND, GpuTransientWindowHost *>& TransientHosts()
@@ -40,7 +38,7 @@ static GpuTopWindow *FindGpuOwner(Ctrl *ctrl)
 class GpuTransientWindowHost {
 public:
 	GpuTransientWindowHost(Ctrl& target, GpuTopWindow& root)
-		: ctrl(&target), gpu_owner(&root)
+		: ctrl(&target), gpu_owner(&root), required(root.IsGpuRequired())
 	{
 		hwnd = target.GetHWND();
 	}
@@ -57,16 +55,20 @@ public:
 
 		GpuNativeWindowDesc native_window;
 		String native_error;
-		if(!BuildWin32GpuNativeWindowDesc(hwnd, native_window, native_error))
-			return false;
-
 		String open_error;
-		if(!presenter.Open(gpu_owner->GetBackend(), gpu_owner->IsValidationRequested(),
-		                   native_window, open_error))
-			return false;
+		if(!BuildWin32GpuNativeWindowDesc(hwnd, native_window, native_error))
+			last_error = native_error.IsEmpty() ? String("native window descriptor failed") : native_error;
+		else if(!presenter.Open(gpu_owner->GetBackend(), gpu_owner->IsValidationRequested(),
+		                        native_window, open_error))
+			last_error = open_error.IsEmpty() ? (presenter.GetError().IsEmpty() ? String("transient initialization failed") : presenter.GetError()) : open_error;
+		if(!last_error.IsEmpty()) {
+			if(!required) return false;
+			ReportRequiredFailure();
+		}
 
 		old_proc = reinterpret_cast<WNDPROC>(GetWindowLongPtr(hwnd, GWLP_WNDPROC));
 		if(!old_proc) {
+			if(required) { last_error = "transient GPU paint hook unavailable"; ReportRequiredFailure(); ctrl->Hide(); }
 			presenter.Close();
 			return false;
 		}
@@ -81,6 +83,7 @@ public:
 				TransientHosts().Remove(i);
 			presenter.Close();
 			old_proc = nullptr;
+			if(required) { last_error = "transient GPU paint hook installation failed"; ReportRequiredFailure(); ctrl->Hide(); }
 			return false;
 		}
 		return true;
@@ -119,6 +122,15 @@ public:
 		return true;
 	}
 
+	void ReportRequiredFailure()
+	{
+		presenter.Close();
+		gpu_active = false;
+		frame_presented = false;
+		if(gpu_owner)
+			gpu_owner->ReportGpuFailure("transient GPU: " +
+			    (last_error.IsEmpty() ? String("presentation failed") : last_error));
+	}
 	void EnterSoftwareFallback()
 	{
 		presenter.Close();
@@ -137,6 +149,17 @@ public:
 		if(message == WM_NCDESTROY)
 			return host->DetachForDestroy(message, wParam, lParam);
 
+		if(host->required) {
+			if(message == WM_ERASEBKGND) return 1;
+			if(message == WM_PAINT) {
+				if(host->IsActive() && !host->Present())
+					host->ReportRequiredFailure();
+				PAINTSTRUCT ps;
+				BeginPaint(hwnd, &ps);
+				EndPaint(hwnd, &ps);
+				return 0;
+			}
+		}
 		if(message == WM_ERASEBKGND && host->IsActive() && host->HasPresentedFrame())
 			return 1;
 
@@ -180,6 +203,7 @@ private:
 	WNDPROC old_proc = nullptr;
 	GpuDisplayPresenter presenter;
 	String last_error;
+	bool required = false;
 	bool gpu_active = true;
 	bool frame_presented = false;
 };
@@ -197,7 +221,7 @@ static bool AttachTransientWindow(Ctrl *ctrl)
 		return false;
 
 	GpuTopWindow *owner = FindGpuOwner(ctrl);
-	if(!owner || !owner->IsGpuReady())
+	if(!owner || (!owner->IsGpuReady() && !owner->IsGpuRequired()))
 		return false;
 
 	GpuTransientWindowHost *host = new GpuTransientWindowHost(*ctrl, *owner);
@@ -216,7 +240,6 @@ static bool TransientStateHook(Ctrl *ctrl, int reason)
 	return false;
 }
 
-} // namespace
 #endif
 
 void EnsureGpuTransientWindowSupport()

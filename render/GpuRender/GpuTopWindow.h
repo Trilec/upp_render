@@ -12,6 +12,11 @@ public:
 	void Close() override;
 	// Select before opening; GUI recording, one replaceable pending frame.
 	GpuTopWindow& SetAsyncPresentation(bool enabled = true);
+	// Select before opening. Failed GPU frames remain failed until explicit retry;
+	// root client painting never enters the ordinary software fallback path.
+	GpuTopWindow& SetRequireGpu(bool required = true);
+	bool IsGpuRequired() const;
+	uint64 GetSoftwareFallbackCount() const;
 	GpuPresentationStats GetGpuStats() const;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
@@ -29,6 +34,8 @@ protected:
 	LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 #endif
 private:
+	friend class GpuTransientWindowHost;
+	void ReportGpuFailure(const String& error);
 	struct Impl;
 	One<Impl> impl;
 };
