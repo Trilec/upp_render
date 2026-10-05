@@ -25,7 +25,6 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 
 - Image/vector caches now have pixel budgets and eviction of unused old entries.
 - Current-frame resources stay pinned; oversized active content fails explicitly.
-- Glyph atlas bytes/entries are bounded; exhausted atlases reset between frames.
 - Integer vector placement is separate from shape/gradient identity. Fractional
   coverage phase remains part of the key; moving a shape reuses its raster/texture.
 - Immutable images share native allocations across compatible Vulkan adapters;
@@ -41,11 +40,8 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 - GPU timestamps are unavailable. Acquire/replay/present timings are CPU elapsed time.
 - Cache churn/warm/exhaustion/recovery, vector translation/gradient phase and async
   resize/close/reopen regressions passed. 34-target Release baseline and 22 affected final reruns passed.
-- Clean Debug, clean Release and clean non-BLITZ gallery builds passed.
-- Twelve focused Debug tests and Debug/Release embedded smoke (16/16 each) passed.
-- All three product demos and three public tutorials rebuilt successfully.
-- Native gallery and embedded demo reviews passed after app approval: controls,
-  scene colours, antialias switching, independent pause and secondary hide/show.
+- Clean Debug/Release/non-BLITZ builds, 12 focused Debug tests and demo/tutorial rebuilds PASS.
+- Native gallery/embedded reviews PASS: controls, AA, independent pause and secondary lifecycle.
 - Product demos remain SurfaceDemo, Gallery, Showcase; old motion under diagnostics.
 - Scope/build/measurement notes: `docs/WINDOWS_VULKAN_V1.md`.
 
@@ -84,7 +80,10 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 - Non-BLITZ provider registration was omitted by static linking; fixed with an explicit composition anchor.
 - Required Gallery normal/load PASS: UI p99 18.42/18.03 ms, zero fallback and final ZERO.
 - Gallery development build uses the current Ui tree, separate from RC1 dependency pins.
-- Next drawing gap: source-rectangle images and mask tint/opacity, then portable text/host.
+- Source rectangles, mask tint/opacity and scaled Draw bridge implemented; original upload retained.
+- 2026-10-06: Debug/Release image geometry and real Vulkan validation PASS; software/bridge PASS.
+- Required Gallery normal/load UI p99 24.56/18.07 ms; zero fallback, final ZERO.
+- Next: GPU pixel-readback parity and portable text/host; WebGPU/Metal still pending.
 - RC1 publication is owner-managed; do not infer publication from the Git tag.
 
 ## Remaining Acceptance

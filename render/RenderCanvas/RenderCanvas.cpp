@@ -407,7 +407,8 @@ bool UiDisplayOp::operator==(const UiDisplayOp& other) const
 	       rect.right == other.rect.right && rect.bottom == other.rect.bottom &&
 	       point == other.point && width == other.width && transform == other.transform &&
 	       color == other.color && rounded == other.rounded && image == other.image &&
-	       text == other.text && font == other.font && path == other.path && paint == other.paint &&
+	       image_source == other.image_source && image_tint == other.image_tint &&
+	       image_alpha_mask == other.image_alpha_mask && text == other.text && font == other.font && path == other.path && paint == other.paint &&
 	       fill_rule == other.fill_rule && stroke == other.stroke && svg == other.svg;
 }
 
@@ -466,7 +467,9 @@ String UiDisplayList::Dump() const
 			break;
 		case UiDisplayOpType::DrawImage:
 			sb << "DrawImage " << DumpRect(op.rect) << " image=" << op.image.GetWidth() << 'x'
-			   << op.image.GetHeight() << " hash=" << StableImageHash(op.image);
+			   << op.image.GetHeight() << " hash=" << StableImageHash(op.image)
+			   << " source=" << DumpRect(Rectf(op.image_source)) << " tint=" << DumpColor(op.image_tint)
+			   << " mask=" << (op.image_alpha_mask ? 1 : 0);
 			break;
 		case UiDisplayOpType::DrawText:
 			sb << "DrawText " << DumpPoint(op.point) << " chars=" << op.text.GetCount()
@@ -615,12 +618,26 @@ void UiDisplayListBuilder::FillRoundedRect(const RoundedRect& rect, Rgba8 color)
 
 void UiDisplayListBuilder::DrawImage(const Rectf& rect, const Image& image)
 {
+	DrawImage(rect, image, Rect(image.GetSize()));
+}
+
+void UiDisplayListBuilder::DrawImage(const Rectf& rect, const Image& image, const Rect& source,
+                                     Rgba8 tint, bool alpha_mask)
+{
 	if(!CanRecord())
 		return;
 	UiDisplayOp op;
 	op.type = UiDisplayOpType::DrawImage;
 	op.rect = rect;
+	if(!image.IsEmpty() && (source.IsEmpty() || source.left < 0 || source.top < 0 ||
+	                        source.right > image.GetWidth() || source.bottom > image.GetHeight())) {
+		Fail("image source rectangle is empty or outside image bounds");
+		return;
+	}
 	op.image = image;
+	op.image_source = source;
+	op.image_tint = tint;
+	op.image_alpha_mask = alpha_mask;
 	Append(op);
 }
 

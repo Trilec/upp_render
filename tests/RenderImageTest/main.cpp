@@ -91,6 +91,29 @@ CONSOLE_APP_MAIN
 	empty_painter.DrawRect(Rect(0, 0, 12, 12), Color(3, 4, 5));
 	ok &= Check(software.Replay(empty_image_list, empty_painter), "software replay should accept an empty image as a no-op");
 
+	// Compare cropped alpha-mask replay with an independently prepared Painter image.
+	UiDisplayListBuilder crop_builder;
+	crop_builder.DrawImage(Rectf(2, 2, 14, 14), image, Rect(1, 0, 2, 2), Rgba8(80, 160, 240, 128), true);
+	UiDisplayList cropped;
+	ok &= Check(crop_builder.Finish(cropped), "crop/mask/opacity intent should finish");
+	ok &= Check(cropped[0].image.GetSerialId() == image.GetSerialId(),
+	            "crop and tint must retain the original image identity");
+	ImagePainter actual(Size(16, 16)), expected(Size(16, 16));
+	actual.DrawRect(0, 0, 16, 16, Black()); expected.DrawRect(0, 0, 16, 16, Black());
+	ok &= Check(software.Replay(cropped, actual), "software crop/mask/opacity replay");
+	Image reference = SetColorKeepAlpha(Crop(image, Rect(1, 0, 2, 2)), Color(80, 160, 240));
+	ImageBuffer faded(reference);
+	for(RGBA& pixel : faded) {
+		pixel.r = (pixel.r * 128 + 127) / 255; pixel.g = (pixel.g * 128 + 127) / 255;
+		pixel.b = (pixel.b * 128 + 127) / 255; pixel.a = (pixel.a * 128 + 127) / 255;
+	}
+	expected.DrawImage(Rect(2, 2, 14, 14), Image(faded));
+	ok &= Check(actual.GetResult() == expected.GetResult(), "crop mask opacity should match independent reference pixels");
+	UiDisplayListBuilder invalid_crop;
+	invalid_crop.DrawImage(Rectf(0, 0, 10, 10), image, Rect(-1, 0, 2, 2));
+	UiDisplayList invalid;
+	ok &= Check(!invalid_crop.Finish(invalid), "out-of-bounds source must fail explicitly");
+
 	if(ok) {
 		Cout() << "RenderImageTest passed" << EOL;
 		return;

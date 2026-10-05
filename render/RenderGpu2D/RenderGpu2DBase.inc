@@ -104,6 +104,37 @@ static const uint32 kTexturedFragmentShader[] = {
 	0x00000016u, 0x000100fdu, 0x00010038u,
 };
 
+// Alpha-mask fragment: vec4(1, 1, 1, texture(image, uv).a) * colour.
+// Same descriptor and vertex layout as ordinary images; no recoloured texture.
+static const uint32 kMaskFragmentShader[] = {
+	0x07230203u, 0x00010000u, 0x00000000u, 0x0000001au, 0x00000000u, 0x00020011u,
+	0x00000001u, 0x0003000eu, 0x00000000u, 0x00000001u, 0x0008000fu, 0x00000004u,
+	0x00000010u, 0x6e69616du, 0x00000000u, 0x00000007u, 0x00000009u, 0x0000000bu,
+	0x00030010u, 0x00000010u, 0x00000007u, 0x00040047u, 0x00000007u, 0x0000001eu,
+	0x00000000u, 0x00040047u, 0x00000009u, 0x0000001eu, 0x00000001u, 0x00040047u,
+	0x0000000bu, 0x0000001eu, 0x00000000u, 0x00040047u, 0x0000000fu, 0x00000022u,
+	0x00000000u, 0x00040047u, 0x0000000fu, 0x00000021u, 0x00000000u, 0x00020013u,
+	0x00000001u, 0x00030021u, 0x00000002u, 0x00000001u, 0x00030016u, 0x00000003u,
+	0x00000020u, 0x00040017u, 0x00000004u, 0x00000003u, 0x00000002u, 0x00040017u,
+	0x00000005u, 0x00000003u, 0x00000004u, 0x00040020u, 0x00000006u, 0x00000001u,
+	0x00000004u, 0x0004003bu, 0x00000006u, 0x00000007u, 0x00000001u, 0x00040020u,
+	0x00000008u, 0x00000001u, 0x00000005u, 0x0004003bu, 0x00000008u, 0x00000009u,
+	0x00000001u, 0x00040020u, 0x0000000au, 0x00000003u, 0x00000005u, 0x0004003bu,
+	0x0000000au, 0x0000000bu, 0x00000003u, 0x00090019u, 0x0000000cu, 0x00000003u,
+	0x00000001u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000001u, 0x00000000u,
+	0x0003001bu, 0x0000000du, 0x0000000cu, 0x00040020u, 0x0000000eu, 0x00000000u,
+	0x0000000du, 0x0004003bu, 0x0000000eu, 0x0000000fu, 0x00000000u, 0x0004002bu,
+	0x00000003u, 0x00000018u, 0x3f800000u, 0x00050036u, 0x00000001u, 0x00000010u,
+	0x00000000u, 0x00000002u, 0x000200f8u, 0x00000011u, 0x0004003du, 0x00000004u,
+	0x00000012u, 0x00000007u, 0x0004003du, 0x0000000du, 0x00000013u, 0x0000000fu,
+	0x00050057u, 0x00000005u, 0x00000014u, 0x00000013u, 0x00000012u, 0x00050051u,
+	0x00000003u, 0x00000017u, 0x00000014u, 0x00000003u, 0x00070050u, 0x00000005u,
+	0x00000019u, 0x00000018u, 0x00000018u, 0x00000018u, 0x00000017u, 0x0004003du,
+	0x00000005u, 0x00000015u, 0x00000009u, 0x00050085u, 0x00000005u, 0x00000016u,
+	0x00000019u, 0x00000015u, 0x0003003eu, 0x0000000bu, 0x00000016u, 0x000100fdu,
+	0x00010038u,
+};
+
 static String SpirV(const uint32 *words, int count)
 {
 	return String(reinterpret_cast<const char *>(words), count * (int)sizeof(uint32));
@@ -323,6 +354,28 @@ static Vector<Pointf> RoundedPolygon(const RoundedRect& rounded, const Transform
 	return out;
 }
 
+// Linear sampling of a cropped image must clamp to its own edge texel centres.
+// Nine small quads express that clamp without new RHI vertex attributes or textures.
+template <class Emit>
+static bool EmitImageCrop(const Rectf& rect, const Rect& src, Size size, Emit emit)
+{
+	if(src == Rect(size)) return emit(rect, Rectf(0, 0, 1, 1));
+	const double dx[] = {rect.left, rect.left + rect.GetWidth() / (2 * src.GetWidth()),
+	                     rect.right - rect.GetWidth() / (2 * src.GetWidth()), rect.right};
+	const double dy[] = {rect.top, rect.top + rect.GetHeight() / (2 * src.GetHeight()),
+	                     rect.bottom - rect.GetHeight() / (2 * src.GetHeight()), rect.bottom};
+	const double ux[] = {(src.left + 0.5) / size.cx, (src.left + 0.5) / size.cx,
+	                     (src.right - 0.5) / size.cx, (src.right - 0.5) / size.cx};
+	const double uy[] = {(src.top + 0.5) / size.cy, (src.top + 0.5) / size.cy,
+	                     (src.bottom - 0.5) / size.cy, (src.bottom - 0.5) / size.cy};
+	for(int y = 0; y < 3; ++y)
+		for(int x = 0; x < 3; ++x)
+			if(dx[x+1] > dx[x] && dy[y+1] > dy[y] &&
+			   !emit(Rectf(dx[x], dy[y], dx[x+1], dy[y+1]),
+			         Rectf(ux[x], uy[y], ux[x+1], uy[y+1]))) return false;
+	return true;
+}
+
 static bool IsSupportedColorFormat(GpuFormat format)
 {
 	return format == GpuFormat::RGBA8 || format == GpuFormat::BGRA8 ||
@@ -354,18 +407,18 @@ bool UiRenderer2D::Fail(const String& message)
 	return false;
 }
 
-bool UiRenderer2D::EnsureShaders(bool textured)
+bool UiRenderer2D::EnsureShaders(bool textured, bool alpha_mask)
 {
 	GpuShaderId& vs_id = textured ? textured_vertex_shader : vertex_shader;
-	GpuShaderId& fs_id = textured ? textured_fragment_shader : fragment_shader;
+	GpuShaderId& fs_id = textured ? (alpha_mask ? mask_fragment_shader : textured_fragment_shader) : fragment_shader;
 	if(vs_id.IsValid() && fs_id.IsValid())
 		return true;
 
 	const uint32 *vs_words = textured ? kTexturedVertexShader : kVertexShader;
 	const int vs_count = textured ? (int)(sizeof(kTexturedVertexShader) / sizeof(kTexturedVertexShader[0]))
 	                              : (int)(sizeof(kVertexShader) / sizeof(kVertexShader[0]));
-	const uint32 *fs_words = textured ? kTexturedFragmentShader : kFragmentShader;
-	const int fs_count = textured ? (int)(sizeof(kTexturedFragmentShader) / sizeof(kTexturedFragmentShader[0]))
+	const uint32 *fs_words = textured ? (alpha_mask ? kMaskFragmentShader : kTexturedFragmentShader) : kFragmentShader;
+	const int fs_count = textured ? (alpha_mask ? (int)(sizeof(kMaskFragmentShader) / sizeof(kMaskFragmentShader[0])) : (int)(sizeof(kTexturedFragmentShader) / sizeof(kTexturedFragmentShader[0])))
 	                              : (int)(sizeof(kFragmentShader) / sizeof(kFragmentShader[0]));
 
 	GpuShaderDesc vs;
@@ -373,7 +426,7 @@ bool UiRenderer2D::EnsureShaders(bool textured)
 	vs.format = GpuShaderFormat::SpirV;
 	vs.code = SpirV(vs_words, vs_count);
 	vs.label = textured ? "UiRenderer2D textured vertex" : "UiRenderer2D solid vertex";
-	GpuResult result = device->CreateShader(vs, vs_id);
+	GpuResult result = vs_id.IsValid() ? GpuResult::Ok : device->CreateShader(vs, vs_id);
 	if(result != GpuResult::Ok)
 		return Fail("UiRenderer2D vertex shader creation failed: " + DumpGpuResult(result));
 
@@ -384,29 +437,27 @@ bool UiRenderer2D::EnsureShaders(bool textured)
 	fs.label = textured ? "UiRenderer2D textured fragment" : "UiRenderer2D solid fragment";
 	result = device->CreateShader(fs, fs_id);
 	if(result != GpuResult::Ok) {
-		device->DestroyShader(vs_id);
-		vs_id = GpuShaderId();
 		return Fail("UiRenderer2D fragment shader creation failed: " + DumpGpuResult(result));
 	}
 	return true;
 }
 
 bool UiRenderer2D::EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out,
-                                  GpuBlendMode blend_mode)
+                                  GpuBlendMode blend_mode, bool alpha_mask)
 {
 	for(const PipelineEntry& entry : pipelines) {
-		if(entry.format == format && entry.textured == textured && entry.blend_mode == blend_mode) {
+		if(entry.format == format && entry.textured == textured && entry.alpha_mask == alpha_mask && entry.blend_mode == blend_mode) {
 			out = entry.pipeline;
 			return true;
 		}
 	}
-	if(!EnsureShaders(textured))
+	if(!EnsureShaders(textured, alpha_mask))
 		return false;
 	GpuPipelineDesc desc;
 	desc.topology = GpuPrimitiveTopology::TriangleList;
 	desc.color_format = format;
 	desc.vertex_shader = textured ? textured_vertex_shader : vertex_shader;
-	desc.fragment_shader = textured ? textured_fragment_shader : fragment_shader;
+	desc.fragment_shader = textured ? (alpha_mask ? mask_fragment_shader : textured_fragment_shader) : fragment_shader;
 	desc.vertex_layout = textured ? GpuVertexLayout::Position2Uv2Color4F : GpuVertexLayout::Position2Color4F;
 	desc.blend_mode = blend_mode;
 	desc.sampled_texture_count = textured ? 1 : 0;
@@ -422,6 +473,7 @@ bool UiRenderer2D::EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId
 	PipelineEntry& entry = pipelines.Add();
 	entry.format = format;
 	entry.textured = textured;
+	entry.alpha_mask = alpha_mask;
 	entry.blend_mode = blend_mode;
 	entry.pipeline = pipeline;
 	out = pipeline;
@@ -767,7 +819,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 }
 
 bool UiRenderer2D::Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
-                          GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline)
+                          GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline, GpuPipelineId mask_pipeline)
 {
 	GpuCommandListId commands;
 	GpuResult result = device->BeginCommands(commands);
@@ -799,8 +851,8 @@ bool UiRenderer2D::Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_
 	pass_active = true;
 
 	for(const Batch& batch : batches) {
-		const bool textured = batch.kind == BatchKind::Image;
-		GpuPipelineId pipeline = textured ? textured_pipeline :
+		const bool textured = batch.kind == BatchKind::Image || batch.kind == BatchKind::ImageMask;
+		GpuPipelineId pipeline = textured ? (batch.kind == BatchKind::ImageMask ? mask_pipeline : textured_pipeline) :
 		                           (batch.kind == BatchKind::Invert ? invert_pipeline : solid_pipeline);
 		result = device->SetPipeline(commands, pipeline);
 		if(result != GpuResult::Ok) {
@@ -857,6 +909,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	GpuPipelineId solid_pipeline;
 	GpuPipelineId invert_pipeline;
 	GpuPipelineId textured_pipeline;
+	GpuPipelineId mask_pipeline;
 	bool has_invert = false;
 	for(const Batch& batch : batches)
 		if(batch.kind == BatchKind::Invert) {
@@ -870,6 +923,10 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		return false;
 	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline))
 		return false;
+
+	for(const Batch& batch : batches)
+		if(batch.kind == BatchKind::ImageMask && !mask_pipeline.IsValid() &&
+		   !EnsurePipeline(target.color_format, true, mask_pipeline, GpuBlendMode::SourceOver, true)) return false;
 
 	const int64 solid_bytes = (int64)vertices.GetCount() * sizeof(Vertex);
 	const int64 textured_bytes = (int64)textured_vertices.GetCount() * sizeof(TexturedVertex);
@@ -887,7 +944,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		if(result != GpuResult::Ok)
 			return Fail("UiRenderer2D textured vertex upload failed: " + DumpGpuResult(result));
 	}
-	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline);
+	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline, mask_pipeline);
 }
 
 bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& frame,
@@ -925,6 +982,9 @@ void UiRenderer2D::Close()
 		device->DestroyShader(fragment_shader);
 	if(textured_vertex_shader.IsValid())
 		device->DestroyShader(textured_vertex_shader);
+	if(mask_fragment_shader.IsValid())
+		device->DestroyShader(mask_fragment_shader);
+	mask_fragment_shader = GpuShaderId();
 	if(textured_fragment_shader.IsValid())
 		device->DestroyShader(textured_fragment_shader);
 	vertex_shader = GpuShaderId();

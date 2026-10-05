@@ -202,6 +202,27 @@ GUI_APP_MAIN
 #ifdef PLATFORM_WIN32
 	ok &= Check(!ProbeGlobalBackBuffer(), "recording should restore a previously disabled U++ global backbuffer mode");
 #endif
+	{
+		class ImageIntentCtrl : public Ctrl {
+		public:
+			Image image = MakeProbeImage();
+			void Paint(Draw& w) override {
+				w.DrawImage(0, 0, 16, 18, image, Rect(2, 3, 10, 12), Color(80, 140, 220));
+				w.DrawImage(12, 0, image, Color(220, 80, 140));
+			}
+		} image_ctrl;
+		image_ctrl.SetRect(0, 0, 40, 24);
+		UiDisplayList images; String image_error;
+		ok &= Check(RecordCtrlDisplayList(image_ctrl, images, image_error), "Draw bridge crop/mask list should record");
+		int found = 0;
+		for(int i = 0; i < images.GetCount(); ++i) if(images[i].type == UiDisplayOpType::DrawImage) {
+			ok &= Check(images[i].image.GetSerialId() == image_ctrl.image.GetSerialId() && images[i].image_alpha_mask,
+			            "Draw bridge must preserve source identity and mask intent across colours");
+			if(found == 0) ok &= Check(images[i].image_source == Rect(2, 3, 10, 12) && images[i].rect == Rectf(0, 0, 16, 18), "bridge preserves source crop and scaled destination");
+			++found;
+		}
+		ok &= Check(found == 2, "bridge should emit both image states");
+	}
 	const String dump = list.Dump();
 	UiDisplayList second; CtrlDisplayListRecordReport second_report;
 	ok &= Check(RecordCtrlDisplayList(root, second, error, &second_report), "same resolved control tree should record repeatedly");

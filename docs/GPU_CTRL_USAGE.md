@@ -131,3 +131,23 @@ GpuUiGallery --require-gpu --benchmark exercises this mode and writes gpu_requir
 and software_fallback_count in its report. Required runs write the separate
 GpuUiGallery-required-normal/load/soak.txt reports. This mode still uses Windows hosting
 and font APIs. See [UI2 drawing audit](UI2_DRAWING_AUDIT.md) for remaining portability work.
+
+## Image crops, colour masks and opacity
+
+DrawImage(destination, image, source, tint, alpha_mask) records an integer source
+rectangle and retains the original image identity. Source pixels must be inside
+the image and nonempty; empty images are no-ops. tint alpha is opacity. With
+alpha_mask=true, tint RGB replaces image RGB and sampled alpha supplies coverage;
+otherwise tint RGB modulates sampled RGB in the target working colour space.
+Linear filtering clamps to the selected crop's edge texel centres. Full images
+keep a single quad; crops use at most nine quads that batch under one texture.
+
+```cpp
+w.DrawImage(Rectf(0, 0, 32, 32), icon, Rect(0, 0, 16, 16),
+            Rgba8(80, 140, 220, 128), true);
+```
+
+The U++ Draw bridge records scaled destinations directly, avoiding inherited
+CPU rescaling and per-colour image creation. Image/mask pipelines share one
+original upload and vertex shader; mask colours batch together. Shader bytecode
+ships with GpuRender; application users need no shader compiler.

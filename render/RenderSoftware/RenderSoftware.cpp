@@ -102,8 +102,24 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			painter.Fill(ToRgba(op.color));
 			break;
 		case UiDisplayOpType::DrawImage:
-			if(!op.image.IsEmpty())
-				painter.DrawImage(ToRect(op.rect), op.image);
+			if(!op.image.IsEmpty() && op.image_tint.a) {
+				Image resolved = Crop(op.image, op.image_source);
+				if(op.image_tint != Rgba8(255, 255, 255, 255) || op.image_alpha_mask) {
+					ImageBuffer pixels(resolved);
+					for(RGBA& p : pixels) {
+						const int a = p.a;
+						p.r = ((op.image_alpha_mask ? a : p.r) * op.image_tint.r + 127) / 255;
+						p.g = ((op.image_alpha_mask ? a : p.g) * op.image_tint.g + 127) / 255;
+						p.b = ((op.image_alpha_mask ? a : p.b) * op.image_tint.b + 127) / 255;
+						p.r = (p.r * op.image_tint.a + 127) / 255;
+						p.g = (p.g * op.image_tint.a + 127) / 255;
+						p.b = (p.b * op.image_tint.a + 127) / 255;
+						p.a = (a * op.image_tint.a + 127) / 255;
+					}
+					resolved = Image(pixels);
+				}
+				painter.DrawImage(ToRect(op.rect), resolved);
+			}
 			break;
 		case UiDisplayOpType::DrawText:
 			if(!op.text.IsEmpty()) {

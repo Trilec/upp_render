@@ -116,6 +116,7 @@ private:
 	struct PipelineEntry : Moveable<PipelineEntry> {
 		GpuFormat format = GpuFormat::Unknown;
 		bool textured = false;
+		bool alpha_mask = false;
 		GpuBlendMode blend_mode = GpuBlendMode::SourceOver;
 		GpuPipelineId pipeline;
 	};
@@ -132,6 +133,7 @@ private:
 		Solid,
 		Invert,
 		Image,
+		ImageMask,
 	};
 
 	struct Batch : Moveable<Batch> {
@@ -217,6 +219,7 @@ private:
 	GpuShaderId fragment_shader;
 	GpuShaderId textured_vertex_shader;
 	GpuShaderId textured_fragment_shader;
+	GpuShaderId mask_fragment_shader;
 	GpuBufferId vertex_buffer;
 	GpuBufferId textured_vertex_buffer;
 	int64 vertex_buffer_capacity = 0;
@@ -246,9 +249,9 @@ private:
 	VectorCleanup vector_cleanup;
 
 	static Image Unmultiply(const Image& image);
-	bool EnsureShaders(bool textured);
+	bool EnsureShaders(bool textured, bool alpha_mask = false);
 	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out,
-	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver);
+	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver, bool alpha_mask = false);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
 	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
@@ -258,7 +261,7 @@ private:
 	                           UiRenderer2DStats& vector_stats);
 	bool BuildGeometry(const UiDisplayList& list, Size target_size);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
-	            GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline);
+	            GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline, GpuPipelineId mask_pipeline);
 	bool Fail(const String& message);
 
 	TextImpl& Text();

@@ -118,6 +118,16 @@ CONSOLE_APP_MAIN
 				ok &= Check(second.texture_upload_count == 0 && second.batch_count == 3 && second.draw_count == 3,
 				            "second Vulkan image frame should reuse cached texture and preserve ordering");
 
+				UiDisplayListBuilder crop_builder;
+				crop_builder.DrawImage(Rectf(0, 0, 24, 24), image, Rect(1, 0, 2, 2));
+				crop_builder.DrawImage(Rectf(24, 0, 48, 24), image, Rect(0, 0, 1, 1), Rgba8(40, 140, 220, 128), true);
+				UiDisplayList crop_list; ok &= Check(crop_builder.Finish(crop_list), "Vulkan cropped/masked list");
+				ok &= Check(renderer.Render(crop_list, offscreen) && renderer.GetStats().texture_upload_count == 0,
+				            "Vulkan crops and mask colours must reuse the existing image texture");
+				ok &= Check(renderer.GetStats().batch_count == 2, "Vulkan mask and image pipelines preserve order");
+				ok &= Check(renderer.Render(crop_list, offscreen) && renderer.GetStats().texture_upload_count == 0,
+				            "Vulkan warm cropped/masked replay must reuse both pipelines and texture");
+
 				GpuSurfaceDesc surface_desc;
 				surface_desc.size = Size(64, 64);
 				surface_desc.native_window.kind = GpuNativeWindowKind::Win32;

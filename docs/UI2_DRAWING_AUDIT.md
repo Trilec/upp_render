@@ -11,7 +11,7 @@ No OpenGL implementation is planned for this milestone.
 | --- | --- | --- |
 | Control painting | Win32 SystemDraw adapter into UiCanvas/display list | A portable recording seam; keep one Ui layout/input/theme authority |
 | Flat primitives/images | Shared RenderGpu2D replay and bounded resource caches | Preserve semantics and batching across providers |
-| Image source rectangle/tint | Bridge crops/recolours CPU images before recording | Carry source rectangle, opacity and mask tint as neutral drawing intent; test filtering edges and shared upload identity |
+| Image source rectangle/tint | Neutral source rectangle, tint/opacity and alpha-mask intent; original-image GPU upload | Software reference and GPU geometry/ownership verified; offscreen GPU pixel-readback parity remains |
 | Paths/SVG | Cached CPU Painter raster into sampled GPU images | Keep portable CPU raster available; optimize measured hot paths without per-control GPU APIs |
 | Text | U++ font metrics and per-character glyph raster into atlases | Portable shaping/measurement/glyph contract including fallback fonts, bidi, IME, selection and DPI |
 | Clip | Rectangular neutral clip; non-axis-aligned transformed clip rejected | Non-rectangular clip semantics and reference pixels |
@@ -95,11 +95,42 @@ No new manual visual/input acceptance is claimed by these timed/native regressio
 Reports: build/GpuUiGallery-required-normal.txt and
 build/GpuUiGallery-required-load.txt. GPU timestamp timing remains unavailable.
 
+## Image integration — 2026-10-06
+
+DrawImage now carries an integer source rectangle, tint/opacity and alpha-mask
+intent. The U++ Draw bridge overrides scaled DrawImageOp, bypassing inherited CPU
+rescaling, cropping and per-colour image creation. Vector materialization keeps
+the intent. Text and image-only scenes use the same active geometry path.
+
+GPU crop filtering clamps to source-edge texel centres using at most nine quads;
+normal full images remain one quad. Masks use the original image's alpha with
+a separate fragment shader and the existing vertex/descriptor layout. Adjacent
+mask colours batch together. Texture identity remains original image serial,
+size and target colour format. Crops retain/upload the full original image;
+cache limits apply to its full allocation, not the cropped area.
+
+Software reference pixels match independently prepared crop/mask/opacity output.
+Debug/Release geometry/cache tests and real Vulkan validation tests PASS: one original
+upload for multiple crops/colours, warm zero uploads, separate mask fragment with
+shared vertex shader, edge-centre UVs and final ownership ZERO. Native Draw bridge
+identity/scaled-destination regression PASS. New manual visual/input acceptance
+and offscreen GPU pixel-readback parity are not claimed.
+
+Required Gallery, validation requested, 4 s warmup plus 20 s measured:
+
+| Scene | UI delay p99 / max | Process private peak | Presented frames | Root fallback |
+| --- | --- | --- | --- | --- |
+| 96 particles | 24.56 / 36.43 ms | 474,370,048 bytes | 982 | 0 |
+| 512 particles | 18.07 / 29.10 ms | 535,658,496 bytes | 186 | 0 |
+
+Both responsiveness gates PASS, no GPU error, final ownership ZERO. Heavy replay
+CPU p99 was 175.39 ms; this remains a slow-rendering stress scene with responsive
+UI. These runs do not establish a process-memory improvement or new plateau.
+
 ## Next bounded acceptance gates
 
-1. Add source-rectangle images and mask tint/opacity without per-state CPU images;
-   test software parity, clipping/filtering edges, transparent pixels and one upload
-   reused by multiple crop/tint draws.
+1. Close pixel-readback parity for the implemented source-rectangle/mask/opacity path;
+   compare transparent and crop-edge pixels across UNORM/sRGB GPU targets.
 2. Choose and test the portable text/host boundary, then exercise a small WebGPU
    browser application using the same control and drawing code.
 3. Extend full control coverage, Linux Vulkan and Metal using the verified contract.

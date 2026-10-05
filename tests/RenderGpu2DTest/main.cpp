@@ -485,6 +485,42 @@ CONSOLE_APP_MAIN
 		cache_device.DestroyTexture(cache_target);
 	}
 
+	{
+		NullGpuDevice crop_device;
+		GpuTextureId crop_target = CreateTarget(crop_device, GpuFormat::RGBA8, Size(64, 64));
+		ImageBuffer pixels(4, 4); Fill(pixels.Begin(), RGBAZero(), pixels.GetLength());
+		for(int i = 0; i < pixels.GetLength(); ++i) { pixels.Begin()[i].r = 128; pixels.Begin()[i].a = 128; }
+		Image image(pixels);
+		UiDisplayListBuilder builder;
+		builder.DrawImage(Rectf(0, 0, 20, 20), image, Rect(1, 1, 3, 3));
+		builder.DrawImage(Rectf(20, 0, 40, 20), image, Rect(0, 0, 1, 1), Rgba8(40, 120, 220, 128), true);
+		builder.DrawImage(Rectf(0, 20, 20, 40), image, Rect(1, 0, 4, 4), Rgba8(220, 80, 40, 255), true);
+		UiDisplayList list; ok &= Check(builder.Finish(list), "multi-state image list should build");
+		UiRenderer2D renderer(crop_device);
+		ok &= Check(renderer.Render(list, MakeTarget(crop_target, GpuFormat::RGBA8, Size(64, 64))),
+		            "crop and alpha-mask geometry must render");
+		ok &= Check(renderer.GetStats().texture_upload_count == 1 && renderer.GetStats().image_cache_entry_count == 1,
+		            "all crops and colour states must share one original image upload");
+		GpuPipelineId normal_id, mask_id; normal_id.value = 1; mask_id.value = 2;
+		GpuPipelineDesc normal_desc, mask_desc;
+		ok &= Check(crop_device.GetPipelineDesc(normal_id, normal_desc) && crop_device.GetPipelineDesc(mask_id, mask_desc) &&
+		            normal_desc.vertex_shader == mask_desc.vertex_shader && normal_desc.fragment_shader != mask_desc.fragment_shader,
+		            "mask must use its own fragment shader and share the image vertex shader");
+		GpuBufferId buffer; buffer.value = 1;
+		String prefix = crop_device.GetBufferWritePrefix(buffer);
+		float vertex[8] = {}; if(prefix.GetCount() >= (int)sizeof(vertex)) std::memcpy(vertex, prefix.Begin(), sizeof(vertex));
+		ok &= Check(prefix.GetCount() >= (int)sizeof(vertex) &&
+		            std::abs(vertex[2] - 0.375f) < 0.00001f && std::abs(vertex[3] - 0.375f) < 0.00001f,
+		            "crop corner must clamp sampling to the selected edge texel centre");
+		ok &= Check(renderer.GetStats().batch_count == 2,
+		            "different mask colours should batch together, ordinary image ordering preserved");
+		ok &= Check(renderer.Render(list, MakeTarget(crop_target, GpuFormat::RGBA8, Size(64, 64))) &&
+		            renderer.GetStats().texture_upload_count == 0, "warm crop/mask replay should upload nothing");
+		renderer.Close(); crop_device.DestroyTexture(crop_target);
+		ok &= Check(crop_device.GetLiveTextureCount() == 0 && crop_device.GetLivePipelineCount() == 0 &&
+		            crop_device.GetLiveShaderCount() == 0, "mask pipeline and shared image ownership must clean up");
+	}
+
 	if(ok) {
 		Cout() << "RenderGpu2DTest passed" << EOL;
 		return;

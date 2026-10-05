@@ -28,14 +28,6 @@ float UiRenderer2D::ColorChannel(byte channel) const
 
 bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 {
-	bool has_text = false;
-	for(int i = 0; i < list.GetCount(); ++i)
-		if(list[i].type == UiDisplayOpType::DrawText) {
-			has_text = true;
-			break;
-		}
-	if(!has_text)
-		return BuildGeometryBase(list, target_size);
 
 	vertices.Clear();
 	textured_vertices.Clear();
@@ -119,7 +111,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 	};
 
 	auto append_textured = [&](const Rectf& rect, const Rectf& uv, GpuTextureId texture,
-	                           Rgba8 tint, const char *kind) -> bool {
+	                           Rgba8 tint, const char *kind, bool alpha_mask = false) -> bool {
 		if(!texture.IsValid())
 			return Fail(String("UiRenderer2D ") + kind + " has no sampled texture");
 		if(!IsFiniteRect(rect) || rect.right <= rect.left || rect.bottom <= rect.top ||
@@ -158,6 +150,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const float g = ColorChannel(tint.g);
 		const float b = ColorChannel(tint.b);
 		const float a = tint.a * scale;
+		const BatchKind image_kind = alpha_mask ? BatchKind::ImageMask : BatchKind::Image;
 		const int first = textured_vertices.GetCount();
 		auto add_vertex = [&](const TexturedPoint& p) {
 			TexturedVertex& v = textured_vertices.Add();
@@ -176,13 +169,13 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			stats.triangle_count++;
 		}
 		const int count = textured_vertices.GetCount() - first;
-		if(!batches.IsEmpty() && batches.Top().kind == BatchKind::Image &&
+		if(!batches.IsEmpty() && batches.Top().kind == image_kind &&
 		   batches.Top().texture == texture &&
 		   batches.Top().first_vertex + batches.Top().vertex_count == first)
 			batches.Top().vertex_count += count;
 		else if(count > 0) {
 			Batch& batch = batches.Add();
-			batch.kind = BatchKind::Image;
+			batch.kind = image_kind;
 			batch.first_vertex = first;
 			batch.vertex_count = count;
 			batch.texture = texture;
@@ -190,20 +183,21 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		return true;
 	};
 
-	auto append_image = [&](const Rectf& rect, const Image& image) -> bool {
-		if(!IsFiniteRect(rect) || rect.right <= rect.left || rect.bottom <= rect.top)
-			return Fail("UiRenderer2D received an invalid image rectangle");
-		if(image.IsEmpty())
-			return true;
+	auto append_image = [&](const UiDisplayOp& op) -> bool {
+		if(!IsFiniteRect(op.rect) || op.rect.IsEmpty()) return Fail("invalid image rectangle");
+		if(op.image.IsEmpty() || op.image_tint.a == 0) return true;
+		const Rect& src = op.image_source;
+		if(src.IsEmpty() || src.left < 0 || src.top < 0 ||
+		   src.right > op.image.GetWidth() || src.bottom > op.image.GetHeight())
+			return Fail("image source rectangle outside image bounds");
 		GpuTextureId texture;
-		if(!EnsureImageTexture(image, texture))
-			return false;
+		if(!EnsureImageTexture(op.image, texture)) return false;
 		const int before = textured_vertices.GetCount();
-		if(!append_textured(rect, Rectf(0, 0, 1, 1), texture, Rgba8(255, 255, 255, 255), "image"))
-			return false;
+		if(!EmitImageCrop(op.rect, src, op.image.GetSize(), [&](const Rectf& rect, const Rectf& uv) {
+			return append_textured(rect, uv, texture, op.image_tint, "image", op.image_alpha_mask);
+		})) return false;
 		stats.image_count++;
-		if(textured_vertices.GetCount() > before)
-			stats.emitted_primitive_count++;
+		if(textured_vertices.GetCount() > before) stats.emitted_primitive_count++;
 		return true;
 	};
 
@@ -276,7 +270,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			break;
 		case UiDisplayOpType::DrawImage:
 			stats.primitive_count++;
-			if(!append_image(op.rect, op.image))
+			if(!append_image(op))
 				return false;
 			break;
 		case UiDisplayOpType::DrawText: {
@@ -382,14 +376,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 		return true;
 	}
 
-	bool has_text = false;
-	for(int i = 0; i < list.GetCount(); ++i)
-		if(list[i].type == UiDisplayOpType::DrawText) {
-			has_text = true;
-			break;
-		}
-	if(!has_text)
-		return RenderBase(list, target);
+	// One geometry/replay path for images with or without text.
 
 	error.Clear();
 	if(!ready || !device)
@@ -403,6 +390,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 	GpuPipelineId solid_pipeline;
 	GpuPipelineId invert_pipeline;
 	GpuPipelineId textured_pipeline;
+	GpuPipelineId mask_pipeline;
 	bool has_invert = false;
 	for(const Batch& batch : batches)
 		if(batch.kind == BatchKind::Invert) {
@@ -416,6 +404,10 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 		return false;
 	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline))
 		return false;
+
+	for(const Batch& batch : batches)
+		if(batch.kind == BatchKind::ImageMask && !mask_pipeline.IsValid() &&
+		   !EnsurePipeline(target.color_format, true, mask_pipeline, GpuBlendMode::SourceOver, true)) return false;
 
 	const int64 solid_bytes = (int64)vertices.GetCount() * sizeof(Vertex);
 	const int64 textured_bytes = (int64)textured_vertices.GetCount() * sizeof(TexturedVertex);
@@ -433,7 +425,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 		if(result != GpuResult::Ok)
 			return Fail("UiRenderer2D textured vertex upload failed: " + DumpGpuResult(result));
 	}
-	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline);
+	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline, mask_pipeline);
 }
 
 void UiRenderer2D::SetCacheLimits(const UiRenderer2DCacheLimits& limits)

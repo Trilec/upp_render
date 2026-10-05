@@ -23,19 +23,6 @@ static Rectf ToRectf(const Rect& r)
 	return Rectf(r.left, r.top, r.right, r.bottom);
 }
 
-static Image CropImage(const Image& image, const Rect& source)
-{
-	Rect src = source & Rect(image.GetSize());
-	if(src.IsEmpty())
-		return Image();
-	if(src == Rect(image.GetSize()))
-		return image;
-	ImageBuffer out(src.GetSize());
-	for(int y = 0; y < src.GetHeight(); y++)
-		Copy(out[y], image[src.top + y] + src.left, src.GetWidth());
-	return Image(out);
-}
-
 static Transform2D Translation(Point p)
 {
 	return Transform2D::Translation(p.x, p.y);
@@ -334,16 +321,22 @@ public:
 
 	void SysDrawImageOp(int x, int y, const Image& image, const Rect& src, Color color) override
 	{
-		Image resolved = CropImage(image, src);
-		if(resolved.IsEmpty())
+		Rect source = src & Rect(image.GetSize());
+		DrawImageOp(x, y, source.GetWidth(), source.GetHeight(), image, source, color);
+	}
+
+	void DrawImageOp(int x, int y, int cx, int cy, const Image& image, const Rect& src, Color color) override
+	{
+		Rect source = src & Rect(image.GetSize());
+		if(image.IsEmpty() || source.IsEmpty() || cx <= 0 || cy <= 0)
 			return;
 		if(color == InvertColor()) {
 			Fail("invert image drawing is not supported by the neutral compositor");
 			return;
 		}
-		if(!IsNull(color))
-			resolved = CachedSetColorKeepAlpha(resolved, color);
-		builder.DrawImage(Rectf(x, y, x + resolved.GetWidth(), y + resolved.GetHeight()), resolved);
+		builder.DrawImage(Rectf(x, y, x + cx, y + cy), image, source,
+		                  IsNull(color) ? Rgba8(255, 255, 255, 255) : Rgba8::FromColor(color),
+		                  !IsNull(color));
 		report.image_count++;
 	}
 
