@@ -146,10 +146,11 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 				return Fail(String("UiRenderer2D generated non-finite ") + kind + " geometry");
 
 		const float scale = 1.0f / 255.0f;
-		const float r = ColorChannel(tint.r);
-		const float g = ColorChannel(tint.g);
-		const float b = ColorChannel(tint.b);
 		const float a = tint.a * scale;
+		const float rgb_alpha = alpha_mask ? 1.0f : a;
+		const float r = ColorChannel(tint.r) * rgb_alpha;
+		const float g = ColorChannel(tint.g) * rgb_alpha;
+		const float b = ColorChannel(tint.b) * rgb_alpha;
 		const BatchKind image_kind = alpha_mask ? BatchKind::ImageMask : BatchKind::Image;
 		const int first = textured_vertices.GetCount();
 		auto add_vertex = [&](const TexturedPoint& p) {
@@ -296,7 +297,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 					                 pen_x + glyph.offset.x + glyph.size.cx,
 					                 op.point.y + glyph.offset.y + glyph.size.cy);
 					const int before = textured_vertices.GetCount();
-					if(!append_textured(glyph_rect, glyph.uv, glyph.texture, op.color, "glyph"))
+					if(!append_textured(glyph_rect, glyph.uv, glyph.texture, op.color, "glyph", true))
 						return false;
 					emitted = emitted || textured_vertices.GetCount() > before;
 				}
@@ -402,7 +403,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 	if(has_invert && !EnsurePipeline(target.color_format, false, invert_pipeline,
 	                                GpuBlendMode::DestinationInvert))
 		return false;
-	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline))
+	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline, GpuBlendMode::PremultipliedSourceOver))
 		return false;
 
 	for(const Batch& batch : batches)

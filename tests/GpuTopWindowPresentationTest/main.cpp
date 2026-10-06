@@ -299,13 +299,14 @@ GUI_APP_MAIN
 
 	for(int cycle = 0; cycle < 3; ++cycle) {
 		RootPresentationWindow win;
-		win.SetAsyncPresentation();
+		win.SetAsyncPresentation().SetFrameClock();
 		win.Open();
 		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
 			PumpEvents(1);
 		ok &= Check(win.IsGpuReady() && win.GetGpuStats().presented_frames > 0 &&
 		            win.GetGpuError().IsEmpty(),
 		            "async root must present a recorded control tree");
+		ok &= Check(win.IsFrameClockActive(), "async animated root must start its precise host clock");
 		for(int i = 0; i < 50; ++i) {
 			win.RequestGpuRefresh();
 			Ctrl::ProcessEvents();
@@ -315,6 +316,7 @@ GUI_APP_MAIN
 		win.SetRect(120, 120, 740 + cycle * 10, 430);
 		PumpEvents(20);
 		win.Close(); // drain/cancel before HWND destruction
+		ok &= Check(!win.IsFrameClockActive(), "closing an animated root must stop its host clock");
 		PumpEvents(20);
 		const auto closed = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(closed.runtime_live_count == 0 && closed.device_live_count == 0 &&
@@ -327,7 +329,7 @@ GUI_APP_MAIN
 	// including startup failure, post-record failure and asynchronous admission.
 	for(int async = 0; async < 2; ++async) {
 		FallbackPresentationWindow win;
-		win.SetRequireGpu().SetAsyncPresentation(async != 0);
+		win.SetRequireGpu().SetAsyncPresentation(async != 0).SetFrameClock();
 		win.Open();
 		for(int i = 0; i < 500 && win.GetGpuStats().presented_frames == 0; ++i)
 			PumpEvents(1);
@@ -343,6 +345,7 @@ GUI_APP_MAIN
 		ok &= Check(!win.IsGpuReady() &&
 		            win.GetGpuError().Find("intentional post-record root frame failure") >= 0,
 		            "required GPU failure must stop presentation and retain its diagnostic");
+		ok &= Check(!win.IsFrameClockActive(), "required GPU failure must stop its host clock");
 		ok &= Check(win.GetSoftwareFallbackCount() == 0 &&
 		            win.GetLeftPaintCount() == left_before + 1 &&
 		            win.GetRightPaintCount() == right_before + 1,
@@ -359,6 +362,7 @@ GUI_APP_MAIN
 		ok &= Check(win.IsGpuReady() && win.GetGpuError().IsEmpty() &&
 		            win.GetGpuStats().presented_frames > 0 && win.GetSoftwareFallbackCount() == 0,
 		            "explicit required-mode retry must restore GPU presentation");
+		ok &= Check(win.IsFrameClockActive(), "required GPU retry must restart its host clock");
 		win.Close();
 		PumpEvents(20);
 	}

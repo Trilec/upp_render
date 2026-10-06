@@ -76,6 +76,13 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	// fractional phase preserves subpixel coverage while moving the result
 	// through DrawImage's existing transform/clipping authority.
 	UiDisplayOp key = op;
+	// Solid path colour is draw state, not coverage identity.
+	// One coverage image can serve every colour/opacity of the same geometry.
+	if(op.type != UiDisplayOpType::DrawSvg && op.paint.kind == UiPaintKind::Solid) {
+		out.tint = op.paint.color;
+		out.alpha_mask = true;
+		key.paint.color = Rgba8(255, 255, 255, 255);
+	}
 	Rectf bounds = op.type == UiDisplayOpType::DrawSvg ? op.rect : op.path.GetControlBounds();
 	if(!std::isfinite(bounds.left) || !std::isfinite(bounds.top))
 		return Fail("UiRenderer2D vector bounds are non-finite");
@@ -213,7 +220,8 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 			if(!EnsureVectorRaster(op, state.transform, raster, vector_stats))
 				return false;
 			if(raster.drawable)
-				builder.DrawImage(raster.local_rect, raster.image);
+				builder.DrawImage(raster.local_rect, raster.image, Rect(raster.image.GetSize()),
+				                  raster.tint, raster.alpha_mask);
 			break;
 		}
 		}

@@ -151,3 +151,26 @@ The U++ Draw bridge records scaled destinations directly, avoiding inherited
 CPU rescaling and per-colour image creation. Image/mask pipelines share one
 original upload and vertex shader; mask colours batch together. Shader bytecode
 ships with GpuRender; application users need no shader compiler.
+
+Image filtering uses premultiplied colour to avoid dark transparent edges;
+opacity multiplies colour and alpha together. sRGB uploads premultiply in linear
+light before encoding. Glyphs and coloured masks use alpha coverage separately.
+GPU readback acceptance covers RGBA/BGRA UNORM/sRGB targets; the synchronous
+Vulkan ReadTexturePixels diagnostic is bounded to 64 MiB and is for checks,
+not per-frame UI presentation.
+
+## Animated Windows roots and FPS
+
+Call `SetFrameClock()` before opening an animated `GpuTopWindow`. It opts into
+high-resolution Windows timer wakes (Windows 10 1803 or later), coalesces them
+to one queued message, and dispatches the existing U++ timer scheduler on the
+UI thread. The waiting thread never paints or accesses controls. Close and GPU
+failure stop the clock; retry starts a new generation and rejects stale wakes.
+Clock creation failure is reported rather than silently using coarse timing.
+Static roots leave this opt-in disabled. `IsFrameClockActive()` reports status.
+
+GpuUiGallery uses upp_animation at 60 Hz and shows actual presented FPS,
+sampled over approximately one second. Replay milliseconds are CPU timing;
+neither value is a GPU timestamp. `--particles=512` starts the interactive load
+scene; the inspector permits 6–512 particles. `--no-grid` disables the grid for
+comparison. Benchmark reports record grid state and measured presentation FPS.

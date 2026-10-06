@@ -41,6 +41,10 @@ public:
 	GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) override;
 	GpuResult DestroyBuffer(GpuBufferId id) override;
 
+	// Synchronous diagnostic readback; call only with exclusive queue access and no open commands.
+	// Owned initialized RGBA/BGRA8 targets with TransferSrc only; tightly packed native bytes.
+	bool ReadTexturePixels(GpuTextureId id, Vector<byte>& pixels);
+
 	GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) override;
 	GpuResult AcquireImmutableTexture(uint64 identity, const GpuTextureDesc& desc,
 	                                 const void *data, int64 size, GpuTextureId& out,

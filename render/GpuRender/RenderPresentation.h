@@ -10,6 +10,10 @@ struct GpuPresentationStats {
 	uint64 presented_frames = 0;
 	uint64 dropped_frames = 0;
 	int pending_frames = 0;
+	// Root control recording/worker enqueue CPU timings; zero for other presenters.
+	// Maxima include warmup and span the owning window lifetime.
+	double record_ms = 0, record_max_ms = 0;
+	double enqueue_ms = 0, enqueue_max_ms = 0;
 	double acquire_ms = 0;
 	double replay_ms = 0;
 	double present_ms = 0;

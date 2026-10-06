@@ -967,6 +967,124 @@ GpuResult VulkanGpuDevice::DestroyBuffer(GpuBufferId id)
 	return GpuResult::Ok;
 }
 
+bool VulkanGpuDevice::ReadTexturePixels(GpuTextureId id, Vector<byte>& pixels)
+{
+	pixels.Clear();
+	auto& d = *impl;
+	auto *texture = d.FindTexture(id);
+	if(!d.ready || !texture || texture->borrowed_swapchain || !texture->initialized ||
+	   d.HasOpenCommands() || !(texture->desc.usage & GpuTextureUsage_TransferSrc) ||
+	   (texture->desc.format != GpuFormat::RGBA8 && texture->desc.format != GpuFormat::BGRA8 &&
+	    texture->desc.format != GpuFormat::RGBA8Srgb && texture->desc.format != GpuFormat::BGRA8Srgb)) {
+		d.error = "readback requires an initialized owned RGBA8/BGRA8 TransferSrc target and no open commands";
+		return false;
+	}
+	const int64 pixel_count = (int64)texture->desc.size.cx * texture->desc.size.cy;
+	if(pixel_count <= 0 || pixel_count > 16 * 1024 * 1024) {
+		d.error = "diagnostic readback exceeds the 64 MiB limit";
+		return false;
+	}
+	const int bytes = (int)(pixel_count * 4);
+	PFN_vkCmdCopyImageToBuffer copy_image = nullptr;
+	PFN_vkInvalidateMappedMemoryRanges invalidate = nullptr;
+	if(!d.Resolve(copy_image, "vkCmdCopyImageToBuffer") ||
+	   !d.Resolve(invalidate, "vkInvalidateMappedMemoryRanges"))
+		return false;
+	Impl::RawBuffer staging;
+	if(!d.CreateRawBuffer((VkDeviceSize)bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, staging))
+		return false;
+	VkCommandPool pool = VK_NULL_HANDLE;
+	auto cleanup = [&]() {
+		if(pool) d.destroy_command_pool(d.device, pool, nullptr);
+		d.DestroyRawBuffer(staging);
+	};
+	auto fail = [&](const char *operation, VkResult result) {
+		d.error = VkFailure(operation, result);
+		cleanup();
+		return false;
+	};
+	VkCommandPoolCreateInfo pci {};
+	pci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	pci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+	pci.queueFamilyIndex = d.graphics_queue_family_index;
+	VkResult vr = d.create_command_pool(d.device, &pci, nullptr, &pool);
+	if(vr != VK_SUCCESS) return fail("vkCreateCommandPool", vr);
+	VkCommandBuffer command = VK_NULL_HANDLE;
+	VkCommandBufferAllocateInfo ai {};
+	ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	ai.commandPool = pool;
+	ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	ai.commandBufferCount = 1;
+	vr = d.allocate_command_buffers(d.device, &ai, &command);
+	if(vr != VK_SUCCESS) return fail("vkAllocateCommandBuffers", vr);
+	VkCommandBufferBeginInfo bi {};
+	bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vr = d.begin_command_buffer(command, &bi);
+	if(vr != VK_SUCCESS) return fail("vkBeginCommandBuffer", vr);
+	VkImageMemoryBarrier barrier {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.srcAccessMask = AccessForLayout(texture->layout);
+	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	barrier.oldLayout = texture->layout;
+	barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.image = texture->image;
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+	d.cmd_pipeline_barrier(command, StageForLayout(texture->layout), VK_PIPELINE_STAGE_TRANSFER_BIT,
+	                       0, 0, nullptr, 0, nullptr, 1, &barrier);
+	VkBufferImageCopy region {};
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.layerCount = 1;
+	region.imageExtent = { (uint32_t)texture->desc.size.cx, (uint32_t)texture->desc.size.cy, 1 };
+	copy_image(command, texture->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &region);
+	barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	barrier.dstAccessMask = AccessForLayout(texture->layout);
+	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	barrier.newLayout = texture->layout;
+	d.cmd_pipeline_barrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, StageForLayout(texture->layout),
+	                       0, 0, nullptr, 0, nullptr, 1, &barrier);
+	VkBufferMemoryBarrier host {};
+	host.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+	host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	host.buffer = staging.buffer;
+	host.size = VK_WHOLE_SIZE;
+	d.cmd_pipeline_barrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+	                       0, 0, nullptr, 1, &host, 0, nullptr);
+	vr = d.end_command_buffer(command);
+	if(vr != VK_SUCCESS) return fail("vkEndCommandBuffer", vr);
+	VkSubmitInfo submit {};
+	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &command;
+	vr = d.queue_submit(d.graphics_queue, 1, &submit, VK_NULL_HANDLE);
+	if(vr != VK_SUCCESS) return fail("vkQueueSubmit", vr);
+	vr = d.queue_wait_idle(d.graphics_queue);
+	if(vr != VK_SUCCESS) return fail("vkQueueWaitIdle", vr);
+	void *mapped = nullptr;
+	vr = d.map_memory(d.device, staging.memory, 0, VK_WHOLE_SIZE, 0, &mapped);
+	if(vr != VK_SUCCESS) return fail("vkMapMemory", vr);
+	if(!(staging.memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+		VkMappedMemoryRange range {};
+		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range.memory = staging.memory;
+		range.size = VK_WHOLE_SIZE;
+		vr = invalidate(d.device, 1, &range);
+		if(vr != VK_SUCCESS) {
+			d.unmap_memory(d.device, staging.memory);
+			return fail("vkInvalidateMappedMemoryRanges", vr);
+		}
+	}
+	pixels.SetCount((int)bytes);
+	std::memcpy(pixels.Begin(), mapped, (size_t)bytes);
+	d.unmap_memory(d.device, staging.memory);
+	cleanup();
+	return true;
+}
+
 GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out)
 {
 	out = GpuTextureId();
@@ -1374,7 +1492,8 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		impl->error = "CreatePipeline requires Position2Color4F and a supported color format"; return GpuResult::InvalidArgument;
 	}
 	if(desc.blend_mode != GpuBlendMode::Opaque && desc.blend_mode != GpuBlendMode::SourceOver &&
-	   desc.blend_mode != GpuBlendMode::DestinationInvert) {
+	   desc.blend_mode != GpuBlendMode::DestinationInvert &&
+	   desc.blend_mode != GpuBlendMode::PremultipliedSourceOver) {
 		impl->error = "CreatePipeline received an unsupported blend mode"; return GpuResult::InvalidArgument;
 	}
 	VkPipelineLayoutCreateInfo lci {}; lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1395,9 +1514,10 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	VkPipelineMultisampleStateCreateInfo ms {}; ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	VkPipelineColorBlendAttachmentState blend_attachment {};
 	blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	if(desc.blend_mode == GpuBlendMode::SourceOver) {
+	if(desc.blend_mode == GpuBlendMode::SourceOver || desc.blend_mode == GpuBlendMode::PremultipliedSourceOver) {
 		blend_attachment.blendEnable = VK_TRUE;
-		blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+		blend_attachment.srcColorBlendFactor = desc.blend_mode == GpuBlendMode::PremultipliedSourceOver ?
+		                                     VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_SRC_ALPHA;
 		blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 		blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
 		blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;

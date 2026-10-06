@@ -18,6 +18,10 @@ public:
 	bool IsGpuRequired() const;
 	uint64 GetSoftwareFallbackCount() const;
 	GpuPresentationStats GetGpuStats() const;
+	// Opt-in precise Windows host wakes for existing UI/Animation timers.
+	// Select before opening; one coalesced message, joined before window teardown.
+	GpuTopWindow& SetFrameClock(bool enabled = true);
+	bool IsFrameClockActive() const;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
 	GpuBackendKind GetBackend() const;

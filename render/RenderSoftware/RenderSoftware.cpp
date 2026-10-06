@@ -118,7 +118,12 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 					}
 					resolved = Image(pixels);
 				}
-				painter.DrawImage(ToRect(op.rect), resolved);
+				// Match GPU clamp-to-edge sampling instead of Painter's transparent extension.
+				const Rect dest = ToRect(op.rect);
+				painter.RectPath(dest).Fill(resolved,
+					Xform2D::Scale((double)dest.GetWidth() / resolved.GetWidth(),
+					               (double)dest.GetHeight() / resolved.GetHeight()) *
+					Xform2D::Translation(dest.left, dest.top), FILL_PAD);
 			}
 			break;
 		case UiDisplayOpType::DrawText:

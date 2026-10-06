@@ -64,11 +64,8 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 ## Branch Hygiene
 
 - User explicitly requested only main on 2026-10-03.
-- All 24 historical remote branches and one local branch contained unique commits.
-- Complete verified archive: `build/branches-before-cleanup-2026-10-03.bundle`.
-- SHA-256: `c00c2ae7060ce55f7d09ca76f5a5d7c8828aca25c93b4bb1918021c351934cec`.
-- Atomic exact-head remote deletion and local removal completed; only main remains.
-- Preserve the archive separately when cleaning build outputs.
+- All historical branches archived and removed; only main remains.
+- Preserve `build/branches-before-cleanup-2026-10-03.bundle` (hash in v1 scope notes).
 
 ## UI2 Drawing Integration — 2026-10-05
 
@@ -78,12 +75,15 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 - GpuUiGallery --require-gpu reports failure and exits; benchmark counts root fallback.
 - Debug/Release root/worker/startup/retry/owned-popup fault tests PASS; default/required popup lifecycle PASS.
 - Non-BLITZ provider registration was omitted by static linking; fixed with an explicit composition anchor.
-- Required Gallery normal/load PASS: UI p99 18.42/18.03 ms, zero fallback and final ZERO.
-- Gallery development build uses the current Ui tree, separate from RC1 dependency pins.
-- Source rectangles, mask tint/opacity and scaled Draw bridge implemented; original upload retained.
-- 2026-10-06: Debug/Release image geometry and real Vulkan validation PASS; software/bridge PASS.
-- Required Gallery normal/load UI p99 24.56/18.07 ms; zero fallback, final ZERO.
-- Next: GPU pixel-readback parity and portable text/host; WebGPU/Metal still pending.
+- Image crops/masks/scaling retain original uploads; readback fixed GPU halos/software crop fading.
+- Premultiplied images/glyph masks; four-format pixels and Debug/Release image/text PASS.
+- Default enabled/disabled drawing: 54 painted entries, 216 cases PASS; populated/input states pending.
+- Representative Gallery review and short load PASS; earlier 300 s max-delay failures retained.
+- Particle geometry/mask sharing reduces cache churn; Gallery uses upp_animation.
+- Live presented FPS and 512-particle inspector added; precise host clock lifecycle PASS.
+- Owner observes faster animation; measured grid on/off FPS 44.00 / 41.60 (single pair).
+- Short responsiveness PASS; updated 300 s validation run ended early, sustained gate open.
+- Next: complete Windows control conformance and portable text/host; WebGPU/Metal pending.
 - RC1 publication is owner-managed; do not infer publication from the Git tag.
 
 ## Remaining Acceptance

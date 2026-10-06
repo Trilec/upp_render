@@ -1,5 +1,6 @@
 #include <GpuRender/GpuRender.h>
 #include <Ui/Ui.h>
+#include <Animation/Animation.h>
 #include <Utilities/PropertyEditor/PropertyEditor.h>
 #include <Utilities/PropertyEditor/PropertyValueEditors.h>
 
@@ -40,7 +41,7 @@ String SceneModeName(int mode)
 
 class ParticleSceneCtrl : public Ctrl {
 public:
-	ParticleSceneCtrl()
+	ParticleSceneCtrl() : motion_(*this)
 	{
 		NoWantFocus();
 
@@ -50,12 +51,14 @@ public:
 		d.DrawEllipse(16, 13, 9, 9, Color(255, 216, 112));
 		badge_ = d;
 
-		SetTimeCallback(-33, [=] {
-			if(!paused_) {
-				phase_ += 0.033 * speed_;
+		motion_.Duration(60000).Loop().Ease([](double progress) { return progress; })
+			.OnUpdate([=](double progress) {
+				double elapsed = progress - motion_progress_;
+				if(elapsed < 0) elapsed += 1; // next scheduler loop
+				motion_progress_ = progress;
+				phase_ += elapsed * 60.0 * speed_;
 				Refresh();
-			}
-		});
+			}).Play();
 	}
 
 	void SetMode(int mode)              { mode_ = clamp(mode, 0, SCENE_MODE_COUNT - 1); Refresh(); }
@@ -67,7 +70,12 @@ public:
 	void SetPrimaryColor(Color color)   { primary_ = color; Refresh(); }
 	void SetSecondaryColor(Color color) { secondary_ = color; Refresh(); }
 	void ShowGrid(bool on)              { show_grid_ = on; Refresh(); }
-	void SetPaused(bool on)             { paused_ = on; Refresh(); }
+	void SetPaused(bool on) {
+		if(paused_ == on) return;
+		paused_ = on;
+		if(on) motion_.Pause(); else motion_.Resume();
+		Refresh();
+	}
 	void TogglePaused()                 { SetPaused(!paused_); }
 
 	int GetMode() const              { return mode_; }
@@ -94,6 +102,8 @@ public:
 		show_grid_ = true;
 		paused_ = false;
 		phase_ = 0.0;
+		motion_progress_ = 0.0;
+		motion_.Replay();
 		Refresh();
 	}
 
@@ -181,6 +191,8 @@ public:
 	}
 
 private:
+	Animation motion_;
+	double motion_progress_ = 0.0;
 	Image badge_;
 	int mode_ = SCENE_ORBIT;
 	double speed_ = 1.0;
@@ -224,6 +236,7 @@ public:
 	GpuUiGallery()
 	{
 		SetAsyncPresentation();
+		SetFrameClock();
 		Title("GpuRender - upp_Ui GPU Scene Inspector")
 		    .Sizeable().Zoomable().SetRect(0, 0, 1220, 760);
 
@@ -262,7 +275,17 @@ public:
 
 		SetTimeCallback(-250, [=] {
 			String e = GetGpuError();
-			gpu_state_.SetText(e.IsEmpty() ? String(IsGpuReady() ? "Vulkan root compositor active" : "GPU initialization pending") : "GPU compositor: " + e);
+			String state = e.IsEmpty() ? String(IsGpuReady() ? "Vulkan root compositor active" : "GPU initialization pending")
+			                         : "GPU compositor: " + e;
+			const auto stats = GetGpuStats();
+			const double now = NowMs();
+			if(!live_fps_epoch_) { live_fps_epoch_ = now; live_fps_frames_ = stats.presented_frames; }
+			if(now - live_fps_epoch_ >= 1000) {
+				live_fps_ = (stats.presented_frames - live_fps_frames_) * 1000.0 / (now - live_fps_epoch_);
+				live_fps_epoch_ = now; live_fps_frames_ = stats.presented_frames;
+			}
+			if(IsGpuReady()) state << Format(" | %.1f FPS | replay %.2f ms", live_fps_, stats.replay_ms);
+			gpu_state_.SetText(state);
 			if(IsGpuRequired() && !e.IsEmpty()) {
 				SaveFile(GetExeDirFile("GpuUiGallery-gpu-failure.txt"), e + "\n");
 				SetExitCode(1);
@@ -273,9 +296,16 @@ public:
 		SyncAllControlsFromScene();
 	}
 
+	void SetDemoScene(int particles, bool grid)
+	{
+		scene_.SetParticleCount(particles);
+		scene_.ShowGrid(grid);
+		SyncAllControlsFromScene();
+	}
 	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300)
 	{
 		scene_.SetParticleCount(heavy ? 512 : 96);
+		SyncAllControlsFromScene();
 		benchmark_heavy_ = heavy;
 		benchmark_soak_ = soak;
 		benchmark_seconds_ = seconds;
@@ -427,7 +457,7 @@ private:
 	{
 		property_title_.SetText("Scene properties");
 
-		property_model_.AddSliderInt("particle_count", "Particle count", 28, 6, 96, 2, "Motion")
+		property_model_.AddSliderInt("particle_count", "Particle count", 28, 6, 512, 2, "Motion")
 		              .SetInlineEditor(true).SetImpact(PropertyImpactPaint);
 		property_model_.AddSliderInt("motion_radius", "Motion radius", 72, 20, 100, 1, "Motion")
 		              .SetInlineEditor(true).SetUnit("%").SetImpact(PropertyImpactPaint);
@@ -588,6 +618,10 @@ private:
 		if(duration >= 4000) {
 			benchmark_delays_.Add(max(0.0, now - benchmark_due_));
 			const GpuPresentationStats stats = GetGpuStats();
+			if(!benchmark_measure_started_) {
+				benchmark_measure_started_ = now;
+				benchmark_start_frame_ = stats.presented_frames;
+			}
 			if(stats.presented_frames != benchmark_last_frame_) {
 				benchmark_replays_.Add(stats.acquire_ms + stats.replay_ms + stats.present_ms);
 				benchmark_last_frame_ = stats.presented_frames;
@@ -627,6 +661,11 @@ private:
 		       << "presented_frames=" << AsString(stats.presented_frames)
 		       << " dropped_frames=" << AsString(stats.dropped_frames)
 		       << " pending_frames=" << stats.pending_frames << "\n"
+		       << "measured_presented_frames=" << AsString(stats.presented_frames - benchmark_start_frame_)
+		       << " throughput_elapsed_ms=" << Format("%.2f", now - benchmark_measure_started_)
+		       << " presented_fps=" << Format("%.2f", (stats.presented_frames - benchmark_start_frame_) * 1000.0 /
+		                                                   max(1.0, now - benchmark_measure_started_)) << "\n"
+		       << "frame_clock_active=" << (IsFrameClockActive() ? 1 : 0) << "\n"
 		       << "timer_delay_ms p50=" << Format("%.2f", Percentile(benchmark_delays_, 0.50))
 		       << " p95=" << Format("%.2f", Percentile(benchmark_delays_, 0.95))
 		       << " p99=" << Format("%.2f", p99) << " max=" << Format("%.2f", worst) << "\n"
@@ -634,10 +673,16 @@ private:
 		       << " p95=" << Format("%.2f", Percentile(benchmark_replays_, 0.95))
 		       << " p99=" << Format("%.2f", Percentile(benchmark_replays_, 0.99))
 		       << " max=" << Format("%.2f", Percentile(benchmark_replays_, 1.0)) << "\n"
+		       << "root_record_ms last=" << Format("%.2f", stats.record_ms)
+		       << " lifetime_max=" << Format("%.2f", stats.record_max_ms) << "\n"
+		       << "root_enqueue_ms last=" << Format("%.2f", stats.enqueue_ms)
+		       << " lifetime_max=" << Format("%.2f", stats.enqueue_max_ms) << "\n"
 		       << "process_private_peak_bytes=" << AsString(benchmark_private_peak_) << "\n"
 		       << "image_cache_entry_peak=" << benchmark_image_entries_ << "\n"
 		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
 		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"
+		       << "grid=" << (scene_.IsGridVisible() ? 1 : 0) << "\n"
+		       << "animation_driver=upp_animation scheduler_fps=" << Animation::GetFPS() << "\n"
 		       << "gpu_required=" << (IsGpuRequired() ? 1 : 0) << "\n"
 		       << "software_fallback_count=" << AsString(GetSoftwareFallbackCount()) << "\n"
 		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
@@ -664,7 +709,11 @@ private:
 	Vector<uint64> benchmark_heap_;
 	double benchmark_next_memory_ = 30000;
 	Vector<uint64> benchmark_memory_;
+	double live_fps_epoch_ = 0, live_fps_ = 0;
+	uint64 live_fps_frames_ = 0;
 	double benchmark_started_ = 0;
+	double benchmark_measure_started_ = 0;
+	uint64 benchmark_start_frame_ = 0;
 	double benchmark_due_ = 0;
 	uint64 benchmark_last_frame_ = 0;
 	uint64 benchmark_private_peak_ = 0;
@@ -707,6 +756,8 @@ GUI_APP_MAIN
 	int seconds = 300;
 	bool validation = false;
 	bool require_gpu = false;
+	bool grid = true;
+	int particles = 28;
 	for(const String& arg : CommandLine()) {
 		if(arg == "--benchmark" || arg == "--benchmark-load") {
 			benchmark = true;
@@ -717,16 +768,24 @@ GUI_APP_MAIN
 			seconds = ScanInt(arg.Mid(20));
 			if(IsNull(seconds) || seconds < 20 || seconds > 300) { SetExitCode(2); return; }
 		}
+		if(arg.StartsWith("--particles=")) {
+			particles = ScanInt(arg.Mid(12));
+			if(IsNull(particles) || particles < 6 || particles > 512) { SetExitCode(2); return; }
+		}
+		if(arg == "--no-grid") grid = false;
 		if(arg == "--validation") validation = true;
 		if(arg == "--require-gpu") require_gpu = true;
 	}
+	Animation::SetFPS(60);
 	{
 		GpuUiGallery app;
+		app.SetDemoScene(particles, grid);
 		if(validation) app.SetValidation();
 		if(require_gpu) app.SetRequireGpu();
 		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
 		app.Run();
 	}
+	Animation::Finalize();
 	if(benchmark) {
 		const auto d = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&

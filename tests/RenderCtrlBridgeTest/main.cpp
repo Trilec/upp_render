@@ -19,6 +19,47 @@ static Image MakeProbeImage()
 	return draw;
 }
 
+class MovingEllipseCtrl : public Ctrl {
+public:
+	int x = 10;
+	MovingEllipseCtrl() { SetRect(0, 0, 700, 64); }
+	void Paint(Draw& draw) override {
+		draw.DrawEllipse(x, 12, 22, 18, Color(80, 160, 240), 1, White());
+	}
+};
+
+static bool CheckMovingEllipse()
+{
+	MovingEllipseCtrl ctrl;
+	UiDisplayList first, moved;
+	String error;
+	bool ok = RecordCtrlDisplayList(ctrl, first, error);
+	ctrl.x = 501;
+	ok &= RecordCtrlDisplayList(ctrl, moved, error);
+	int paths = 0;
+	for(int i = 0; i < first.GetCount(); ++i) {
+		const UiDisplayOp& op = first[i];
+		if(op.type == UiDisplayOpType::FillPath || op.type == UiDisplayOpType::StrokePath) {
+			ok &= Check(i < moved.GetCount() && op == moved[i],
+			            "translated native ellipse must reuse exactly the same curve/paint cache key");
+			paths++;
+		}
+	}
+	ok &= Check(paths == 2, "ellipse fixture must exercise fill and stroke");
+	SoftwareUiRenderer software;
+	ImagePainter p1(ctrl.GetSize()), p2(ctrl.GetSize());
+	p1.Clear(RGBAZero()); p2.Clear(RGBAZero());
+	ok &= software.Replay(first, p1) && software.Replay(moved, p2);
+	Image a = p1.GetResult(), b = p2.GetResult();
+	for(int y = 0; y < 64; ++y)
+		for(int x = 0; x < 44; ++x)
+			ok &= a[y][x] == b[y][x + 491];
+	ok &= Check(a[20][20].a > 0 && b[20][20].a == 0,
+	            "ellipse translation must preserve visible placement and clear the old position");
+	return Check(ok, "moving ellipse software pixels should be identical after translation");
+
+}
+
 class ProbeCtrl : public Ctrl {
 public:
 	ProbeCtrl()
@@ -286,6 +327,7 @@ GUI_APP_MAIN
 	Ctrl::GlobalBackBuffer(initial_global_backbuffer);
 	ok &= Check(ProbeGlobalBackBuffer() == initial_global_backbuffer, "focused test should restore the process global backbuffer state it inherited");
 #endif
+	ok &= CheckMovingEllipse();
 	if(ok) { Cout() << "RenderCtrlBridgeTest passed" << EOL; return; }
 	SetExitCode(1);
 }

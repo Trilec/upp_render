@@ -83,6 +83,8 @@ enum class GpuBlendMode {
 	Opaque,
 	SourceOver,
 	DestinationInvert,
+	// Source RGB is already multiplied by source alpha in the working colour space.
+	PremultipliedSourceOver,
 };
 
 enum class GpuSamplerFilter {

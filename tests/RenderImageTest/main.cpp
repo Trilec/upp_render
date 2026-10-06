@@ -107,7 +107,8 @@ CONSOLE_APP_MAIN
 		pixel.r = (pixel.r * 128 + 127) / 255; pixel.g = (pixel.g * 128 + 127) / 255;
 		pixel.b = (pixel.b * 128 + 127) / 255; pixel.a = (pixel.a * 128 + 127) / 255;
 	}
-	expected.DrawImage(Rect(2, 2, 14, 14), Image(faded));
+	expected.RectPath(2, 2, 12, 12).Fill(Image(faded),
+		Xform2D::Scale(12.0, 6.0) * Xform2D::Translation(2, 2), FILL_PAD);
 	ok &= Check(actual.GetResult() == expected.GetResult(), "crop mask opacity should match independent reference pixels");
 	UiDisplayListBuilder invalid_crop;
 	invalid_crop.DrawImage(Rectf(0, 0, 10, 10), image, Rect(-1, 0, 2, 2));

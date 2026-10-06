@@ -362,14 +362,14 @@ CONSOLE_APP_MAIN
 			GpuPipelineId candidate; candidate.value = id;
 			if(image_device.GetPipelineDesc(candidate, sampled_pipeline) && sampled_pipeline.sampled_texture_count == 1) {
 				found_sampled_pipeline = sampled_pipeline.vertex_layout == GpuVertexLayout::Position2Uv2Color4F &&
-				                         sampled_pipeline.blend_mode == GpuBlendMode::SourceOver &&
+				                         sampled_pipeline.blend_mode == GpuBlendMode::PremultipliedSourceOver &&
 				                         sampled_pipeline.sampler_filter == GpuSamplerFilter::Linear &&
 				                         sampled_pipeline.sampler_address == GpuSamplerAddressMode::ClampToEdge;
 				break;
 			}
 		}
 		ok &= Check(found_sampled_pipeline,
-		            "image renderer should request the bounded UV + SourceOver + linear-clamp sampled pipeline");
+		            "image renderer should request the bounded UV + premultiplied SourceOver + linear-clamp sampled pipeline");
 		renderer.Close();
 		String image_log = image_device.DumpLog();
 		ok &= Check(CountText(image_log, "WriteTexture id=") == 1,

@@ -486,14 +486,19 @@ public:
 			Fail("invert ellipse drawing is not supported by the neutral compositor");
 			return;
 		}
-		UiPath ellipse = MakeEllipsePath(r);
+		// Keep canonical curve coordinates independent of integer placement.
+		// Absolute cubic coordinates otherwise retain rounding differences in cache keys.
+		UiPath ellipse = MakeEllipsePath(Rect(r.GetSize()));
 		if(ellipse.IsEmpty())
 			return;
+		builder.Save();
+		builder.ConcatTransform(Translation(r.TopLeft()));
 		if(!IsNull(color))
 			builder.FillPath(ellipse, UiPaint::Solid(ToRgba8(color)), UiFillRule::NonZero);
 		UiStrokeStyle stroke;
 		if(!IsNull(pencolor) && ConfigureStroke(pen, stroke))
 			builder.StrokePath(ellipse, UiPaint::Solid(ToRgba8(pencolor)), stroke);
+		builder.Restore();
 		report.path_count++;
 	}
 

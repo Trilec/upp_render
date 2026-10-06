@@ -189,6 +189,8 @@ private:
 
 	struct VectorRaster : Moveable<VectorRaster> {
 		Image image;
+		Rgba8 tint = Rgba8(255, 255, 255, 255);
+		bool alpha_mask = false;
 		Rectf local_rect = Rectf(0, 0, 0, 0);
 		bool drawable = false;
 	};
@@ -248,7 +250,7 @@ private:
 	VectorImpl *vector_impl = nullptr;
 	VectorCleanup vector_cleanup;
 
-	static Image Unmultiply(const Image& image);
+	static Image PrepareImagePixels(const Image& image, GpuFormat format);
 	bool EnsureShaders(bool textured, bool alpha_mask = false);
 	bool EnsurePipeline(GpuFormat format, bool textured, GpuPipelineId& out,
 	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver, bool alpha_mask = false);

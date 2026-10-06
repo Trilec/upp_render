@@ -2,6 +2,7 @@
 #include "GpuTransientWindows.h"
 #include "RenderCtrlBridge.h"
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -18,11 +19,18 @@ struct GpuTopWindow::Impl {
 	bool IsGpuReady() const { return worker.joinable() ? worker_ready : presenter.IsReady(); }
 	GpuPresentationStats GetStats() const
 	{
-		if(!worker.joinable()) return presenter.GetStats();
-		std::lock_guard<std::mutex> guard(work_mutex);
-		GpuPresentationStats result = worker_stats;
-		result.dropped_frames = dropped_frames;
-		result.pending_frames = pending_frame ? 1 : 0;
+		GpuPresentationStats result;
+		if(!worker.joinable()) result = presenter.GetStats();
+		else {
+			std::lock_guard<std::mutex> guard(work_mutex);
+			result = worker_stats;
+			result.dropped_frames = dropped_frames;
+			result.pending_frames = pending_frame ? 1 : 0;
+		}
+		result.record_ms = record_ms;
+		result.record_max_ms = record_max_ms;
+		result.enqueue_ms = enqueue_ms;
+		result.enqueue_max_ms = enqueue_max_ms;
 		return result;
 	}
 	struct PendingFrame {
@@ -83,6 +91,10 @@ struct GpuTopWindow::Impl {
 	String GetGpuError() const
 	{
 		if(!api_error.IsEmpty()) return api_error;
+#ifdef PLATFORM_WIN32
+		if(frame_clock_requested && IsGpuReady() && !frame_clock.IsActive())
+			return "precise Windows frame clock stopped unexpectedly";
+#endif
 		if(!session_error.IsEmpty()) return session_error;
 		if(!presentation_error.IsEmpty()) return presentation_error;
 		return worker.joinable() ? WorkerError() : presenter.GetError();
@@ -131,6 +143,11 @@ struct GpuTopWindow::Impl {
 		if(!BuildWin32GpuNativeWindowDesc(hwnd, native_window, native_error)) { SetSessionError(native_error); return; }
 		String open_error;
 		if(!presenter.Open(backend_kind, validation_requested, native_window, open_error)) { SetSessionError(open_error.IsEmpty() ? presenter.GetError() : open_error); return; }
+		if(frame_clock_requested && !frame_clock.Start(hwnd)) {
+			presenter.Close();
+			SetSessionError("precise Windows frame clock could not start");
+			return;
+		}
 		ClearError();
 		StartWorker();
 		if(owner) owner->Refresh();
@@ -152,18 +169,31 @@ struct GpuTopWindow::Impl {
 		UiDisplayList list;
 		Rgba8 background;
 		String error;
-		if(!owner->BuildGpuFrame(size, list, background, error)) { presentation_error = error.IsEmpty() ? String("root GPU frame build failed") : error; return false; }
+		const auto record_started = std::chrono::steady_clock::now();
+		const bool built = owner->BuildGpuFrame(size, list, background, error);
+		record_ms = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - record_started).count();
+		record_max_ms = max(record_max_ms, record_ms);
+		if(!built) { presentation_error = error.IsEmpty() ? String("root GPU frame build failed") : error; return false; }
 		if(worker.joinable()) {
+			const auto enqueue_started = std::chrono::steady_clock::now();
 			std::unique_ptr<PendingFrame> frame(new PendingFrame);
 			frame->size = size;
 			frame->list = pick(list);
 			frame->background = background;
+			std::unique_ptr<PendingFrame> retired;
 			{
 				std::lock_guard<std::mutex> guard(work_mutex);
 				if(pending_frame) ++dropped_frames;
+				retired = std::move(pending_frame);
 				pending_frame = std::move(frame);
 			}
 			work_changed.notify_one();
+			// Release discarded image/path payloads without holding the worker/statistics mutex.
+			retired.reset();
+			enqueue_ms = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - enqueue_started).count();
+			enqueue_max_ms = max(enqueue_max_ms, enqueue_ms);
 			return true;
 		}
 		if(!presenter.Present(size, list, background, error)) { presentation_error = error.IsEmpty() ? presenter.GetError() : error; return false; }
@@ -183,6 +213,7 @@ struct GpuTopWindow::Impl {
 		String failure = GetGpuError();
 		if(failure.IsEmpty())
 			failure = "root GPU presentation failed";
+		frame_clock.Stop();
 		StopWorker();
 		presenter.Close();
 		init_attempted = false;
@@ -195,6 +226,9 @@ struct GpuTopWindow::Impl {
 #endif
 	void StopGpuSession()
 	{
+#ifdef PLATFORM_WIN32
+		frame_clock.Stop();
+#endif
 		StopWorker();
 		presenter.Close();
 		init_attempted = false;
@@ -226,6 +260,13 @@ struct GpuTopWindow::Impl {
 	GpuPresentationStats worker_stats;
 	String worker_error;
 	uint64 dropped_frames = 0;
+	// UI-thread diagnostics, cumulative for this window lifetime.
+	double record_ms = 0, record_max_ms = 0;
+	double enqueue_ms = 0, enqueue_max_ms = 0;
+	bool frame_clock_requested = false;
+#ifdef PLATFORM_WIN32
+	Win32GpuFrameClock frame_clock;
+#endif
 	bool destroying = false;
 };
 
@@ -233,6 +274,20 @@ GpuTopWindow::GpuTopWindow()
 {
 	EnsureGpuTransientWindowSupport();
 	impl.Create(*this);
+}
+GpuTopWindow& GpuTopWindow::SetFrameClock(bool enabled)
+{
+	if(IsOpen()) { impl->SetApiError("frame clock must be selected before opening"); return *this; }
+	impl->frame_clock_requested = enabled;
+	return *this;
+}
+bool GpuTopWindow::IsFrameClockActive() const
+{
+#ifdef PLATFORM_WIN32
+	return impl && impl->frame_clock.IsActive();
+#else
+	return false;
+#endif
 }
 GpuTopWindow::~GpuTopWindow() { if(impl) { impl->destroying = true; impl->StopGpuSession(); } }
 void GpuTopWindow::Close()
@@ -294,6 +349,11 @@ void GpuTopWindow::NcCreate(HWND hwnd) { TopWindow::NcCreate(hwnd); if(impl) imp
 void GpuTopWindow::PreDestroy() { if(impl) impl->StopGpuSession(); TopWindow::PreDestroy(); }
 LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
+	if(message == Win32GpuFrameClock::Message()) {
+		if(impl && impl->frame_clock.Consume(wParam))
+			TimerProc(msecs()); // existing scheduler, on the UI thread; callbacks may close this root
+		return 0;
+	}
 	if(impl && impl->require_gpu) {
 		if(message == WM_ERASEBKGND) return 1;
 		if(message == WM_PAINT) {

@@ -1,7 +1,11 @@
 uses
+	Ui,
+	GpuRender,
 	RenderGpu2D,
-	RenderSoftware,
 	RenderVulkan;
 
 file
 	main.cpp;
+
+mainconfig
+	"" = "GUI";

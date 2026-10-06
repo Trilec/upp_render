@@ -546,7 +546,7 @@ bool UiRenderer2D::EnsureImageTexture(const Image& image, GpuTextureId& out)
 	desc.usage = GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst;
 	desc.label = "UiRenderer2D image";
 	GpuTextureId texture;
-	Image straight = Unmultiply(image);
+	Image straight = PrepareImagePixels(image, image_format);
 	const int64 byte_count = (int64)straight.GetLength() * sizeof(RGBA);
 	const void *pixels = straight.Begin();
 #ifdef PLATFORM_MACOS
@@ -921,7 +921,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	if(has_invert && !EnsurePipeline(target.color_format, false, invert_pipeline,
 	                                GpuBlendMode::DestinationInvert))
 		return false;
-	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline))
+	if(!textured_vertices.IsEmpty() && !EnsurePipeline(target.color_format, true, textured_pipeline, GpuBlendMode::PremultipliedSourceOver))
 		return false;
 
 	for(const Batch& batch : batches)

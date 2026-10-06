@@ -11,7 +11,7 @@ No OpenGL implementation is planned for this milestone.
 | --- | --- | --- |
 | Control painting | Win32 SystemDraw adapter into UiCanvas/display list | A portable recording seam; keep one Ui layout/input/theme authority |
 | Flat primitives/images | Shared RenderGpu2D replay and bounded resource caches | Preserve semantics and batching across providers |
-| Image source rectangle/tint | Neutral source rectangle, tint/opacity and alpha-mask intent; original-image GPU upload | Software reference and GPU geometry/ownership verified; offscreen GPU pixel-readback parity remains |
+| Image source rectangle/tint | Neutral source rectangle, tint/opacity and alpha-mask intent; original-image GPU upload | Crop/mask/opacity pixels and transparent-edge interpolation verified across RGBA/BGRA UNORM/sRGB |
 | Paths/SVG | Cached CPU Painter raster into sampled GPU images | Keep portable CPU raster available; optimize measured hot paths without per-control GPU APIs |
 | Text | U++ font metrics and per-character glyph raster into atlases | Portable shaping/measurement/glyph contract including fallback fonts, bidi, IME, selection and DPI |
 | Clip | Rectangular neutral clip; non-axis-aligned transformed clip rejected | Non-rectangular clip semantics and reference pixels |
@@ -114,7 +114,7 @@ Debug/Release geometry/cache tests and real Vulkan validation tests PASS: one or
 upload for multiple crops/colours, warm zero uploads, separate mask fragment with
 shared vertex shader, edge-centre UVs and final ownership ZERO. Native Draw bridge
 identity/scaled-destination regression PASS. New manual visual/input acceptance
-and offscreen GPU pixel-readback parity are not claimed.
+are not claimed for this image implementation.
 
 Required Gallery, validation requested, 4 s warmup plus 20 s measured:
 
@@ -129,8 +129,8 @@ UI. These runs do not establish a process-memory improvement or new plateau.
 
 ## Next bounded acceptance gates
 
-1. Close pixel-readback parity for the implemented source-rectangle/mask/opacity path;
-   compare transparent and crop-edge pixels across UNORM/sRGB GPU targets.
+1. Populate model-backed controls and verify drawing/input states beyond the
+   completed 216 default enabled/disabled drawing cases.
 2. Choose and test the portable text/host boundary, then exercise a small WebGPU
    browser application using the same control and drawing code.
 3. Extend full control coverage, Linux Vulkan and Metal using the verified contract.
@@ -138,3 +138,136 @@ UI. These runs do not establish a process-memory improvement or new plateau.
 
 RC1 artifacts and tag remain the previous qualified snapshot. UI2 builds are
 development evidence and require their own dependency identities.
+
+## Pixel acceptance and transparent filtering — 2026-10-06
+
+VulkanGpuDevice.ReadTexturePixels is a synchronous diagnostic for initialized,
+owned RGBA/BGRA8 TransferSrc targets, with no open command lists and exclusive
+queue access. It caps the output at 64 MiB, invalidates noncoherent host memory,
+restores the image layout and destroys temporary staging/command resources.
+It is never called by the production UI frame path.
+
+Readback verifies cropped translucent pixels, RGB tint, alpha masks and opacity
+in all four RGBA/BGRA UNORM/sRGB formats against independent compositing values.
+Aligned UNORM crop/mask/tint scenes also compare every pixel with the software
+reference. Warm replay after readback verifies restored layout and zero uploads.
+
+The tests exposed two defects: Painter's default transparent extension faded
+magnified crop boundaries; straight-alpha GPU filtering darkened transitions
+into transparency (red 99 rather than 159 at one tested UNORM sample).
+The software image fill now pads crop edges. GPU images use premultiplied colour
+filtering and explicit PremultipliedSourceOver blending. UNORM uploads reuse
+original U++ pixels; sRGB uploads encode colour premultiplied in linear space.
+Tint opacity multiplies both RGB and alpha. Glyphs use the alpha-mask pipeline.
+This preserves one original-image allocation across mask/tint/crop variants.
+
+## Browser fundamentals and implementation order
+
+WebGPU remains the chosen browser backend. Windows can qualify it before Metal:
+[Chrome supports WebGPU on suitable Windows hardware](https://developer.chrome.com/docs/web-platform/webgpu/overview).
+Browser capability/adapter creation must still be checked on the actual machine.
+
+A Windows executable cannot run in a canvas by switching its Vulkan backend.
+The application/control code needs a WebAssembly build plus a browser host.
+[Emscripten supports browser WebGPU via Emdawnwebgpu](https://emscripten.org/docs/porting/multimedia_and_graphics/WebGPU-support.html).
+Its [runtime](https://emscripten.org/docs/porting/emscripten-runtime-environment.html)
+requires browser-compatible event/lifecycle and filesystem handling.
+Browser shaders use [WGSL](https://www.w3.org/TR/WGSL/); existing Vulkan SPIR-V
+is not the browser shader input.
+
+Project implementation order: finish Windows drawing/control conformance and
+sustained responsiveness first; separate portable text and control recording
+from Win32 services; then implement RenderWebGPU and a Wasm host with the same
+Ui controls/display-list contract. Browser host work includes pointer/key/focus,
+DPI/resize, IME/composition, clipboard, font loading and page lifecycle. Bound
+caches/queues and explicit failure remain shared semantics. Metal follows with
+Apple-host validation. WebGPU implementation remains unstarted; documentation
+and Windows feasibility do not count as a working provider.
+
+## Inventory drawing baseline and sustained load
+
+UiGpuDrawingTest records and renders 54 painted inventory entries on real
+Vulkan: default enabled/disabled states at 128x32 and 320x180, including the
+UiTag painter fixture. All 216 cases passed with no unsupported operations,
+zero validation warnings/errors and zero final ownership. UiOsFileDialog is
+a host service, not a painted Ctrl. Empty models and headless layout containers
+are included; this baseline does not accept populated models, input, hover,
+pressed/focus states, themes, DPI, IME or accessibility.
+
+The first updated 300-second required-GPU heavy soak passed memory plateau
+(early/late mean private bytes 534,887,424 / 536,577,024) and cleanup. It failed
+the existing responsiveness gate: p99 20.99 ms, maximum 107.37 ms above 100 ms.
+Preserved evidence: build/ui2-pixel-soak-failure-2026-10-06.json. The threshold
+is unchanged. Root recording/enqueue CPU timings now identify front-end costs.
+Discarded pending frames release their payload outside the worker/statistics
+mutex; at most one pending frame is still retained. The repeat also failed:
+p99 23.47 ms/max 126.04 ms, with record max 19.83 ms/enqueue max 0.60 ms.
+Memory plateau PASS (early/late 535,615,488 / 536,798,208 bytes), final ZERO.
+Evidence: build/ui2-pixel-soak-repeat-failure-2026-10-06.json. These diagnostics
+do not yet explain the timer outlier; computer-use review had already closed.
+
+## Gallery visual/input review — 2026-10-06
+
+The rebuilt required-GPU Gallery passed native review: dropdown mouse selection
+and keyboard open/Escape dismissal, pause/resume state, slider value changes,
+inspector grid toggle, readable tooltip and a shared-domain GPU modal that closes
+without losing the root state. This is representative input acceptance, not all
+control states. The owner also reports the visible controls look and function well.
+The interactive review exited normally before the sustained benchmark began.
+The whole client UI is recorded and composited through Vulkan; CPU font/path
+rasterization and Windows hosting remain dependencies.
+
+Concurrent Ui development was preserved. Benchmark evidence identifies each
+executable and separately records the observed dirty dependency files.
+
+## Particle preparation and Animation integration
+
+Native ellipses now record canonical local curve coordinates plus translation.
+Moving them no longer changes cached geometry through floating-point cancellation.
+The bridge regression verifies identical fill/stroke keys and translated pixels.
+The first 512-particle short retest reduced replay median from 134.59 to 52.50 ms,
+image entries from 4096 to 532 and private peak from 538,951,680 to 243,462,144 bytes.
+These are different-duration runs; the short result is not a plateau qualification.
+
+Solid filled/stroked paths now cache white coverage independently of colour and
+opacity, replaying through the alpha-mask shader. Gradient/SVG content retains
+coloured rasters. Real Vulkan readback verifies one shared raster/upload for red
+and blue translucent versions in all four target formats.
+
+The Gallery now explicitly uses upp_animation: one owned looping Animation drives
+elapsed-time phase at the shared 60 Hz scheduler rate. Pause/Resume freezes the
+scheduler state; reset replays from zero. Animation::Finalize follows application
+teardown. This replaces the per-scene fixed-step timer without adding a painter
+or changing Ui's input/layout ownership. The owner reports faster motion, with a small slowdown when showing the grid.
+The live status now reports actual presentation FPS and replay CPU milliseconds.
+The inspector supports 512 particles. Optional precise Windows wakes dispatch
+the existing Animation/U++ scheduler; lifecycle and coalescing tests pass.
+Grid on/off production measurements and sustained validation are recorded below.
+
+## Live FPS and grid comparison — 2026-10-06
+
+Required-GPU Release production runs used identical GpuUiGalleryUi2Next.exe
+(SHA-256 4a27b22c7126ceee60de41d730d83fa3b93d9de5baa06c1d78392bf787fb6877),
+512 particles, four-second warmup and about 20 seconds of measured throughput.
+
+| Grid | Presented FPS | UI delay p99 / max ms | Private peak bytes |
+|---|---:|---:|---:|
+| On | 44.00 | 18.30 / 21.34 | 165,511,168 |
+| Off | 41.60 | 29.69 / 52.57 | 167,182,336 |
+
+Both passed the unchanged short responsiveness gate, with no software fallback
+and final native ownership ZERO. This single sequential pair does not establish
+a grid-related slowdown; replay medians were 9.36 / 9.29 ms. FPS counts frames
+actually presented after warmup, not the configured Animation rate. GPU timing
+is unavailable. Evidence: build/ui2-fps-grid-2026-10-06.json.
+
+Precise host wakes do not replace the scheduler time base: this U++ build's
+msecs() still uses Windows GetTickCount. A configured 60 Hz scheduler therefore
+does not guarantee 60 presented FPS. Further pacing/preparation measurements
+are needed; the high-end GPU alone does not remove UI-thread recording costs.
+
+The subsequent five-minute validation run ended at about 78 seconds before
+its measurement report completed. The report retained RUNNING plus final ZERO;
+the job returned exit 1. The existing GPU-failure file predates this run.
+No runtime failure cause or owner action is inferred. This is an incomplete
+qualification, not a sustained pass or a completed responsiveness measurement.
