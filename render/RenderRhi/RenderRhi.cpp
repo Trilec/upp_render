@@ -69,8 +69,25 @@ String DumpGpuFormat(GpuFormat format)
 	case GpuFormat::BGRA8Srgb: return "BGRA8Srgb";
 	case GpuFormat::R16F: return "R16F";
 	case GpuFormat::D24S8: return "D24S8";
+	case GpuFormat::RGBA16: return "RGBA16";
+	case GpuFormat::RGBA16F: return "RGBA16F";
+	case GpuFormat::RGBA32F: return "RGBA32F";
+	case GpuFormat::R32F: return "R32F";
 	}
 	return "Unknown";
+}
+
+int GpuFormatBytesPerPixel(GpuFormat format)
+{
+	switch(format) {
+	case GpuFormat::RGBA8: case GpuFormat::BGRA8:
+	case GpuFormat::RGBA8Srgb: case GpuFormat::BGRA8Srgb:
+	case GpuFormat::D24S8: case GpuFormat::R32F: return 4;
+	case GpuFormat::R16F: return 2;
+	case GpuFormat::RGBA16: case GpuFormat::RGBA16F: return 8;
+	case GpuFormat::RGBA32F: return 16;
+	default: return 0;
+	}
 }
 
 static String DumpFlags(int flags, const char *const *names, const int *bits, int count)

@@ -88,19 +88,7 @@ static bool HasSpirVMagic(const String& code)
 
 static int BytesPerPixel(GpuFormat format)
 {
-	switch(format) {
-	case GpuFormat::RGBA8:
-	case GpuFormat::BGRA8:
-	case GpuFormat::RGBA8Srgb:
-	case GpuFormat::BGRA8Srgb:
-	case GpuFormat::D24S8:
-		return 4;
-	case GpuFormat::R16F:
-		return 2;
-	case GpuFormat::Unknown:
-		return 0;
-	}
-	return 0;
+	return GpuFormatBytesPerPixel(format);
 }
 
 static bool ValidateNativeWindowDesc(const GpuSurfaceDesc& desc, String& reason)

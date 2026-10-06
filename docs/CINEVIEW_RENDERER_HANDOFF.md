@@ -49,3 +49,11 @@ A shared GPU domain currently serializes queue work; multiple surfaces do not
 imply separate GPU queues or unconstrained parallel rendering. Keep control,
 decode, playback timing and rendering ownership explicit while adding the
 smallest reusable contracts needed for the measured bottlenecks.
+
+## Reconciled precision and streaming requirements
+
+CineView's VULKAN_HANDOFF.md adds precise source formats, device queries,
+asynchronous streaming/lifetime, programmable colour/LUT binding, on-demand
+readback and subsequent compute. See [GPU source image pipeline](GPU_IMAGE_PIPELINE.md)
+for the implemented resource contract, native sample and ordered missing gates.
+The synchronous raw-source sample is not an accepted embedded video/OCIO pass.

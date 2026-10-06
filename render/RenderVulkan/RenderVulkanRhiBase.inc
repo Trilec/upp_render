@@ -19,6 +19,10 @@ static VkFormat ToVkFormat(GpuFormat format)
 	case GpuFormat::BGRA8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
 	case GpuFormat::R16F: return VK_FORMAT_R16_SFLOAT;
 	case GpuFormat::D24S8: return VK_FORMAT_D24_UNORM_S8_UINT;
+	case GpuFormat::RGBA16: return VK_FORMAT_R16G16B16A16_UNORM;
+	case GpuFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
+	case GpuFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
+	case GpuFormat::R32F: return VK_FORMAT_R32_SFLOAT;
 	case GpuFormat::Unknown: return VK_FORMAT_UNDEFINED;
 	}
 	return VK_FORMAT_UNDEFINED;
@@ -33,6 +37,10 @@ static GpuFormat FromVkFormat(VkFormat format)
 	case VK_FORMAT_B8G8R8A8_SRGB: return GpuFormat::BGRA8Srgb;
 	case VK_FORMAT_R16_SFLOAT: return GpuFormat::R16F;
 	case VK_FORMAT_D24_UNORM_S8_UINT: return GpuFormat::D24S8;
+	case VK_FORMAT_R16G16B16A16_UNORM: return GpuFormat::RGBA16;
+	case VK_FORMAT_R16G16B16A16_SFLOAT: return GpuFormat::RGBA16F;
+	case VK_FORMAT_R32G32B32A32_SFLOAT: return GpuFormat::RGBA32F;
+	case VK_FORMAT_R32_SFLOAT: return GpuFormat::R32F;
 	default: return GpuFormat::Unknown;
 	}
 }
@@ -45,19 +53,7 @@ static bool IsSwapchainColorFormat(GpuFormat format)
 
 static int BytesPerPixel(GpuFormat format)
 {
-	switch(format) {
-	case GpuFormat::RGBA8:
-	case GpuFormat::BGRA8:
-	case GpuFormat::RGBA8Srgb:
-	case GpuFormat::BGRA8Srgb:
-	case GpuFormat::D24S8:
-		return 4;
-	case GpuFormat::R16F:
-		return 2;
-	case GpuFormat::Unknown:
-		return 0;
-	}
-	return 0;
+	return GpuFormatBytesPerPixel(format);
 }
 
 static VkBufferUsageFlags ToVkBufferUsage(int usage)
@@ -302,6 +298,7 @@ struct VulkanGpuDevice::Impl {
 	VectorMap<int, SwapchainState> swapchains;
 	VectorMap<int, FrameState> frames;
 
+	std::map<std::pair<int, int>, GpuTextureCapabilities> texture_capabilities;
 	PFN_vkGetPhysicalDeviceMemoryProperties get_physical_device_memory_properties = nullptr;
 	VkPhysicalDeviceMemoryProperties memory_properties {};
 
@@ -974,17 +971,17 @@ bool VulkanGpuDevice::ReadTexturePixels(GpuTextureId id, Vector<byte>& pixels)
 	auto *texture = d.FindTexture(id);
 	if(!d.ready || !texture || texture->borrowed_swapchain || !texture->initialized ||
 	   d.HasOpenCommands() || !(texture->desc.usage & GpuTextureUsage_TransferSrc) ||
-	   (texture->desc.format != GpuFormat::RGBA8 && texture->desc.format != GpuFormat::BGRA8 &&
-	    texture->desc.format != GpuFormat::RGBA8Srgb && texture->desc.format != GpuFormat::BGRA8Srgb)) {
-		d.error = "readback requires an initialized owned RGBA8/BGRA8 TransferSrc target and no open commands";
+	   BytesPerPixel(texture->desc.format) <= 0 || texture->desc.format == GpuFormat::D24S8) {
+		d.error = "readback requires initialized owned colour TransferSrc content and no open commands";
 		return false;
 	}
 	const int64 pixel_count = (int64)texture->desc.size.cx * texture->desc.size.cy;
-	if(pixel_count <= 0 || pixel_count > 16 * 1024 * 1024) {
+	const int bpp = BytesPerPixel(texture->desc.format);
+	if(pixel_count <= 0 || pixel_count > 64 * 1024 * 1024 / bpp) {
 		d.error = "diagnostic readback exceeds the 64 MiB limit";
 		return false;
 	}
-	const int bytes = (int)(pixel_count * 4);
+	const int bytes = (int)(pixel_count * bpp);
 	PFN_vkCmdCopyImageToBuffer copy_image = nullptr;
 	PFN_vkInvalidateMappedMemoryRanges invalidate = nullptr;
 	if(!d.Resolve(copy_image, "vkCmdCopyImageToBuffer") ||
@@ -1085,6 +1082,56 @@ bool VulkanGpuDevice::ReadTexturePixels(GpuTextureId id, Vector<byte>& pixels)
 	return true;
 }
 
+GpuResult VulkanGpuDevice::GetTextureCapabilities(GpuFormat format, int usage,
+                                                   GpuTextureCapabilities& out)
+{
+	out = GpuTextureCapabilities();
+	auto& d = *impl;
+	if(!d.CheckReady()) return GpuResult::InvalidState;
+	const int allowed = GpuTextureUsage_ColorAttachment | GpuTextureUsage_Sampled |
+	                    GpuTextureUsage_TransferSrc | GpuTextureUsage_TransferDst;
+	if(usage & ~allowed) { d.error = "unknown texture usage bits"; return GpuResult::InvalidArgument; }
+	const VkFormat native = ToVkFormat(format);
+	if(native == VK_FORMAT_UNDEFINED) {
+		d.error = "texture format is unsupported"; return GpuResult::Unsupported;
+	}
+	const auto key = std::make_pair((int)format, usage);
+	auto found = d.texture_capabilities.find(key);
+	if(found != d.texture_capabilities.end()) { out = found->second; return GpuResult::Ok; }
+	PFN_vkGetPhysicalDeviceFormatProperties get_format = nullptr;
+	PFN_vkGetPhysicalDeviceImageFormatProperties get_image = nullptr;
+	if(!d.ResolveInstance(get_format, "vkGetPhysicalDeviceFormatProperties") ||
+	   !d.ResolveInstance(get_image, "vkGetPhysicalDeviceImageFormatProperties"))
+		return GpuResult::InvalidState;
+	VkFormatProperties properties {};
+	get_format(d.physical_device, native, &properties);
+	VkImageFormatProperties image {};
+	const VkResult result = get_image(d.physical_device, native, VK_IMAGE_TYPE_2D,
+	                                 VK_IMAGE_TILING_OPTIMAL, ToVkImageUsage(usage), 0, &image);
+	if(result != VK_SUCCESS) {
+		d.error = VkFailure("vkGetPhysicalDeviceImageFormatProperties", result);
+		return result == VK_ERROR_FORMAT_NOT_SUPPORTED ? GpuResult::Unsupported : GpuResult::InvalidState;
+	}
+	if(!(image.sampleCounts & VK_SAMPLE_COUNT_1_BIT)) {
+		d.error = "single-sample texture format is unsupported"; return GpuResult::Unsupported;
+	}
+	GpuTextureCapabilities caps;
+	caps.format = format; caps.bytes_per_pixel = BytesPerPixel(format);
+	const auto flags = properties.optimalTilingFeatures;
+	caps.sampled = (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
+	caps.linear_filter = caps.sampled && (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+	caps.color_attachment = (flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0;
+	caps.color_blend = caps.color_attachment && (flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0;
+	caps.transfer_src = (flags & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0;
+	caps.transfer_dst = (flags & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
+	caps.max_size = Size((int)min<uint32_t>(image.maxExtent.width, INT_MAX),
+	                     (int)min<uint32_t>(image.maxExtent.height, INT_MAX));
+	caps.max_resource_bytes = image.maxResourceSize;
+	d.texture_capabilities[key] = caps;
+	out = caps;
+	return GpuResult::Ok;
+}
+
 GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out)
 {
 	out = GpuTextureId();
@@ -1092,6 +1139,12 @@ GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureI
 	if(desc.size.cx <= 0 || desc.size.cy <= 0 || desc.format == GpuFormat::Unknown) { impl->error = "CreateTexture requires positive size and a known format"; return GpuResult::InvalidArgument; }
 	const VkFormat format = ToVkFormat(desc.format);
 	if(format == VK_FORMAT_UNDEFINED) { impl->error = "CreateTexture format is unsupported"; return GpuResult::Unsupported; }
+	GpuTextureCapabilities capabilities;
+	const auto supported = GetTextureCapabilities(desc.format, desc.usage, capabilities);
+	if(supported != GpuResult::Ok) return supported;
+	if(desc.size.cx > capabilities.max_size.cx || desc.size.cy > capabilities.max_size.cy) {
+		impl->error = "CreateTexture exceeds device format dimensions"; return GpuResult::Unsupported;
+	}
 	VkImageCreateInfo ici {};
 	ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO; ici.imageType = VK_IMAGE_TYPE_2D; ici.format = format;
 	ici.extent = { (uint32_t)desc.size.cx, (uint32_t)desc.size.cy, 1 }; ici.mipLevels = 1; ici.arrayLayers = 1;
@@ -1134,12 +1187,11 @@ GpuResult VulkanGpuDevice::AcquireImmutableTexture(uint64 identity, const GpuTex
 	out = GpuTextureId();
 	uploaded = false;
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int bpp = BytesPerPixel(desc.format);
+	if(bpp <= 0 || desc.format == GpuFormat::D24S8) return GpuResult::Unsupported;
 	if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
-	   size / 4 / desc.size.cx < desc.size.cy)
+	   size / bpp / desc.size.cx < desc.size.cy)
 		return GpuResult::InvalidArgument;
-	if(desc.format != GpuFormat::RGBA8 && desc.format != GpuFormat::RGBA8Srgb &&
-	   desc.format != GpuFormat::BGRA8 && desc.format != GpuFormat::BGRA8Srgb)
-		return GpuResult::Unsupported;
 	if(desc.usage != (GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst))
 		return GpuResult::InvalidArgument;
 	std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
@@ -1164,7 +1216,7 @@ GpuResult VulkanGpuDevice::AcquireImmutableTexture(uint64 identity, const GpuTex
 	GpuResult result = CreateTexture(desc, out);
 	if(result != GpuResult::Ok) return result;
 	GpuTextureWriteDesc write;
-	write.size = desc.size; write.row_pitch = (int64)desc.size.cx * 4;
+	write.size = desc.size; write.row_pitch = (int64)desc.size.cx * bpp;
 	result = WriteTexture(out, write, data, size);
 	if(result != GpuResult::Ok) {
 		DestroyTexture(out); out = GpuTextureId(); return result;

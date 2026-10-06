@@ -26,6 +26,11 @@ enum class GpuFormat {
 	BGRA8Srgb,
 	R16F,
 	D24S8,
+	// Raw source channels: no implicit colour conversion or premultiplication.
+	RGBA16,
+	RGBA16F,
+	RGBA32F,
+	R32F,
 };
 
 enum GpuBufferUsage {
@@ -180,6 +185,22 @@ struct GpuTextureWriteDesc : Moveable<GpuTextureWriteDesc> {
 	int64 row_pitch = 0;
 };
 
+// Physical-device support for optimal, single-sample, single-mip 2D images.
+// max_size/resource size apply to the exact requested usage, including the
+// backend's transfer-destination requirement; they are not available-memory budgets.
+struct GpuTextureCapabilities : Moveable<GpuTextureCapabilities> {
+	GpuFormat format = GpuFormat::Unknown;
+	int bytes_per_pixel = 0;
+	bool sampled = false;
+	bool linear_filter = false;
+	bool color_attachment = false;
+	bool color_blend = false;
+	bool transfer_src = false;
+	bool transfer_dst = false;
+	Size max_size = Size(0, 0);
+	uint64 max_resource_bytes = 0;
+};
+
 struct GpuShaderDesc : Moveable<GpuShaderDesc> {
 	GpuShaderStage stage = GpuShaderStage::Unknown;
 	GpuShaderFormat format = GpuShaderFormat::Unknown;
@@ -250,6 +271,9 @@ struct GpuFrameInfo : Moveable<GpuFrameInfo> {
 	GpuFormat color_format = GpuFormat::Unknown;
 };
 
+// Native channel storage width; Unknown and invalid enum values return zero.
+int GpuFormatBytesPerPixel(GpuFormat format);
+
 class GpuDevice {
 public:
 	virtual ~GpuDevice() {}
@@ -263,11 +287,16 @@ public:
 	virtual GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) = 0;
 	virtual GpuResult DestroyBuffer(GpuBufferId id) = 0;
 
+	// Clears out on failure. Providers without physical queries return Unsupported.
+	virtual GpuResult GetTextureCapabilities(GpuFormat, int, GpuTextureCapabilities& out) {
+		out = GpuTextureCapabilities();
+		return GpuResult::Unsupported;
+	}
 	virtual GpuResult CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out) = 0;
 	virtual GpuResult WriteTexture(GpuTextureId id, const GpuTextureWriteDesc& desc, const void *data, int64 data_size) = 0;
 	virtual GpuResult DestroyTexture(GpuTextureId id) = 0;
 
-	// identity denotes immutable tight RGBA/BGRA pixels, unique in the device
+	// identity denotes immutable tight native-format pixels, unique in the device
 	// domain for their lifetime. Each returned handle is independently released
 	// with DestroyTexture. Backends may share the allocation, never handle IDs.
 	virtual GpuResult AcquireImmutableTexture(uint64 identity, const GpuTextureDesc& desc,
@@ -275,17 +304,16 @@ public:
 	                                        bool& uploaded) {
 		out = GpuTextureId();
 		uploaded = false;
+		const int bpp = GpuFormatBytesPerPixel(desc.format);
+		if(bpp <= 0 || desc.format == GpuFormat::D24S8) return GpuResult::Unsupported;
 		if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
-		   size / 4 / desc.size.cx < desc.size.cy)
+		   size / bpp / desc.size.cx < desc.size.cy)
 			return GpuResult::InvalidArgument;
-		if(desc.format != GpuFormat::RGBA8 && desc.format != GpuFormat::RGBA8Srgb &&
-		   desc.format != GpuFormat::BGRA8 && desc.format != GpuFormat::BGRA8Srgb)
-			return GpuResult::Unsupported;
 		GpuResult result = CreateTexture(desc, out);
 		if(result != GpuResult::Ok) return result;
 		GpuTextureWriteDesc write;
 		write.size = desc.size;
-		write.row_pitch = (int64)desc.size.cx * 4;
+		write.row_pitch = (int64)desc.size.cx * bpp;
 		result = WriteTexture(out, write, data, size);
 		if(result != GpuResult::Ok) {
 			DestroyTexture(out);

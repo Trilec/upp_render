@@ -563,6 +563,14 @@ GpuResult VulkanGpuDevice::SetSampledTexture(GpuCommandListId list, int slot, Gp
 		impl->error = "SetSampledTexture cannot alias the active color target";
 		return GpuResult::InvalidState;
 	}
+	GpuTextureCapabilities capabilities;
+	const auto supported = GetTextureCapabilities(texture_state.desc.format, texture_state.desc.usage, capabilities);
+	if(supported != GpuResult::Ok) return supported;
+	if(!capabilities.sampled ||
+	   (pipeline->desc.sampler_filter == GpuSamplerFilter::Linear && !capabilities.linear_filter)) {
+		impl->error = "sampled texture format does not support the pipeline filter";
+		return GpuResult::Unsupported;
+	}
 	const int layout_index = command.texture_layouts.Find(texture.value);
 	const VkImageLayout layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture_state.layout;
 	if(!texture_state.initialized || layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {

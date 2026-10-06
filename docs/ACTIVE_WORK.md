@@ -90,7 +90,7 @@ Use `main`; candidate source identity is recorded in the artifact manifest. This
 
 - Local, sustained and final Caro qualification accepted; owner manual PASS recorded.
 - RC1 publication remains separate; heavy Iris Xe soak about 10 FPS is a measured limit.
-- WebGPU/Metal, generic shader/compute APIs and full Ui coverage remain later milestones.
+- Precision sources/query added; streaming/colour/LUT/readback, WebGPU/Metal and full Ui remain.
 
 ## Guardrails
 
