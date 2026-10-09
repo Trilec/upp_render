@@ -1,0 +1,8 @@
+uses
+	Core;
+
+include
+	"../../build/deps/wgpu-windows-x86_64-gnu-release-v29.0.1.1/include/webgpu";
+
+file
+	main.cpp;

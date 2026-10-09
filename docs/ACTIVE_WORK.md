@@ -1,100 +1,80 @@
 # Active Work
 
-Use `main`; candidate source identity is recorded in the artifact manifest. This file is a recovery checkpoint, not project history.
+## Current direction
 
-## Recovery
+User authorized a clean, lean wgpu renderer baseline, with backups and architecture
+documents before replacing implementation. Keep C++/U++, Ui controls, Designer,
+themes and imaging/application models. Work on main.
 
-- Repository: `Trilec/upp_render`; work on `main`.
-- Current source: main; RC1 source and dependencies remain pinned in its manifest.
-- RC1 Ui pin: b86e598; UI2 uses the current development dependency snapshot.
-- Build baseline: U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0, Windows x64.
-- After a Ui change, clean rebuild renderer callers with `-ab`/`-abr`.
-- Fetch remote main before new work; preserve uncommitted work and recovery journals.
+Design: WGPU_ARCHITECTURE.md.
+Gates: WGPU_IMPLEMENTATION_PLAN.md.
+Recovery and verified bundle: WGPU_RECOVERY.md.
+ARCHITECTURE.md continues to describe the preserved Vulkan implementation.
 
-## Accepted Foundation
+## Recovery checkpoint
 
-- UI1-A/B/R1/R2: neutral canvas/list/software reference/RHI, images/text/vector/SVG,
-  embedded/root presentation, compatible device domain and ownership-zero cleanup.
-- UI1-C: real UiDropdown, UiMenu/submenu and tooltip lifecycle/input; historical
-  Debug/Release acceptance. Representative Ui control coverage, not the entire library.
-- GpuSurfaceDemo: two adjustable embedded surfaces, Randomize, pause/lifecycle,
-  optional cached antialias coverage. Public usage emitted and compiled.
-- GpuUiGallery: real Ui controls and PropertyEditor drive a Vulkan-composited window.
+- Render project: project-028DDA9C9C89 through KlickCurt.
+- Root: E:/apps/github/upp_render.
+- Clean fetched baseline: 0999308ad1b7e2f60789356b7923fb93955c5480.
+- Verified bundle: build/render-before-wgpu-2026-10-08.bundle.
+- Bundle SHA-256: 97e1b69a2aec889377fcb2e96fc5686e2eb329b5ee1b1a23e4f177ba283553b0.
+- Git bundle preserves tracked history/refs, not ignored dependencies/outputs.
+- Existing source remains intact; new design is not a running wgpu renderer.
+- Preserve RC1 manifests, previous branch bundles and Patch recovery journals.
+- Re-resolve project, inspect status/diff/jobs before resuming. No blind reset.
+- Commit/push/publication are separate from this checkpoint.
 
-## Windows/Vulkan v1 Finishing — 2026-10-04
+## New design mandate
 
-- Image/vector caches now have pixel budgets and eviction of unused old entries.
-- Current-frame resources stay pinned; oversized active content fails explicitly.
-- Integer vector placement is separate from shape/gradient identity. Fractional
-  coverage phase remains part of the key; moving a shape reuses its raster/texture.
-- Immutable images share native allocations across compatible Vulkan adapters;
-  logical texture handles remain independent. Mutable glyph atlases stay local.
-- GpuTopWindow has opt-in worker replay with one replaceable pending immutable frame.
-  Ui recording/control access stays on its owning thread; close joins before HWND teardown.
-- Public presentation transactions serialize shared Vulkan queue/pipeline-cache use.
-  Embedded/custom/transient paths remain synchronous; no independent queue guarantee.
-- Gallery enables the worker. Normal/load timed modes measure UI delay, replay CPU
-  time, private bytes, cache payloads and final native ownership.
-- Real Vulkan 1/2/10-surface test: identical image uploads once; 4096 native bytes;
-  bounded unique-image churn; surviving surface after first close; final ZERO.
-- GPU timestamps are unavailable. Acquire/replay/present timings are CPU elapsed time.
-- Cache churn/warm/exhaustion/recovery, vector translation/gradient phase and async
-  resize/close/reopen regressions passed. 34-target Release baseline and 22 affected final reruns passed.
-- Clean Debug/Release/non-BLITZ builds, 12 focused Debug tests and demo/tutorial rebuilds PASS.
-- Native gallery/embedded reviews PASS: controls, AA, independent pause and secondary lifecycle.
-- Product demos remain SurfaceDemo, Gallery, Showcase; old motion under diagnostics.
-- Scope/build/measurement notes: `docs/WINDOWS_VULKAN_V1.md`.
+- Semantic canvas and U++ host facade above direct private wgpu-native internals.
+- No permanent adapter through the old GpuDevice/provider abstraction.
+- Immutable frames; GUI-thread Ui access; shared device and independent surfaces.
+- Bounded cache bytes/entries, uploads/in-flight frames and deferred retirement.
+- Explicit interactive frame replacement versus EveryFrame backpressure.
+- Reproducible WGSL; preserve precision, alpha, colour and painter-order contracts.
+- Native iPad host/toolchain feasibility is an early gate.
+- Browser WebGPU requires a separate WASM binding/host.
+- Measure size, startup, memory, input delay and replay before claiming gains.
 
-## RC1 Qualification — 2026-10-04
+## Accepted legacy evidence to preserve
 
-- Qualification started at `5d7ed27`; exact refreshed source identity is in its manifest.
-- 120 s heavy run exposed private-memory growth (556 MB to 1.13 GB) and max UI
-  delay 225 ms despite bounded pixel payloads; fixed by the image-entry cap.
-- Added a 4096-image entry cap alongside the 64 MiB payload cap. Retest: 482 MB
-  peak, early/late means 480.9/481.7 MB, p99 25.43 ms/max 76.08 ms; final ZERO.
-- Five-minute validation soak passed: p99 20.28 ms/max 50.66 ms; private peak
-  539 MB, early/late mean growth 4.6 MB. Churn (100 lifetimes) and sibling tests PASS.
-- Benchmark now rejects early close without a complete PASS summary.
-- Final Caro binary hashes verified; SDK-free embedded 16/16, normal/load/300 s soak PASS.
-- Iris Xe soak UI p99/max 29.74/38.36 ms; mean private growth -6.57 MB; final ZERO.
-- Owner manual AA/app operation acceptance PASS; remote agent native checklist unavailable.
-- Caro needs only a compatible Vulkan graphics driver; no compiler/SDK required.
-- Only main remains. Preserve the existing candidate and branch archive.
+- Windows x64, U++ 18468, clang 21.1.1, Vulkan SDK 1.4.350.0.
+- Neutral canvas/list/software reference; images/text/vector/SVG; embedded/root
+  presentation and compatible device-domain cleanup.
+- Representative real Ui controls, PropertyEditor, menus/submenus and tooltips.
+- Cache pixel/entry budgets, immutable-image sharing and worker immutable frames.
+- RC1 five-minute qualification and owner manual acceptance are historical PASS;
+  exact source/dependency/artifact identities remain in their manifests.
+- RC1 heavy Iris Xe throughput around 10 FPS was a measured limit.
+- UI2 image crop/mask/scale/readback/premultiplied fixes and fault tests passed.
+- Default enabled/disabled inventory: 54 painted entries, 216 cases passed;
+  populated/input states and full control conformance remain incomplete.
+- Latest UI2 300-second validation ended early; sustained gate remains open.
+- Native precision transfer/query/readback tests passed, including HDR bit retention.
+- Existing queue-idle transfers are not an efficient accepted video streaming path.
+- Streaming, programmable colour/LUTs, async readback and compute remain pending.
+- Windows font/host rendering is not portable Apple/browser hosting.
+- References: WINDOWS_VULKAN_V1.md, UI2_DRAWING_AUDIT.md,
+  GPU_IMAGE_PIPELINE.md, CINEVIEW_RENDERER_HANDOFF.md.
 
-## Branch Hygiene
+## Next concrete gate
 
-- User explicitly requested only main on 2026-10-03.
-- All historical branches archived and removed; only main remains.
-- Preserve `build/branches-before-cleanup-2026-10-03.bundle` (hash in v1 scope notes).
+wgpu-native v29.0.1.1 official Windows GNU DLL acquired; ZIP digest verified.
+Release and non-BLITZ Debug native proofs PASS on RTX 4070 Ti / Vulkan:
+exact offscreen pixels, 180 presentation calls per build, resize, minimize/restore,
+three device/window cycles, zero reported errors and retained user handles.
+Identities/reproduction: WGPU_DEPENDENCY.md and WGPU_NATIVE_PROOF.md.
+Curl/tar are approved acquisition tools; no Cargo build or lean feature claim.
+Control recording moved unchanged into RenderCtrlBridge; old include forwards.
+Neutral recorder and legacy Vulkan root regressions PASS; final ownership zero.
+Next: direct RenderWgpu semantic replay, adjacent painter-order batching,
+bounded image/glyph/vector resources and an opt-in root/embedded Ui facade.
+Keep the accepted source/pixel fixtures; avoid an old-RHI adapter.
+Apple/iPad feasibility, browser hosting, portable text, memory/load gates and full
+control acceptance remain open. Do not retire Vulkan or claim the project complete.
 
-## UI2 Drawing Integration — 2026-10-05
+## Evidence discipline
 
-- Working on main after the preserved v1.0.0-rc1 tag at 501fb1f.
-- Drawing/host audit: docs/UI2_DRAWING_AUDIT.md; reproducible 55-control source inventory.
-- Added required GPU mode and owned-transient failure propagation; default fallback retained.
-- GpuUiGallery --require-gpu reports failure and exits; benchmark counts root fallback.
-- Debug/Release root/worker/startup/retry/owned-popup fault tests PASS; default/required popup lifecycle PASS.
-- Non-BLITZ provider registration was omitted by static linking; fixed with an explicit composition anchor.
-- Image crops/masks/scaling retain original uploads; readback fixed GPU halos/software crop fading.
-- Premultiplied images/glyph masks; four-format pixels and Debug/Release image/text PASS.
-- Default enabled/disabled drawing: 54 painted entries, 216 cases PASS; populated/input states pending.
-- Representative Gallery review and short load PASS; earlier 300 s max-delay failures retained.
-- Particle geometry/mask sharing reduces cache churn; Gallery uses upp_animation.
-- Live presented FPS and 512-particle inspector added; precise host clock lifecycle PASS.
-- Owner observes faster animation; measured grid on/off FPS 44.00 / 41.60 (single pair).
-- Short responsiveness PASS; updated 300 s validation run ended early, sustained gate open.
-- Next: complete Windows control conformance and portable text/host; WebGPU/Metal pending.
-- RC1 publication is owner-managed; do not infer publication from the Git tag.
-
-## Remaining Acceptance
-
-- Local, sustained and final Caro qualification accepted; owner manual PASS recorded.
-- RC1 publication remains separate; heavy Iris Xe soak about 10 FPS is a measured limit.
-- Precision sources/query added; streaming/colour/LUT/readback, WebGPU/Metal and full Ui remain.
-
-## Guardrails
-
-- Ui owns hierarchy/layout/input/focus/state/theme/invalidation.
-- Public application drawing APIs stay backend-neutral.
-- Representative GPU control rendering still uses Windows hosting/font APIs.
-- Tests and native review are separate evidence. Never infer latency from FPS.
+Tests, real visual review and platform delivery are separate evidence.
+FPS is not latency. CPU timings are not GPU timestamps.
+No silent fallback counted as GPU success; no iPad acceptance from Mac Metal alone.

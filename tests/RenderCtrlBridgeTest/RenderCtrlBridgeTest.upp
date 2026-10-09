@@ -6,7 +6,7 @@ uses
 	Painter,
 	RenderCanvas,
 	RenderSoftware,
-	GpuRender;
+	RenderCtrlBridge;
 
 file
 	main.cpp;

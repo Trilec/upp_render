@@ -1,5 +1,5 @@
 #include <CtrlLib/CtrlLib.h>
-#include <GpuRender/RenderCtrlBridge.h>
+#include <RenderCtrlBridge/RenderCtrlBridge.h>
 #include <RenderSoftware/RenderSoftware.h>
 
 using namespace Upp;

@@ -4,6 +4,7 @@ uses
 	CtrlCore,
 	CtrlLib,
 	RenderCanvas,
+	RenderCtrlBridge,
 	RenderGpu2D,
 	RenderPlatformWin32,
 	RenderRhi,
@@ -22,5 +23,4 @@ file
 	GpuWindow.cpp,
 	RenderPresentation.h,
 	RenderPresentation.cpp,
-	RenderCtrlBridge.h,
-	RenderCtrlBridge.cpp;
+	RenderCtrlBridge.h;
