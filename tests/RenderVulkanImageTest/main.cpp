@@ -166,9 +166,9 @@ static bool CheckPixelReadback(VulkanGpuDevice& device)
 			UiDisplayList mask_list;
 			ok &= Check(masks.Finish(mask_list) && renderer.Render(mask_list, output) &&
 			            device.ReadTexturePixels(target, bytes), "solid path colours render from shared coverage");
-			ok &= Check(renderer.GetStats().vector_raster_count == 1 &&
-			            renderer.GetStats().texture_upload_count == 1,
-			            "different solid path colours and opacities share one raster/upload");
+			ok &= Check(renderer.GetStats().gpu_path_count == 2 && renderer.GetStats().vector_raster_count == 0 &&
+			            renderer.GetStats().texture_upload_count == 0 && renderer.GetStats().gpu_path_cache_entry_count == 1,
+			            "different solid path colours and opacities share direct geometry without a raster/upload");
 			ok &= Check(matches(3, 7, expected(255, 128.0 / 255), 0, 0) &&
 			            matches(11, 7, 0, 0, expected(255, 64.0 / 255)),
 			            "shared path mask preserves independent colour/opacity in every target format");

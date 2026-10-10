@@ -193,6 +193,8 @@ public:
 	// alpha_mask replaces RGB with tint RGB while retaining sampled alpha.
 	virtual void DrawImage(const Rectf& rect, const Image& image, const Rect& source,
 	                       Rgba8 tint = Rgba8(255, 255, 255, 255), bool alpha_mask = false) = 0;
+	// U++ control text: per-scalar integer Font advances, including U++ fallback.
+	// A future shaped-glyph run must have an explicit separate contract.
 	virtual void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) = 0;
 	virtual void FillPath(const UiPath& path, const UiPaint& paint,
 	                      UiFillRule rule = UiFillRule::NonZero) = 0;

@@ -307,10 +307,19 @@ GUI_APP_MAIN
 		            win.GetGpuError().IsEmpty(),
 		            "async root must present a recorded control tree");
 		ok &= Check(win.IsFrameClockActive(), "async animated root must start its precise host clock");
+		const auto cold = win.GetGpuStats();
+		ok &= Check(!cold.adapter_name.IsEmpty() && cold.first_frame_cpu_ms >= 0 &&
+		            cold.first_renderer.display_op_count > 0,
+		            "first successful frame retains cold renderer preparation and adapter identity");
 		for(int i = 0; i < 50; ++i) {
 			win.RequestGpuRefresh();
 			Ctrl::ProcessEvents();
 		}
+		const auto warm = win.GetGpuStats();
+		ok &= Check(warm.first_frame_cpu_ms == cold.first_frame_cpu_ms &&
+		            warm.first_renderer.display_op_count == cold.first_renderer.display_op_count &&
+		            warm.first_renderer.texture_upload_count == cold.first_renderer.texture_upload_count,
+		            "warm frames preserve the first-frame diagnostic snapshot");
 		ok &= Check(win.GetGpuStats().pending_frames <= 1,
 		            "async admission must retain at most one pending frame");
 		win.SetRect(120, 120, 740 + cycle * 10, 430);

@@ -1,0 +1,10 @@
+uses
+	RenderFontWin32,
+	RenderGpu2D,
+	RenderVulkan;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE CFONTS";

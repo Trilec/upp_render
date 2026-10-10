@@ -223,6 +223,11 @@ struct GpuDisplayPresenter::Impl {
 			return result;
 		}
 
+		if(stats.presented_frames == 0) {
+			stats.adapter_name = device->GetAdapterInfo().name;
+			stats.first_frame_cpu_ms = stats.acquire_ms + stats.replay_ms + stats.present_ms;
+			stats.first_renderer = stats.renderer;
+		}
 		stats.presented_frames++;
 		error.Clear();
 		out_error.Clear();

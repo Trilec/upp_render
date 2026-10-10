@@ -1,4 +1,5 @@
 #include "RenderGpu2D.h"
+#include "RenderGpu2DPath.h"
 
 #include <cmath>
 #include <limits>
@@ -17,6 +18,12 @@
 #undef Close
 
 namespace Upp {
+
+// Keep destruction outside the renamed base implementation so every extension closes.
+UiRenderer2D::~UiRenderer2D()
+{
+	Close();
+}
 
 float UiRenderer2D::ColorChannel(byte channel) const
 {
@@ -83,6 +90,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const float g = ColorChannel(color.g);
 		const float b = ColorChannel(color.b);
 		const float a = color.a * scale;
+		if(!GeometryFits((int64)(polygon.GetCount() - 2) * 3 * sizeof(Vertex))) return false;
 		const int first = vertices.GetCount();
 		auto add_vertex = [&](const Pointf& p) {
 			Vertex& v = vertices.Add();
@@ -152,6 +160,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const float g = ColorChannel(tint.g) * rgb_alpha;
 		const float b = ColorChannel(tint.b) * rgb_alpha;
 		const BatchKind image_kind = alpha_mask ? BatchKind::ImageMask : BatchKind::Image;
+		if(!GeometryFits((int64)(polygon.GetCount() - 2) * 3 * sizeof(TexturedVertex))) return false;
 		const int first = textured_vertices.GetCount();
 		auto add_vertex = [&](const TexturedPoint& p) {
 			TexturedVertex& v = textured_vertices.Add();
@@ -199,6 +208,88 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		})) return false;
 		stats.image_count++;
 		if(textured_vertices.GetCount() > before) stats.emitted_primitive_count++;
+		return true;
+	};
+
+
+	auto append_gpu_path = [&](const UiDisplayOp& op) -> bool {
+		const GpuPathMesh *prepared = PreparePath(op, state.transform);
+		if(!prepared)
+			return Fail("internal error: direct path preparation changed after materialization");
+		// Reuse raster coverage only at exact device-pixel translations. Fractional
+		// placement stays direct geometry, avoiding a second AA filtering kernel.
+		if(current_path_entry && state.transform.t.x == floor(state.transform.t.x) &&
+		   state.transform.t.y == floor(state.transform.t.y)) {
+			if(!EnsurePathCoverage(*current_path_entry)) return false;
+			if(!current_path_entry->coverage_slot.IsEmpty()) {
+				const Rect& slot = current_path_entry->coverage_slot;
+				const Rect& bounds = current_path_entry->coverage_bounds;
+				Rectf uv((double)slot.left / path_coverage_side, (double)slot.top / path_coverage_side,
+				         (double)slot.right / path_coverage_side, (double)slot.bottom / path_coverage_side);
+				Transform2D saved = state.transform;
+				state.transform = Transform2D::Translation(saved.t.x, saved.t.y);
+				bool ok = append_textured(Rectf(bounds), uv, path_coverage_texture,
+				                          op.paint.color, "GPU path coverage", true);
+				state.transform = saved;
+				if(!ok) return false;
+				stats.gpu_path_count++; stats.gpu_path_coverage_draw_count++;
+				stats.vector_op_count++; stats.vector_path_count++; stats.primitive_count++;
+				stats.emitted_primitive_count++;
+				return true;
+			}
+		}
+		const GpuPathMesh& mesh = *prepared;
+		Rectf clip = state.has_clip ? IntersectRectf(target_clip, state.clip) : target_clip;
+		int first = vertices.GetCount();
+		const float r = ColorChannel(op.paint.color.r), g = ColorChannel(op.paint.color.g);
+		const float b = ColorChannel(op.paint.color.b), alpha = op.paint.color.a / 255.0f;
+		auto vertex = [&](Pointf p, double coverage) {
+			Vertex& v = vertices.Add();
+			v.x = (float)(2 * p.x / target_size.cx - 1);
+			v.y = (float)(1 - 2 * p.y / target_size.cy);
+			v.r = r; v.g = g; v.b = b; v.a = (float)(alpha * coverage);
+			if(v.a > 0 && v.a < 1) stats.translucent_vertex_count++;
+		};
+		for(int i = 0; !clip.IsEmpty() && i < mesh.triangles.GetCount(); i += 3) {
+			bool inside = true;
+			for(int j = 0; j < 3; ++j) {
+				Pointf p = (mesh.triangles[i + j].point + state.transform.t);
+				inside &= p.x >= clip.left && p.x <= clip.right &&
+				          p.y >= clip.top && p.y <= clip.bottom;
+			}
+			if(inside) {
+				if(!GeometryFits(3 * (int64)sizeof(Vertex))) return false;
+				for(int j = 0; j < 3; ++j)
+					vertex((mesh.triangles[i + j].point + state.transform.t), mesh.triangles[i + j].coverage);
+				stats.triangle_count++;
+			}
+			else {
+				// Reuse attribute-aware clipping: uv.x carries scalar coverage.
+				Vector<TexturedPoint> triangle;
+				for(int j = 0; j < 3; ++j) {
+					TexturedPoint& p = triangle.Add();
+					p.position = (mesh.triangles[i + j].point + state.transform.t);
+					p.uv = Pointf(mesh.triangles[i + j].coverage, 0);
+				}
+				Vector<TexturedPoint> polygon = ClipTexturedPolygon(triangle, clip);
+				if(polygon.GetCount() >= 3 &&
+				   !GeometryFits((int64)(polygon.GetCount() - 2) * 3 * sizeof(Vertex))) return false;
+				for(int j = 1; j + 1 < polygon.GetCount(); ++j) {
+					vertex(polygon[0].position, polygon[0].uv.x);
+					vertex(polygon[j].position, polygon[j].uv.x);
+					vertex(polygon[j + 1].position, polygon[j + 1].uv.x);
+					stats.triangle_count++;
+				}
+			}
+		}
+		int count = vertices.GetCount() - first;
+		extend_solid_batch(first, count, BatchKind::Solid);
+		stats.gpu_path_count++;
+		stats.gpu_path_vertex_count += count;
+		stats.vector_op_count++;
+		stats.vector_path_count++;
+		stats.primitive_count++;
+		if(count) stats.emitted_primitive_count++; else stats.clipped_primitive_count++;
 		return true;
 	};
 
@@ -323,8 +414,10 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		}
 		case UiDisplayOpType::FillPath:
 		case UiDisplayOpType::StrokePath:
+			if(!append_gpu_path(op)) return false;
+			break;
 		case UiDisplayOpType::DrawSvg:
-			return Fail("UiRenderer2D internal error: vector operation was not materialized");
+			return Fail("UiRenderer2D internal error: SVG was not materialized");
 		}
 	}
 	if(!stack.IsEmpty())
@@ -343,12 +436,22 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 {
 	working_color_format = target.color_format;
 	bool has_vector = false;
+	Transform2D transform;
+	Vector<Transform2D> transforms;
 	for(int i = 0; i < list.GetCount(); ++i) {
-		const UiDisplayOpType type = list[i].type;
-		if(type == UiDisplayOpType::FillPath || type == UiDisplayOpType::StrokePath ||
-		   type == UiDisplayOpType::DrawSvg) {
-			has_vector = true;
-			break;
+		const UiDisplayOp& op = list[i];
+		if(op.type == UiDisplayOpType::Save) transforms.Add(transform);
+		else if(op.type == UiDisplayOpType::Restore) {
+			if(transforms.IsEmpty()) return Fail("restore without save");
+			transform = transforms.Pop();
+		}
+		else if(op.type == UiDisplayOpType::ConcatTransform) transform = transform * op.transform;
+		else if(op.type == UiDisplayOpType::FillPath || op.type == UiDisplayOpType::StrokePath ||
+		        op.type == UiDisplayOpType::DrawSvg) {
+			if(!PreparePath(op, transform)) {
+				has_vector = true;
+				break;
+			}
 		}
 	}
 	if(has_vector) {
@@ -429,8 +532,143 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 	return Submit(target, solid_pipeline, invert_pipeline, textured_pipeline, mask_pipeline);
 }
 
+void UiRenderer2D::ClosePathCoverage()
+{
+	path_coverage_renderer.Clear();
+	if(path_coverage_texture.IsValid()) device->DestroyTexture(path_coverage_texture);
+	path_coverage_texture = GpuTextureId();
+	path_coverage_side = 0; path_coverage_x = path_coverage_y = 1; path_coverage_row = 0;
+	path_coverage_unsupported = false; current_path_entry = nullptr;
+	for(PathCacheEntry& entry : path_cache) entry.coverage_slot = Rect(0, 0, 0, 0);
+}
+
+bool UiRenderer2D::EnsurePathCoverage(PathCacheEntry& entry)
+{
+	if(!entry.coverage_slot.IsEmpty() || path_coverage_unsupported ||
+	   cache_limits.path_coverage_bytes < 64 * 64 * 4) return true;
+	int side = 64;
+	while(side < 512 && (int64)side * side * 16 <= cache_limits.path_coverage_bytes) side *= 2;
+	Rect bounds;
+	bool first = true;
+	for(const GpuPathVertex& vertex : entry.mesh.triangles) {
+		Point p((int)floor(vertex.point.x), (int)floor(vertex.point.y));
+		if(first) { bounds = Rect(p.x, p.y, p.x + 1, p.y + 1); first = false; }
+		else { bounds.left = min(bounds.left, p.x); bounds.top = min(bounds.top, p.y);
+		       bounds.right = max(bounds.right, p.x + 1); bounds.bottom = max(bounds.bottom, p.y + 1); }
+	}
+	if(first) return true;
+	bounds.Inflate(1);
+	const int coverage_scale = 1; // One-to-one texel alignment is required by the caller.
+	Size size = bounds.GetSize() * coverage_scale;
+	if(size.cx + 2 > side || size.cy + 2 > side) return true;
+	int x = path_coverage_x, y = path_coverage_y, row = path_coverage_row;
+	if(x + size.cx + 1 > side) { x = 1; y += row + 2; row = 0; }
+	if(y + size.cy + 1 > side) return true; // Full atlas uses direct geometry; no reset/churn.
+	if(!path_coverage_texture.IsValid()) {
+		GpuTextureDesc desc; desc.size = Size(side, side); desc.format = GpuFormat::RGBA8;
+		desc.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_Sampled;
+		GpuTextureCapabilities caps;
+		GpuResult query = device->GetTextureCapabilities(desc.format, desc.usage, caps);
+		if(query == GpuResult::Unsupported) { path_coverage_unsupported = true; return true; }
+		if(query != GpuResult::Ok) return Fail("GPU path coverage capability query failed");
+		if(!caps.color_attachment || !caps.color_blend || !caps.sampled || !caps.linear_filter ||
+		   caps.max_size.cx < side || caps.max_size.cy < side) {
+			path_coverage_unsupported = true; return true;
+		}
+		if(device->CreateTexture(desc, path_coverage_texture) != GpuResult::Ok)
+			return Fail("GPU path coverage atlas creation failed");
+		path_coverage_side = side;
+		path_coverage_renderer.Create(*device);
+		UiRenderer2DCacheLimits limits;
+		limits.image_bytes = limits.vector_bytes = limits.glyph_bytes = 0;
+		limits.image_entries = limits.vector_entries = limits.glyph_entries = 0;
+		limits.path_geometry_bytes = limits.path_coverage_bytes = 0;
+		limits.path_geometry_entries = 0; limits.geometry_bytes = 1024 * 1024;
+		path_coverage_renderer->SetCacheLimits(limits);
+		UiDisplayListBuilder empty; UiDisplayList list; empty.Finish(list);
+		UiRenderer2DTarget target; target.color_target = path_coverage_texture;
+		target.size = desc.size; target.color_format = desc.format; target.clear_color.alpha = 0;
+		if(!path_coverage_renderer->Render(list, target))
+			return Fail("GPU path coverage clear failed: " + path_coverage_renderer->GetError());
+	}
+	Transform2D transform = entry.transform;
+	transform.x *= coverage_scale; transform.y *= coverage_scale;
+	transform.t = Pointf(x - coverage_scale * bounds.left, y - coverage_scale * bounds.top);
+	UiDisplayListBuilder builder; builder.ConcatTransform(transform);
+	if(entry.key.type == UiDisplayOpType::FillPath)
+		builder.FillPath(entry.key.path, entry.key.paint, entry.key.fill_rule);
+	else builder.StrokePath(entry.key.path, entry.key.paint, entry.key.stroke);
+	UiDisplayList list;
+	if(!builder.Finish(list)) return Fail("GPU path coverage list failed");
+	UiRenderer2DTarget target; target.color_target = path_coverage_texture;
+	target.size = Size(side, side); target.color_format = GpuFormat::RGBA8; target.load_op = GpuLoadOp::Load;
+	if(!path_coverage_renderer->Render(list, target))
+		return Fail("GPU path coverage render failed: " + path_coverage_renderer->GetError());
+	entry.coverage_slot = RectC(x, y, size.cx, size.cy); entry.coverage_bounds = bounds;
+	path_coverage_x = x + size.cx + 2; path_coverage_y = y; path_coverage_row = max(row, size.cy);
+	stats.gpu_path_coverage_render_count++;
+	return true;
+}
+
+bool UiRenderer2D::GeometryFits(int64 additional_bytes)
+{
+	int64 used = (int64)vertices.GetCount() * sizeof(Vertex) +
+	             (int64)textured_vertices.GetCount() * sizeof(TexturedVertex);
+	return (additional_bytes >= 0 && used <= cache_limits.geometry_bytes &&
+	        additional_bytes <= cache_limits.geometry_bytes - used) ||
+	       Fail("UiRenderer2D frame exceeds the configured geometry byte budget");
+}
+
+const GpuPathMesh *UiRenderer2D::PreparePath(const UiDisplayOp& op, const Transform2D& transform)
+{
+	current_path_entry = nullptr;
+	if((op.type != UiDisplayOpType::FillPath && op.type != UiDisplayOpType::StrokePath) ||
+	   op.paint.kind != UiPaintKind::Solid || !IsFiniteTransform(transform))
+		return nullptr;
+	// Translation and colour do not change device-space coverage geometry.
+	// The full linear transform remains in the key: no scale buckets.
+	Transform2D linear = transform; linear.t = Pointf(0, 0);
+	for(PathCacheEntry& entry : path_cache)
+		if(entry.transform == linear && entry.key.type == op.type &&
+		   entry.key.path == op.path && entry.key.fill_rule == op.fill_rule &&
+		   (op.type != UiDisplayOpType::StrokePath || entry.key.stroke == op.stroke)) {
+			entry.last_frame = cache_frame;
+			current_path_entry = &entry;
+			return &entry.mesh;
+		}
+	// Warm frames compare borrowed geometry; allocate a stored key only on a miss.
+	UiDisplayOp key = op; key.paint.color = Rgba8(255, 255, 255);
+	if(!PrepareGpuConvexPath(key, linear, scratch_path)) return nullptr;
+	frame_path_misses++;
+	int64 bytes = (int64)scratch_path.triangles.GetAlloc() * sizeof(GpuPathVertex) +
+	              (int64)key.path.GetCount() * sizeof(UiPathCommand) + sizeof(PathCacheEntry);
+	if(cache_limits.path_geometry_entries == 0 || bytes > cache_limits.path_geometry_bytes)
+		return &scratch_path; // Bounded transient work; never an unbounded alternate cache.
+	while(!path_cache.IsEmpty() &&
+	      (path_cache.GetCount() >= cache_limits.path_geometry_entries ||
+	       path_cache_bytes > cache_limits.path_geometry_bytes - bytes)) {
+		int oldest = 0;
+		for(int i = 1; i < path_cache.GetCount(); ++i)
+			if(path_cache[i].last_frame < path_cache[oldest].last_frame) oldest = i;
+		path_cache_bytes -= path_cache[oldest].bytes;
+		path_cache.Remove(oldest);
+	}
+	PathCacheEntry& entry = path_cache.Add();
+	entry.key = pick(key); entry.transform = linear; entry.mesh = pick(scratch_path);
+	entry.bytes = bytes; entry.last_frame = cache_frame;
+	path_cache_bytes += bytes;
+	current_path_entry = &entry;
+	return &entry.mesh;
+}
+
 void UiRenderer2D::SetCacheLimits(const UiRenderer2DCacheLimits& limits)
 {
+	ClosePathCoverage();
+	cache_limits.path_coverage_bytes = max<int64>(0, limits.path_coverage_bytes);
+	cache_limits.path_geometry_bytes = max<int64>(0, limits.path_geometry_bytes);
+	cache_limits.path_geometry_entries = max(0, limits.path_geometry_entries);
+	cache_limits.geometry_bytes = max<int64>(0, limits.geometry_bytes);
+	path_cache.Clear(); path_cache_bytes = 0;
 	cache_limits.image_bytes = max<int64>(0, limits.image_bytes);
 	cache_limits.image_entries = max(0, limits.image_entries);
 	cache_limits.vector_bytes = max<int64>(0, limits.vector_bytes);
@@ -539,6 +777,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	++cache_frame;
 	frame_image_hits = frame_image_evictions = frame_vector_evictions = 0;
 	frame_image_upload_bytes = 0;
+	frame_path_misses = 0;
 	// Reset an exhausted atlas only between frames. Never invalidate glyph
 	// handles already referenced by the frame currently being recorded.
 	bool reset_glyphs = text_impl &&
@@ -548,6 +787,10 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	if(reset_glyphs) DestroyTextExtension();
 	bool result = RenderInternal(list, target);
 	stats.glyph_cache_reset_count = reset_glyphs ? 1 : 0;
+	stats.gpu_path_cache_miss_count = frame_path_misses;
+	stats.gpu_path_cache_entry_count = path_cache.GetCount();
+	stats.gpu_path_cache_bytes = path_cache_bytes;
+	stats.gpu_path_coverage_bytes = (int64)path_coverage_side * path_coverage_side * 4;
 	UpdateCacheStats();
 	return result;
 }
@@ -567,6 +810,8 @@ bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& fr
 
 void UiRenderer2D::Close()
 {
+	ClosePathCoverage();
+	path_cache.Clear(); scratch_path.triangles.Clear(); path_cache_bytes = 0;
 	DestroyVectorExtension();
 	DestroyTextExtension();
 	CloseBase();

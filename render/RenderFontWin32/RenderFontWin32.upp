@@ -1,0 +1,8 @@
+uses
+	Draw;
+
+library(WIN32) "dwrite";
+
+file
+	RenderFontWin32.h,
+	RenderFontWin32.cpp;

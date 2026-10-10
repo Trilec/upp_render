@@ -5,7 +5,12 @@ Application code owns Ui controls once; backend selection occurs below resolved
 drawing. Windows/Linux target Vulkan, Apple targets Metal, browser targets WebGPU.
 No OpenGL implementation is planned for this milestone.
 
-## Current boundary audit
+Updated evidence: [Vulkan UI finishing](VULKAN_UI_FINISHING.md) records the
+2026-10-11 convex GPU/rounded-face work, populated-control qualification and
+completed 300-second soak. The earlier incomplete runs below are retained as
+historical evidence; they are not the current sustained result.
+
+## Original boundary audit
 
 | Seam | Current implementation | Required work |
 | --- | --- | --- |

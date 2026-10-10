@@ -286,6 +286,35 @@ static bool TestReplay()
 	return true;
 }
 
+
+static bool TestControlTextAdvances()
+{
+	Font font = SansSerif(14);
+	WString text;
+	for(int i = 0; i < 16; ++i) text.Cat('i');
+	UiDisplayListBuilder builder;
+	builder.DrawText(Pointf(3, 3), text, font, Rgba8(255, 255, 255, 255));
+	UiDisplayList list;
+	if(!Check(builder.Finish(list), "integer-advance text list builds")) return false;
+	ImagePainter replayed(128, 32), reference(128, 32), fractional(128, 32);
+	replayed.Clear(MakeRgba(0, 0, 0)); reference.Clear(MakeRgba(0, 0, 0));
+	fractional.Clear(MakeRgba(0, 0, 0));
+	SoftwareUiRenderer renderer;
+	if(!Check(renderer.Replay(list, replayed), "control text software replay")) return false;
+	WString one; one.Cat('i');
+	int pen = 3;
+	for(int i = 0; i < 16; ++i) {
+		reference.DrawText(pen, 3, one, font, White());
+		pen += font.GetWidth('i');
+	}
+	fractional.DrawText(3, 3, text, font, White());
+	Image expected = reference.GetResult();
+	if(!Check(!ImagesEqual(expected, fractional.GetResult()),
+	          "fixture distinguishes Painter's implicit fractional text spacing")) return false;
+	return Check(ImagesEqual(expected, replayed.GetResult()),
+	             "software text preserves U++ control integer advances");
+}
+
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
@@ -294,6 +323,7 @@ CONSOLE_APP_MAIN
 	ok &= TestTransforms();
 	ok &= TestDeterminism();
 	ok &= TestReplay();
+	ok &= TestControlTextAdvances();
 	if(!ok) {
 		SetExitCode(1);
 		return;

@@ -1,6 +1,11 @@
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderVulkan/RenderVulkanRhi.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
+#include <Painter/Painter.h>
+#include <cmath>
+#ifdef flagCFONTS
+#include <RenderFontWin32/RenderFontWin32.h>
+#endif
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -51,6 +56,79 @@ static bool MakeScene(UiDisplayList& out)
 	return builder.Finish(out);
 }
 
+
+static bool CheckTextPixels(VulkanGpuDevice& device)
+{
+	bool ok = true;
+	const Size size(320, 72);
+	WString text;
+	for(int cp : {0x41, 0x42, 0x00e9, 0x03a9, 0x0416, 0x4e2d, 0x1f600}) text.Cat(cp);
+	Font font = SansSerif(24).Bold().Italic();
+	ImagePainter painter(size);
+	RGBA black{0, 0, 0, 255};
+	painter.Clear(black);
+	// The neutral U++ control contract uses integer advances. Painter's implicit
+	// Text() spacing uses a larger font for fractional advances, so provide dx.
+	Vector<int> advances;
+	for(int cp : text) advances.Add(font.GetWidth(cp));
+	painter.DrawText(4, 4, text, font, White(), advances.Begin());
+	Image reference = painter.GetResult();
+	for(GpuFormat format : {GpuFormat::RGBA8, GpuFormat::BGRA8,
+	                       GpuFormat::RGBA8Srgb, GpuFormat::BGRA8Srgb}) {
+		GpuTextureDesc desc;
+		desc.size = size; desc.format = format;
+		desc.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_TransferSrc;
+		GpuTextureId target;
+		if(!Check(device.CreateTexture(desc, target) == GpuResult::Ok, "Unicode pixel target creates"))
+			return false;
+		{
+			UiRenderer2D renderer(device);
+			UiRenderer2DTarget output;
+			output.color_target = target; output.size = size; output.color_format = format;
+			output.clear_color.alpha = 1;
+			UiDisplayListBuilder builder;
+			builder.DrawText(Pointf(4, 4), text, font, Rgba8(255, 255, 255, 255));
+			UiDisplayList list; builder.Finish(list);
+			Vector<byte> bytes;
+			bool read = renderer.Render(list, output) && device.ReadTexturePixels(target, bytes);
+			ok &= Check(read && bytes.GetCount() == size.cx * size.cy * 4, "Unicode pixels render/read back");
+			if(read && bytes.GetCount() == size.cx * size.cy * 4) {
+				double max_error = 0, sum = 0;
+				int covered = 0, antialiased = 0;
+				const bool srgb = format == GpuFormat::RGBA8Srgb || format == GpuFormat::BGRA8Srgb;
+				for(int y = 0; y < size.cy; ++y)
+					for(int x = 0; x < size.cx; ++x) {
+						const byte *p = bytes.Begin() + 4 * (y * size.cx + x);
+						double actual = p[0] / 255.0;
+						if(srgb) actual = actual <= 0.04045 ? actual / 12.92 : pow((actual + 0.055) / 1.055, 2.4);
+						const double error = fabs(actual - reference[y][x].r / 255.0);
+						max_error = max(max_error, error); sum += error;
+						covered += p[0] > 0;
+						antialiased += p[0] > 0 && p[0] < 255;
+					}
+				Cout() << "Unicode pixel format=" << (int)format << " max_error=" << max_error
+				       << " mean_error=" << sum / (size.cx * size.cy) << " aa_pixels=" << antialiased << EOL;
+				ok &= Check(covered > 100 && antialiased > 20, "visible Unicode text has antialiased edge pixels");
+				ok &= Check(max_error <= 0.03 && sum / (size.cx * size.cy) <= 0.001,
+				            "aligned Unicode mask pixels match the independent Painter reference");
+			}
+			UiDisplayListBuilder decorated;
+			Font decorated_font = font;
+			decorated.DrawText(Pointf(4, 4), text, decorated_font.Underline().Strikeout(), Rgba8(255, 255, 255, 255));
+			UiDisplayList decorations; decorated.Finish(decorations);
+			Vector<byte> decorated_bytes;
+			ok &= Check(renderer.Render(decorations, output) && device.ReadTexturePixels(target, decorated_bytes),
+			            "text decorations render/read back");
+			ok &= Check(renderer.GetStats().glyph_cache_miss_count == 0 &&
+			            renderer.GetStats().glyph_atlas_upload_count == 0,
+			            "decorations reuse undecorated glyph atlas entries");
+			ok &= Check(bytes != decorated_bytes, "underline and strikeout change actual GPU pixels");
+		}
+		ok &= Check(device.DestroyTexture(target) == GpuResult::Ok, "Unicode target cleanup");
+	}
+	return ok;
+}
+
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
@@ -72,6 +150,7 @@ CONSOLE_APP_MAIN
 		{
 			VulkanGpuDevice device(session);
 			ok &= Check(device.IsReady(), "VulkanGpuDevice should be ready for glyph-atlas rendering");
+			ok &= CheckTextPixels(device);
 			UiDisplayList scene;
 			ok &= Check(MakeScene(scene), "text display list should build");
 			const String scene_dump = scene.Dump();
@@ -175,6 +254,12 @@ CONSOLE_APP_MAIN
 	            diag.device_live_count == 0 && diag.swapchain_live_count == 0,
 	            "Vulkan text test should finish with zero Vulkan ownership diagnostics");
 
+#ifdef flagCFONTS
+	const auto font_stats = GetRenderFontWin32Stats();
+	ok &= Check(font_stats.legacy_gdi_font_requests == 0 && font_stats.error.IsEmpty(),
+	            "DirectWrite Vulkan text does not invoke legacy GDI fonts");
+	Cout() << "font_backend=DirectWrite legacy_gdi_font_requests=" << font_stats.legacy_gdi_font_requests << EOL;
+#endif
 	if(ok) {
 		Cout() << "RenderVulkanTextTest passed" << EOL;
 		return;

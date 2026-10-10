@@ -327,6 +327,24 @@ GUI_APP_MAIN
 	Ctrl::GlobalBackBuffer(initial_global_backbuffer);
 	ok &= Check(ProbeGlobalBackBuffer() == initial_global_backbuffer, "focused test should restore the process global backbuffer state it inherited");
 #endif
+#ifdef PLATFORM_WIN32
+	bool inherited_direct = ProbeGlobalBackBuffer();
+	{
+		CtrlDisplayListPaintScope host_scope;
+		{
+			CtrlDisplayListPaintScope sibling_scope;
+			for(int i = 0; i < 3; ++i) {
+				UiDisplayList scoped; CtrlDisplayListRecordReport report; String scoped_error;
+				ok &= Check(RecordCtrlDisplayList(root, scoped, scoped_error, &report) &&
+				            report.paint_probe_count == 0,
+				            "nested host frames perform zero GDI setup probes");
+			}
+		}
+		ok &= Check(ProbeGlobalBackBuffer(), "surviving host retains direct mode");
+	}
+	ok &= Check(ProbeGlobalBackBuffer() == inherited_direct,
+	            "last host restores inherited direct mode");
+#endif
 	ok &= CheckMovingEllipse();
 	if(ok) { Cout() << "RenderCtrlBridgeTest passed" << EOL; return; }
 	SetExitCode(1);

@@ -6,6 +6,8 @@ uses
 
 file
 	RenderGpu2D.h,
+	RenderGpu2DPath.h,
+	RenderGpu2DPath.cpp,
 	RenderGpu2D.cpp,
 	RenderGpu2DBase.inc,
 	RenderGpu2DImage.cpp,

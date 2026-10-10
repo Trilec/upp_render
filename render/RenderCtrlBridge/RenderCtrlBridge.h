@@ -5,7 +5,20 @@
 
 namespace Upp {
 
+// GUI-thread lifetime guard for the existing U++ direct control traversal.
+// Nested roots share one cold setup probe; frames allocate no GDI probe/backbuffer.
+// The last guard restores the inherited setting. Do not change GlobalBackBuffer
+// while a guard owns it. Standalone recording acquires a temporary guard.
+class CtrlDisplayListPaintScope {
+public:
+	CtrlDisplayListPaintScope();
+	~CtrlDisplayListPaintScope();
+	CtrlDisplayListPaintScope(const CtrlDisplayListPaintScope&) = delete;
+	void operator=(const CtrlDisplayListPaintScope&) = delete;
+};
+
 struct CtrlDisplayListRecordReport : Moveable<CtrlDisplayListRecordReport> {
+	int paint_probe_count = 0; // Cold setup only while a host paint scope is held.
 	int rect_count = 0;
 	int line_count = 0;
 	int image_count = 0;

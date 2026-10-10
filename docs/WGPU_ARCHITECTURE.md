@@ -1,3 +1,5 @@
+> Priority correction — 2026-10-11: this is an optional future architecture experiment. The current authorized milestone is completing the existing direct Windows/Vulkan whole-UI renderer. This document does not authorize a renderer replacement. See ACTIVE_WORK.md.
+
 # Clean wgpu renderer architecture
 
 Status: design baseline; implementation and platform qualification pending.

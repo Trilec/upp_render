@@ -1,4 +1,7 @@
 #include <GpuRender/GpuRender.h>
+#ifdef flagCFONTS
+#include <RenderFontWin32/RenderFontWin32.h>
+#endif
 #include <Ui/Ui.h>
 #include <Animation/Animation.h>
 #include <Utilities/PropertyEditor/PropertyEditor.h>
@@ -45,11 +48,12 @@ public:
 	{
 		NoWantFocus();
 
-		ImageDraw d(44, 44);
-		d.DrawRect(0, 0, 44, 44, Color(27, 35, 52));
-		d.DrawEllipse(6, 6, 32, 32, Color(86, 190, 255), 2, Color(210, 238, 255));
-		d.DrawEllipse(16, 13, 9, 9, Color(255, 216, 112));
-		badge_ = d;
+		ImageBuffer badge(44, 44);
+		BufferPainter d(badge, MODE_ANTIALIASED);
+		d.Rectangle(0, 0, 44, 44).Fill(Color(27, 35, 52));
+		d.Ellipse(22, 22, 16, 16).Fill(Color(86, 190, 255)).Stroke(2, Color(210, 238, 255));
+		d.Ellipse(20.5, 17.5, 4.5, 4.5).Fill(Color(255, 216, 112));
+		badge_ = badge;
 
 		motion_.Duration(60000).Loop().Ease([](double progress) { return progress; })
 			.OnUpdate([=](double progress) {
@@ -211,23 +215,135 @@ class GalleryDialog : public GpuTopWindow {
 public:
 	GalleryDialog()
 	{
-		Title("GPU modal dialog").SetRect(0, 0, 440, 220);
-		message_.SetText("Another GpuTopWindow, sharing the application GPU domain.");
-		note_.SetData("The scene keeps its state after this dialog closes.");
+		Title("Vulkan UI workspace").Sizeable().Zoomable().SetRect(0, 0, 900, 620);
+		SetMinSize(Size(DPI(680), DPI(480)));
+		message_.SetText("Populated Ui controls in a second GPU window");
+		note_.SetData("Edit cells, scroll, expand the tree, and type in the notes below.");
+		notes_.SetTextUtf8("Vulkan UI notes\n\nSelect text, type, undo and scroll.\nThe scene and inspector retain their state when this window closes.");
 		close_.SetText("Close");
 		close_.WhenAction = [=] { Close(); };
-
-		Add(message_.HSizePos(22, 22).TopPos(22, 30));
-		Add(note_.HSizePos(22, 22).TopPos(70, 32));
-		Add(close_.RightPos(22, 100).BottomPos(20, 34));
+		{
+			UiTableModel& model = table_.Model();
+			UiModelUpdate update(model);
+			model.SetSize(2000, 3);
+			model.SetHeader(UITABLE_COLUMN_AXIS, 0, UiTableHeader("Item"));
+			model.SetHeader(UITABLE_COLUMN_AXIS, 1, UiTableHeader("State"));
+			model.SetHeader(UITABLE_COLUMN_AXIS, 2, UiTableHeader("Value"));
+			for(int r = 0; r < 2000; ++r) {
+				model.SetCellValue(r, 0, Format("Render item %04d", r + 1));
+				model.SetCellValue(r, 1, r % 3 ? "Ready" : "Review");
+				model.SetCellValue(r, 2, r * 7);
+			}
+		}
+		table_.EnableInternalMutation().SetActiveCell(0, 0);
+		table_.SetColumnWidth(0, DPI(220)); table_.SetColumnWidth(1, DPI(130));
+		{
+			UiTreeModel& model = tree_.Model();
+			UiModelUpdate update(model);
+			for(int group = 0; group < 4; ++group) {
+				UiTreeNodeRef parent = model.AddChild(model.Root(), UiModelItem(Format("Group %d", group + 1)));
+				for(int i = 0; i < 12; ++i) {
+					UiModelItem item(Format("Item %d.%d", group + 1, i + 1));
+					item.has_check = true; item.checked = i % 3 == 0; item.editable = true;
+					model.AddChild(parent, item);
+				}
+				tree_.Expand(parent);
+			}
+		}
+		tree_.EnableInternalMutation().EnableRenameOnDblClick();
+		Add(message_.HSizePos(DPI(20), DPI(20)).TopPos(DPI(18), DPI(30)));
+		Add(note_.HSizePos(DPI(20), DPI(20)).TopPos(DPI(57), DPI(32)));
+		Add(tree_.LeftPos(DPI(20), DPI(200)).VSizePos(DPI(108), DPI(210)));
+		Add(table_.HSizePos(DPI(236), DPI(20)).VSizePos(DPI(108), DPI(210)));
+		Add(notes_.HSizePos(DPI(20), DPI(20)).BottomPos(DPI(64), DPI(130)));
+		Add(close_.RightPos(DPI(20), DPI(100)).BottomPos(DPI(18), DPI(32)));
 		SetTimeCallback(-250, [=] {
 			if(IsGpuRequired() && !GetGpuError().IsEmpty()) { SetExitCode(1); Close(); }
 		});
 	}
 
+	void StartQualification(String& report)
+	{
+		qualification_report_ = &report;
+		SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
+	}
+	bool QualificationPassed() const { return qualification_passed_; }
+
 private:
+	void QualificationTick()
+	{
+		if(++qualification_ticks_ > 150 || !GetGpuError().IsEmpty() || GetSoftwareFallbackCount()) {
+			FinishQualification(false, "workspace GPU frame or timeout"); return;
+		}
+		const auto stats = GetGpuStats();
+		if(!IsGpuReady() || stats.presented_frames <= qualification_frame_) return;
+		qualification_frame_ = stats.presented_frames;
+		bool ok = true;
+		switch(qualification_step_++) {
+		case 0: {
+			const auto native = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+			ok = native.device_live_count == 1 && native.surface_live_count >= 2 && native.swapchain_live_count >= 2;
+			if(qualification_report_) *qualification_report_ << "workspace_native_devices=" << AsString(native.device_live_count)
+				<< " surfaces=" << AsString(native.surface_live_count) << " swapchains=" << AsString(native.swapchain_live_count) << "\n";
+			note_.SetFocus(); note_.Key(K_CTRL_A, 1); note_.Key('V', 1);
+			ok &= note_.HasFocus() && note_.GetTextUtf8() == "V";
+			break;
+		}
+		case 1: {
+			notes_.SetFocus(); notes_.Key(K_CTRL_A, 1); notes_.Key('N', 1);
+			ok = notes_.HasFocus() && notes_.GetTextUtf8() == "N";
+			UiTreeNodeRef first = tree_.Model().GetChild(tree_.Model().Root(), 0);
+			tree_.SetCursor(first); tree_.SetFocus(); tree_.Key(K_DOWN, 1);
+			ok &= tree_.GetCursor().id != first.id;
+			table_.SetFocus(); table_.SetActiveCell(0, 0); table_.Key(K_RIGHT, 1);
+			ok &= table_.GetActiveCell().col == 1;
+			break;
+		}
+		case 2:
+			table_.BeginEdit(); ok = table_.IsEditing();
+			break;
+		case 3:
+			table_.CommitEditValue("GPU committed");
+			ok = !table_.IsEditing() && table_.Model().GetCellValue(0, 1) == Value("GPU committed");
+			table_.BeginEdit(); ok &= table_.IsEditing();
+			break;
+		case 4:
+			table_.CancelEdit();
+			ok = !table_.IsEditing() && table_.Model().GetCellValue(0, 1) == Value("GPU committed");
+			SetRect(Rect(GetRect().TopLeft(), Size(DPI(760), DPI(540))));
+			qualification_theme_ = UiTheme::GetContext();
+			{ UiThemeContext c = qualification_theme_;
+			  c.mode = c.mode == UiThemeMode::Dark ? UiThemeMode::Light : UiThemeMode::Dark;
+			  UiTheme::Set(c); Ctrl::SwapDarkLight(); Refresh(); }
+			break;
+		case 5:
+			UiTheme::Set(qualification_theme_); Ctrl::SwapDarkLight(); Refresh();
+			break;
+		default:
+			FinishQualification(true, "focus/text/tree/table edit commit-cancel/resize/light-dark");
+			return;
+		}
+		if(!ok) FinishQualification(false, Format("workspace step %d", qualification_step_ - 1));
+	}
+
+	void FinishQualification(bool pass, const String& detail)
+	{
+		qualification_passed_ = pass;
+		if(qualification_report_) *qualification_report_ << "workspace=" << (pass ? "PASS " : "FAIL ") << detail << "\n";
+		KillTimeCallback(990);
+		Close();
+	}
+
+	String *qualification_report_ = nullptr; // Borrowed only during the caller's modal Run.
+	UiThemeContext qualification_theme_;
+	bool qualification_passed_ = false;
+	int qualification_step_ = 0, qualification_ticks_ = 0;
+	uint64 qualification_frame_ = 0;
 	UiLabel message_;
 	UiLineEdit note_;
+	UiTree tree_;
+	UiTable table_;
+	UiMultiEdit notes_;
 	UiButton close_;
 };
 
@@ -284,7 +400,9 @@ public:
 				live_fps_ = (stats.presented_frames - live_fps_frames_) * 1000.0 / (now - live_fps_epoch_);
 				live_fps_epoch_ = now; live_fps_frames_ = stats.presented_frames;
 			}
-			if(IsGpuReady()) state << Format(" | %.1f FPS | replay %.2f ms", live_fps_, stats.replay_ms);
+			if(IsGpuReady()) state << Format(" | %.1f FPS | replay %.2f ms | GPU paths %d | CPU rasters %d",
+			                                live_fps_, stats.replay_ms, stats.renderer.gpu_path_count,
+			                                stats.renderer.vector_raster_count);
 			gpu_state_.SetText(state);
 			if(IsGpuRequired() && !e.IsEmpty()) {
 				SaveFile(GetExeDirFile("GpuUiGallery-gpu-failure.txt"), e + "\n");
@@ -301,6 +419,12 @@ public:
 		scene_.SetParticleCount(particles);
 		scene_.ShowGrid(grid);
 		SyncAllControlsFromScene();
+	}
+	void StartQualification()
+	{
+		qualification_started_ = NowMs();
+		SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), "qualification=RUNNING\n");
+		SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
 	}
 	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300)
 	{
@@ -389,6 +513,7 @@ private:
 
 		UiMenuNodeRef view = model.AddChild(root, UiMenuItem("View"));
 		model.AddChild(view, UiMenuItem("Toggle grid"));
+		model.AddChild(view, UiMenuItem("Light / Dark"));
 		model.AddChild(view, UiMenuItem("Reset colours"));
 
 		menu_.SetMenuBarMode();
@@ -400,6 +525,13 @@ private:
 				TogglePause();
 			else if(action == "Open GPU dialog")
 				OpenDialog();
+			else if(action == "Light / Dark") {
+				UiThemeContext context = UiTheme::GetContext();
+				context.mode = context.mode == UiThemeMode::Dark ? UiThemeMode::Light : UiThemeMode::Dark;
+				UiTheme::Set(context);
+				Ctrl::SwapDarkLight();
+				Refresh();
+			}
 			else if(action == "Toggle grid") {
 				scene_.ShowGrid(!scene_.IsGridVisible());
 				property_model_.SetValue("show_grid", scene_.IsGridVisible(), false);
@@ -457,6 +589,8 @@ private:
 	{
 		property_title_.SetText("Scene properties");
 
+		property_model_.AddSliderInt("animation_fps", "Animation target", Animation::GetFPS(), 30, 240, 1, "Motion")
+		              .SetInlineEditor(true).SetUnit("fps").SetImpact(PropertyImpactPaint);
 		property_model_.AddSliderInt("particle_count", "Particle count", 28, 6, 512, 2, "Motion")
 		              .SetInlineEditor(true).SetImpact(PropertyImpactPaint);
 		property_model_.AddSliderInt("motion_radius", "Motion radius", 72, 20, 100, 1, "Motion")
@@ -501,6 +635,7 @@ private:
 
 	void ApplyPropertyProjection()
 	{
+		Animation::SetFPS((int)PropertyValue("animation_fps", Animation::GetFPS()));
 		scene_.SetParticleCount((int)PropertyValue("particle_count", 28));
 		scene_.SetMotionRadius((int)PropertyValue("motion_radius", 72));
 		scene_.SetParticleSize((int)PropertyValue("particle_size", 8));
@@ -512,6 +647,7 @@ private:
 
 	void SyncPropertyModelFromScene()
 	{
+		property_model_.SetValue("animation_fps", Animation::GetFPS(), false);
 		property_model_.SetValue("particle_count", scene_.GetParticleCount(), false);
 		property_model_.SetValue("motion_radius", scene_.GetMotionRadius(), false);
 		property_model_.SetValue("particle_size", scene_.GetParticleSize(), false);
@@ -574,7 +710,7 @@ private:
 	void OpenDialog()
 	{
 		GalleryDialog dlg;
-		dlg.SetRequireGpu(IsGpuRequired());
+		dlg.SetRequireGpu(IsGpuRequired()).SetValidation(IsValidationRequested()).SetAsyncPresentation();
 		dlg.Run();
 		SetStatus("Modal GpuTopWindow closed; the scene state was preserved.");
 	}
@@ -585,6 +721,55 @@ private:
 	}
 
 private:
+	void QualificationTick()
+	{
+		if(NowMs() - qualification_started_ > 30000 || !GetGpuError().IsEmpty() || GetSoftwareFallbackCount()) {
+			FinishQualification(false, "root GPU frame or timeout"); return;
+		}
+		if(!IsGpuReady() || GetGpuStats().presented_frames <= qualification_frame_) return;
+		qualification_frame_ = GetGpuStats().presented_frames;
+		if(qualification_step_++ == 0) {
+			pause_.WhenAction();
+			bool ok = scene_.IsPaused();
+			pause_.WhenAction(); ok &= !scene_.IsPaused();
+			speed_.SetValue(1.75); speed_.WhenAction(); ok &= scene_.GetSpeed() == 1.75;
+			mode_.WhenSelect(SCENE_PULSE); ok &= scene_.GetMode() == SCENE_PULSE;
+			property_model_.SetValue("particle_count", 512, false);
+			properties_.WhenCommit("particle_count", 512); ok &= scene_.GetParticleCount() == 512;
+			if(!ok) { FinishQualification(false, "root control callbacks"); return; }
+			KillTimeCallback(990); // Modal Run pumps timers; prevent root test re-entry.
+			for(int i = 0; i < 3; ++i) {
+				GalleryDialog dlg;
+				dlg.SetRequireGpu().SetValidation(IsValidationRequested()).SetAsyncPresentation();
+				dlg.StartQualification(qualification_report_); dlg.Run();
+				if(!dlg.QualificationPassed()) { FinishQualification(false, "workspace"); return; }
+			}
+			qualification_report_ << "workspace_open_edit_close_cycles=3\n";
+			qualification_frame_ = GetGpuStats().presented_frames;
+			SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
+			RequestGpuRefresh();
+			return;
+		}
+		const bool preserved = scene_.GetParticleCount() == 512 && scene_.GetSpeed() == 1.75 &&
+		                       scene_.GetMode() == SCENE_PULSE && !scene_.IsPaused();
+		FinishQualification(preserved, "pause/resume/speed/mode/inspector/modal state retained");
+	}
+
+	void FinishQualification(bool pass, const String& detail)
+	{
+		qualification_report_ << "root=" << (pass ? "PASS " : "FAIL ") << detail << "\n"
+		                      << "software_fallback_count=" << AsString(GetSoftwareFallbackCount()) << "\n"
+		                      << "gpu_error=" << GetGpuError() << "\n"
+		                      << "qualification=" << (pass ? "PASS" : "FAIL") << "\n";
+		SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
+		if(!pass) SetExitCode(1);
+		KillTimeCallback(990); Close();
+	}
+
+	String qualification_report_;
+	double qualification_started_ = 0;
+	uint64 qualification_frame_ = 0;
+	int qualification_step_ = 0;
 	static double NowMs()
 	{
 		return std::chrono::duration<double, std::milli>(
@@ -665,6 +850,12 @@ private:
 		       << " throughput_elapsed_ms=" << Format("%.2f", now - benchmark_measure_started_)
 		       << " presented_fps=" << Format("%.2f", (stats.presented_frames - benchmark_start_frame_) * 1000.0 /
 		                                                   max(1.0, now - benchmark_measure_started_)) << "\n"
+		       << "adapter=" << stats.adapter_name << "\n"
+		       << "cold_first_successful_frame_cpu_ms=" << Format("%.2f", stats.first_frame_cpu_ms) << "\n"
+		       << "cold_texture_uploads=" << stats.first_renderer.texture_upload_count
+		       << " cold_glyph_misses=" << stats.first_renderer.glyph_cache_miss_count
+		       << " cold_vector_rasters=" << stats.first_renderer.vector_raster_count
+		       << " cold_gpu_coverage_renders=" << stats.first_renderer.gpu_path_coverage_render_count << "\n"
 		       << "frame_clock_active=" << (IsFrameClockActive() ? 1 : 0) << "\n"
 		       << "timer_delay_ms p50=" << Format("%.2f", Percentile(benchmark_delays_, 0.50))
 		       << " p95=" << Format("%.2f", Percentile(benchmark_delays_, 0.95))
@@ -681,6 +872,21 @@ private:
 		       << "image_cache_entry_peak=" << benchmark_image_entries_ << "\n"
 		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
 		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"
+		       << "gpu_paths_last=" << stats.renderer.gpu_path_count << "\n"
+		       << "gpu_path_vertices_last=" << stats.renderer.gpu_path_vertex_count << "\n"
+		       << "gpu_coverage_draws_last=" << stats.renderer.gpu_path_coverage_draw_count << "\n"
+		       << "gpu_coverage_renders_last=" << stats.renderer.gpu_path_coverage_render_count << "\n"
+		       << "gpu_coverage_atlas_bytes=" << AsString(stats.renderer.gpu_path_coverage_bytes) << "\n"
+		       << "gpu_path_cache_misses_last=" << stats.renderer.gpu_path_cache_miss_count << "\n"
+		       << "gpu_path_cache_entries_last=" << stats.renderer.gpu_path_cache_entry_count << "\n"
+		       << "gpu_path_cache_payload_bytes_last=" << AsString(stats.renderer.gpu_path_cache_bytes) << "\n"
+		       << "cpu_vector_rasters_last=" << stats.renderer.vector_raster_count << "\n"
+		       << "cpu_glyph_misses_last=" << stats.renderer.glyph_cache_miss_count << "\n"
+		       << "ui_shared_raster_cache_bytes=" << AsString(UiRasterCache::GetStats().bytes) << "\n"
+		       << "ui_shared_raster_cache_misses_total=" << AsString(UiRasterCache::GetStats().misses) << "\n"
+		       << "ui_software_layer_allocations_total=" << AsString(UiGetRenderLayerStats().allocations) << "\n"
+		       << "vertex_buffer_capacity_bytes_last=" << AsString(stats.renderer.vertex_buffer_capacity) << "\n"
+		       << "textured_vertex_buffer_capacity_bytes_last=" << AsString(stats.renderer.textured_vertex_buffer_capacity) << "\n"
 		       << "grid=" << (scene_.IsGridVisible() ? 1 : 0) << "\n"
 		       << "animation_driver=upp_animation scheduler_fps=" << Animation::GetFPS() << "\n"
 		       << "gpu_required=" << (IsGpuRequired() ? 1 : 0) << "\n"
@@ -751,6 +957,7 @@ private:
 GUI_APP_MAIN
 {
 	bool benchmark = false;
+	bool qualification = false;
 	bool heavy = false;
 	bool soak = false;
 	int seconds = 300;
@@ -758,6 +965,7 @@ GUI_APP_MAIN
 	bool require_gpu = false;
 	bool grid = true;
 	int particles = 28;
+	int animation_fps = 120;
 	for(const String& arg : CommandLine()) {
 		if(arg == "--benchmark" || arg == "--benchmark-load") {
 			benchmark = true;
@@ -772,30 +980,44 @@ GUI_APP_MAIN
 			particles = ScanInt(arg.Mid(12));
 			if(IsNull(particles) || particles < 6 || particles > 512) { SetExitCode(2); return; }
 		}
+		if(arg.StartsWith("--animation-fps=")) {
+			animation_fps = ScanInt(arg.Mid(16));
+			if(IsNull(animation_fps) || animation_fps < 30 || animation_fps > 240) { SetExitCode(2); return; }
+		}
+		if(arg == "--qualify-ui") { qualification = true; require_gpu = true; }
 		if(arg == "--no-grid") grid = false;
 		if(arg == "--validation") validation = true;
 		if(arg == "--require-gpu") require_gpu = true;
 	}
-	Animation::SetFPS(60);
+	if(qualification && benchmark) { SetExitCode(2); return; }
+	Animation::SetFPS(animation_fps);
 	{
 		GpuUiGallery app;
 		app.SetDemoScene(particles, grid);
 		if(validation) app.SetValidation();
 		if(require_gpu) app.SetRequireGpu();
 		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
+		if(qualification) app.StartQualification();
 		app.Run();
 	}
 	Animation::Finalize();
-	if(benchmark) {
+	if(benchmark || qualification) {
 		const auto d = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&
 		            d.device_live_count == 0 && d.surface_live_count == 0 && d.swapchain_live_count == 0 &&
 		            VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
-		String path = BenchmarkReportPath(heavy, soak, require_gpu);
+		String path = qualification ? GetExeDirFile("GpuUiGallery-qualification.txt") : BenchmarkReportPath(heavy, soak, require_gpu);
 		String report = LoadFile(path);
 		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
+#ifdef flagCFONTS
+		const auto fonts = GetRenderFontWin32Stats();
+		report << "font_backend=DirectWrite legacy_gdi_font_requests=" << AsString(fonts.legacy_gdi_font_requests)
+		       << " face_cache_entries=" << fonts.face_cache_entries << "/" << fonts.face_cache_limit
+		       << " font_error=" << fonts.error << "\n";
+		if(fonts.legacy_gdi_font_requests || !fonts.error.IsEmpty()) SetExitCode(1);
+#endif
 		SaveFile(path, report);
-		if(!zero || report.Find("responsiveness=PASS") < 0 ||
+		if(!zero || (qualification ? report.Find("qualification=PASS") < 0 : report.Find("responsiveness=PASS") < 0) ||
 		   (soak && report.Find("memory_plateau=PASS") < 0)) SetExitCode(1);
 	}
 }

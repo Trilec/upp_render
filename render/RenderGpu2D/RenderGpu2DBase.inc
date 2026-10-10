@@ -396,11 +396,6 @@ UiRenderer2D::UiRenderer2D(GpuDevice& gpu)
 	ready = true;
 }
 
-UiRenderer2D::~UiRenderer2D()
-{
-	Close();
-}
-
 bool UiRenderer2D::Fail(const String& message)
 {
 	error = message;
@@ -484,6 +479,8 @@ bool UiRenderer2D::EnsureVertexBuffer(bool textured, int64 required_bytes)
 {
 	if(required_bytes <= 0)
 		return true;
+	if(required_bytes > cache_limits.geometry_bytes)
+		return Fail("UiRenderer2D vertex buffer exceeds the geometry byte budget");
 	GpuBufferId& buffer = textured ? textured_vertex_buffer : vertex_buffer;
 	int64& capacity_ref = textured ? textured_vertex_buffer_capacity : vertex_buffer_capacity;
 	if(buffer.IsValid() && capacity_ref >= required_bytes)
@@ -501,6 +498,7 @@ bool UiRenderer2D::EnsureVertexBuffer(bool textured, int64 required_bytes)
 		buffer = GpuBufferId();
 		capacity_ref = 0;
 	}
+	capacity = min(capacity, cache_limits.geometry_bytes);
 	GpuBufferDesc desc;
 	desc.size = capacity;
 	desc.usage = GpuBufferUsage_Vertex | GpuBufferUsage_TransferDst;

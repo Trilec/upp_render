@@ -61,7 +61,13 @@ The control bridge explicitly reports unsupported operations. They must either g
 
 `upp_Ui` must continue to work independently through normal U++ Draw / UiDraw and must not gain a hard dependency on `upp_render` or `RenderVulkan`.
 
-The current GpuTopWindow integration and future broader Ui coverage are assembled from the render/integration side:
+Ui optionally accepts the `GPUUI` assembly flag. With that flag, shared rounded
+faces can call the small `GpuDrawTarget` semantic interface from the RenderCore package when the
+actual Draw receiver implements it. No backend types enter Ui. Ordinary Draw
+receivers and assemblies without GPUUI keep the existing software path; a native
+Ui application does not require the render nest.
+
+The GpuTopWindow integration and broader Ui coverage are assembled from the render/integration side:
 
 ```text
 upp_Ui control tree

@@ -130,7 +130,11 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			if(!op.text.IsEmpty()) {
 				painter.Begin();
 				painter.Translate(op.point);
-				painter.DrawText(0, 0, op.text, op.font, op.color.ToColor());
+				// Match the neutral control contract and GPU glyph placement.
+				// Painter's default Text spacing otherwise uses fractional large-font metrics.
+				Vector<int> advances;
+				for(int cp : op.text) advances.Add(op.font.GetWidth(cp));
+				painter.DrawText(0, 0, op.text, op.font, op.color.ToColor(), advances.Begin());
 				painter.End();
 			}
 			break;

@@ -2,6 +2,7 @@
 
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderRhi/RenderRhi.h>
+#include "RenderGpu2DPath.h"
 
 namespace Upp {
 
@@ -20,6 +21,10 @@ struct UiRenderer2DTarget : Moveable<UiRenderer2DTarget> {
 struct UiRenderer2DCacheLimits {
 	int64 image_bytes = 64 * 1024 * 1024;
 	int image_entries = 4096;
+	int64 path_geometry_bytes = 8 * 1024 * 1024;
+	int path_geometry_entries = 256;
+	int64 path_coverage_bytes = 1024 * 1024; // Optional GPU-rendered coverage atlas.
+	int64 geometry_bytes = 32 * 1024 * 1024; // Combined active vertex payload.
 	int64 vector_bytes = 32 * 1024 * 1024;
 	int vector_entries = 4096;
 	int64 glyph_bytes = 16 * 1024 * 1024;
@@ -44,6 +49,14 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int vector_cache_miss_count = 0;
 	int vector_cache_entry_count = 0;
 	int vector_raster_count = 0;
+	int gpu_path_count = 0; // Direct coverage geometry; no image raster/upload.
+	int gpu_path_vertex_count = 0;
+	int gpu_path_coverage_draw_count = 0;
+	int gpu_path_coverage_render_count = 0;
+	int64 gpu_path_coverage_bytes = 0;
+	int gpu_path_cache_miss_count = 0;
+	int gpu_path_cache_entry_count = 0;
+	int64 gpu_path_cache_bytes = 0;
 	int texture_upload_count = 0;
 	int triangle_count = 0;
 	int vertex_count = 0;
@@ -69,9 +82,9 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 };
 
 // Backend-neutral 2D renderer. The GpuDevice must outlive this object.
-// Vector/SVG content is antialiased by the shared U++ Painter authority into
-// cached Images, then flows through the same sampled-image GPU path already
-// used by ordinary DrawImage content. No second GPU texture ownership tree.
+// Solid convex paths use bounded cached coverage geometry and GPU rasterization.
+// Complex vector/SVG content retains the bounded Painter/image reference path.
+// Glyph preparation currently uses U++ fonts; this is not a GDI-free text host.
 class UiRenderer2D {
 public:
 	explicit UiRenderer2D(GpuDevice& device);
@@ -186,6 +199,29 @@ private:
 		UiRenderer2D *owner = nullptr;
 		~TextCleanup();
 	};
+
+	struct PathCacheEntry : Moveable<PathCacheEntry> {
+		UiDisplayOp key;
+		Transform2D transform;
+		GpuPathMesh mesh;
+		Rect coverage_slot = Rect(0, 0, 0, 0);
+		Rect coverage_bounds = Rect(0, 0, 0, 0);
+		int64 bytes = 0;
+		uint64 last_frame = 0;
+	};
+	Vector<PathCacheEntry> path_cache;
+	PathCacheEntry *current_path_entry = nullptr;
+	GpuTextureId path_coverage_texture;
+	int path_coverage_side = 0, path_coverage_x = 1, path_coverage_y = 1, path_coverage_row = 0;
+	bool path_coverage_unsupported = false;
+	One<UiRenderer2D> path_coverage_renderer;
+	bool EnsurePathCoverage(PathCacheEntry& entry);
+	void ClosePathCoverage();
+	GpuPathMesh scratch_path;
+	int64 path_cache_bytes = 0;
+	int frame_path_misses = 0;
+	const GpuPathMesh *PreparePath(const UiDisplayOp& op, const Transform2D& transform);
+	bool GeometryFits(int64 additional_bytes);
 
 	struct VectorRaster : Moveable<VectorRaster> {
 		Image image;

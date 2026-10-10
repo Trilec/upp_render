@@ -6,8 +6,11 @@ uses
 	Utilities/PropertyEditor,
 	GpuRender;
 
+uses(CFONTS)
+	RenderFontWin32;
+
 file
 	main.cpp;
 
 mainconfig
-	"" = "GUI";
+	"" = "GUI GPUUI CFONTS";

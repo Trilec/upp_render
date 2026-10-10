@@ -1,4 +1,5 @@
 #include "RenderGpu2D.h"
+#include "RenderGpu2DPath.h"
 
 #include <RenderVector/RenderVector.h>
 #include <cmath>
@@ -215,6 +216,11 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 				vector_stats.vector_path_count++;
 				if(op.paint.kind != UiPaintKind::Solid)
 					vector_stats.gradient_count++;
+			}
+			if(PreparePath(op, state.transform)) {
+				if(op.type == UiDisplayOpType::FillPath) builder.FillPath(op.path, op.paint, op.fill_rule);
+				else builder.StrokePath(op.path, op.paint, op.stroke);
+				break;
 			}
 			VectorRaster raster;
 			if(!EnsureVectorRaster(op, state.transform, raster, vector_stats))

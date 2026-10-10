@@ -148,6 +148,7 @@ struct GpuTopWindow::Impl {
 			SetSessionError("precise Windows frame clock could not start");
 			return;
 		}
+		if(!paint_scope) paint_scope.Create();
 		ClearError();
 		StartWorker();
 		if(owner) owner->Refresh();
@@ -216,6 +217,7 @@ struct GpuTopWindow::Impl {
 		frame_clock.Stop();
 		StopWorker();
 		presenter.Close();
+		paint_scope.Clear();
 		init_attempted = false;
 		frame_presented = false;
 		session_error.Clear();
@@ -231,6 +233,7 @@ struct GpuTopWindow::Impl {
 #endif
 		StopWorker();
 		presenter.Close();
+		paint_scope.Clear();
 		init_attempted = false;
 		frame_presented = false;
 		session_error.Clear();
@@ -241,6 +244,7 @@ struct GpuTopWindow::Impl {
 	void ClearError() { api_error.Clear(); session_error.Clear(); presentation_error.Clear(); }
 	GpuTopWindow *owner = nullptr;
 	GpuDisplayPresenter presenter;
+	One<CtrlDisplayListPaintScope> paint_scope;
 	GpuBackendKind backend_kind = GpuBackendKind::Vulkan;
 	String api_error;
 	String session_error;

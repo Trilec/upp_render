@@ -4,8 +4,11 @@ uses
 	RenderGpu2D,
 	RenderVulkan;
 
+uses(CFONTS)
+	RenderFontWin32;
+
 file
 	main.cpp;
 
 mainconfig
-	"" = "GUI";
+	"" = "GUI GPUUI CFONTS";

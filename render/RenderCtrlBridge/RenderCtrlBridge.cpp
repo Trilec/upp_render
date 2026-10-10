@@ -184,41 +184,60 @@ private:
 	bool direct = false;
 };
 
+static int direct_paint_scopes = 0;
+static bool restore_direct_paint = false;
+static uint64 direct_paint_probes = 0;
+
 static bool IsGlobalBackBufferEnabled()
 {
+	++direct_paint_probes;
 	DirectPaintProbeCtrl ctrl;
 	DirectPaintProbeDraw draw;
 	ctrl.DrawCtrl(draw, 0, 0);
 	return draw.WasDirect();
 }
 
-class ScopedDirectCtrlPainting {
-public:
-	ScopedDirectCtrlPainting()
-	{
-		if(!IsGlobalBackBufferEnabled()) {
-			Ctrl::GlobalBackBuffer(true);
-			enabled_by_scope = true;
-		}
-	}
-
-	~ScopedDirectCtrlPainting()
-	{
-		if(enabled_by_scope)
-			Ctrl::GlobalBackBuffer(false);
-	}
-
-private:
-	bool enabled_by_scope = false;
-};
-
-class CtrlDisplayListSystemDraw : public SystemDraw {
+class CtrlDisplayListSystemDraw : public SystemDraw, public GpuDrawTarget {
 public:
 	CtrlDisplayListSystemDraw(UiDisplayListBuilder& target, Size size,
 	                          CtrlDisplayListRecordReport& target_report)
 		: builder(target), page_size(size), report(target_report)
 	{
 		state.clip = Rect(size);
+	}
+
+
+	bool DrawRoundedFaceFrame(const Rect& bounds, int radius,
+	                          int frame_width, Color face, Color frame) override
+	{
+		if(bounds.IsEmpty() || radius <= 0 || frame_width < 0) return false;
+		const double inset = frame_width > 0 ? max(0.5, frame_width * 0.5) : 0.5;
+		const double width = bounds.GetWidth() - 2 * inset;
+		const double height = bounds.GetHeight() - 2 * inset;
+		if(width <= 0 || height <= 0) return true;
+		const double r = min<double>(radius, min(bounds.GetWidth(), bounds.GetHeight()) * 0.5);
+		if(2 * r > min(width, height)) return false; // Preserve unusual Painter geometry.
+		const double k = 0.5522847498307936 * r;
+		const double l = inset, top = inset, right = inset + width, bottom = inset + height;
+		UiPath path;
+		path.MoveTo(Pointf(l + r, top)).LineTo(Pointf(right - r, top));
+		path.CubicTo(Pointf(right - r + k, top), Pointf(right, top + r - k), Pointf(right, top + r));
+		path.LineTo(Pointf(right, bottom - r));
+		path.CubicTo(Pointf(right, bottom - r + k), Pointf(right - r + k, bottom), Pointf(right - r, bottom));
+		path.LineTo(Pointf(l + r, bottom));
+		path.CubicTo(Pointf(l + r - k, bottom), Pointf(l, bottom - r + k), Pointf(l, bottom - r));
+		path.LineTo(Pointf(l, top + r));
+		path.CubicTo(Pointf(l, top + r - k), Pointf(l + r - k, top), Pointf(l + r, top)).Close();
+		builder.Save();
+		builder.ConcatTransform(Translation(bounds.TopLeft()));
+		if(!IsNull(face)) builder.FillPath(path, UiPaint::Solid(ToRgba8(face)));
+		if(!IsNull(frame) && frame_width > 0) {
+			UiStrokeStyle stroke; stroke.width = frame_width;
+			builder.StrokePath(path, UiPaint::Solid(ToRgba8(frame)), stroke);
+		}
+		builder.Restore();
+		report.path_count++;
+		return true;
 	}
 
 	bool Failed() const { return !error.IsEmpty(); }
@@ -570,6 +589,29 @@ private:
 } // namespace
 #endif
 
+CtrlDisplayListPaintScope::CtrlDisplayListPaintScope()
+{
+#ifdef PLATFORM_WIN32
+	GuiLock lock;
+	if(direct_paint_scopes++ == 0) {
+		restore_direct_paint = !IsGlobalBackBufferEnabled();
+		if(restore_direct_paint) Ctrl::GlobalBackBuffer(true);
+	}
+#endif
+}
+
+CtrlDisplayListPaintScope::~CtrlDisplayListPaintScope()
+{
+#ifdef PLATFORM_WIN32
+	GuiLock lock;
+	ASSERT(direct_paint_scopes > 0);
+	if(--direct_paint_scopes == 0 && restore_direct_paint) {
+		Ctrl::GlobalBackBuffer(false);
+		restore_direct_paint = false;
+	}
+#endif
+}
+
 bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
                            CtrlDisplayListRecordReport *report)
 {
@@ -583,8 +625,10 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 	UiDisplayListBuilder builder;
 	CtrlDisplayListSystemDraw draw(builder, ctrl.GetSize(), result);
 	{
-		ScopedDirectCtrlPainting direct_paint;
+		const uint64 probes_before = direct_paint_probes;
+		CtrlDisplayListPaintScope direct_paint;
 		ctrl.DrawCtrl(draw, 0, 0);
+		result.paint_probe_count = (int)(direct_paint_probes - probes_before);
 	}
 	if(draw.Failed()) {
 		error = draw.GetError();

@@ -1,0 +1,9 @@
+uses
+	RenderFontWin32,
+	Painter;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE CFONTS";

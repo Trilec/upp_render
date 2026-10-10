@@ -2,6 +2,7 @@
 
 #include <Core/Core.h>
 #include <Draw/Draw.h>
+#include "GpuDrawTarget.h"
 
 namespace Upp {
 

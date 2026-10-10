@@ -17,6 +17,10 @@ struct GpuPresentationStats {
 	double acquire_ms = 0;
 	double replay_ms = 0;
 	double present_ms = 0;
+	// Frozen after the first successful present; separate cold preparation from warm replay.
+	String adapter_name;
+	double first_frame_cpu_ms = 0;
+	UiRenderer2DStats first_renderer;
 	UiRenderer2DStats renderer;
 };
 
