@@ -67,6 +67,7 @@ public:
 	GpuResult DestroyShader(GpuShaderId id) override;
 	GpuResult GetComputeCapabilities(GpuComputeCapabilities& out) override;
 	GpuResult GetComputeStats(GpuComputeStats& out) override;
+	GpuResult GetSamplingStats(GpuSamplingStats& out) override;
 	GpuResult CreateComputePipeline(const GpuComputePipelineDesc& desc, GpuPipelineId& out) override;
 	GpuResult SetComputePipeline(GpuCommandListId list, GpuPipelineId pipeline) override;
 	GpuResult SetStorageBuffer(GpuCommandListId list, int slot, GpuBufferId buffer, int64 offset = 0, int64 size = 0) override;

@@ -34,6 +34,7 @@ struct GpuPresentationStats {
 	double first_frame_cpu_ms = 0;
 	UiRenderer2DStats first_renderer;
 	UiRenderer2DStats renderer;
+	GpuSamplingStats sampling;
 };
 
 // Backend-neutral application GPU context.

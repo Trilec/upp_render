@@ -899,6 +899,9 @@ private:
 		       << "root_enqueue_ms last=" << Format("%.2f", stats.enqueue_ms)
 		       << " lifetime_max=" << Format("%.2f", stats.enqueue_max_ms) << "\n"
 		       << "process_private_peak_bytes=" << AsString(benchmark_private_peak_) << "\n"
+		       << "sampled_descriptor_pools_created=" << AsString(stats.sampling.descriptor_pools_created)
+		       << " reused=" << AsString(stats.sampling.descriptor_pools_reused)
+		       << " retained=" << stats.sampling.retained_descriptor_pools << "\n"
 		       << "image_cache_entry_peak=" << benchmark_image_entries_ << "\n"
 		       << "image_pixel_payload_peak_bytes=" << AsString(benchmark_image_peak_) << "\n"
 		       << "vector_pixel_payload_peak_bytes=" << AsString(benchmark_vector_peak_) << "\n"

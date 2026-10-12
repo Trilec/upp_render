@@ -86,6 +86,20 @@ limits, not proof of a sole cause. Core and Animation were not changed.
 This supplements the ten UI gates; it does not complete general vectors, shaping,
 source-image OCIO or asynchronous video. See VULKAN_COMPUTE.md and build/vulkan-compute-qualification-2026-10-13.json.
 
+## Sampled-image allocation refinement — 2026-10-13
+
+Completed sampled-image descriptor pools now use bounded reuse as well.
+Release/Debug repeated pixel checks prove pool creation plateaus. The current
+whole-UI 300-second load soak passed: 64 FPS, CPU median/p99 7.22/15.27 ms,
+private early/late growth 845,824 B, no fallback/error and final native ZERO.
+Only two sampled pools were created; 38,830 reuse operations were recorded.
+The current 4K compute run holds 119.94 FPS with one compute and one sampled
+pool created. Its callback max 156.13 ms remains an optimization target.
+Current artifact: 59d1a2c8e44715c709040e5e9811b13beed1e3ab52d14924c6a6746db7829dcf.
+See build/vulkan-sampling-qualification-2026-10-13.json and
+WINDOWS_FRAME_PACING.md. This does not complete the open vector/text/helper/DPI
+gates or the source-image OCIO/async pipeline.
+
 ## Known starting seams (historical baseline)
 
 - Vulkan composites the entire client UI. U++ owns controls, layout and input.

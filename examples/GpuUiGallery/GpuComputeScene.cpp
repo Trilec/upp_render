@@ -79,6 +79,7 @@ public:
         ++state->dispatches;
         if(!renderer->RenderTextureFrame(texture, frame)) { error = renderer->GetError(); return false; }
         device.GetComputeStats(state->compute_stats);
+        device.GetSamplingStats(state->sampling_stats);
         if(state->measuring && state->frame_cpu_ms.GetCount() < 72000) state->frame_cpu_ms.Add(NowMs() - now);
         error.Clear(); return true;
     }
@@ -176,6 +177,7 @@ void ComputeSceneDialog::BenchmarkTick(double now)
     bool responsive = p99 < 100 && worst < 500 && measured_fps >= 55;
     bool resources = state->program_builds == 1 && state->image_builds == 1 &&
                      state->compute_stats.descriptor_pools_created == 1 && state->compute_stats.live_commands == 0 &&
+                     state->sampling_stats.descriptor_pools_created == 1 && state->sampling_stats.live_commands == 0 &&
                      state->retained_image_bytes <= 64 * 1024 * 1024;
     *benchmark_report = "GpuUiGallery Windows/Vulkan compute and whole-UI window\n";
     *benchmark_report << "adapter=" << stats.adapter_name << "\n"
@@ -194,6 +196,8 @@ void ComputeSceneDialog::BenchmarkTick(double now)
         << " shader_pipeline_builds=" << state->program_builds << " image_builds=" << state->image_builds << "\n"
         << "descriptor_pools_created=" << AsString(state->compute_stats.descriptor_pools_created)
         << " reused=" << AsString(state->compute_stats.descriptor_pools_reused) << "\n"
+        << "sampled_descriptor_pools_created=" << AsString(state->sampling_stats.descriptor_pools_created)
+        << " reused=" << AsString(state->sampling_stats.descriptor_pools_reused) << "\n"
         << "software_fallback_count=" << GetSoftwareFallbackCount()
         << " responsiveness=" << (responsive ? "PASS" : "FAIL")
         << " memory_plateau=" << (plateau ? "PASS" : "FAIL")

@@ -210,6 +210,18 @@ static bool CheckPixelReadback(VulkanGpuDevice& device)
 			ok &= Check(renderer.GetStats().texture_upload_count == 0 &&
 			            renderer.GetStats().textured_vertex_count == 6 && renderer.GetStats().triangle_count == 2,
 			            "GPU image uses one quad and no CPU image upload");
+			GpuSamplingStats pool_before, pool_after;
+			ok &= Check(device.GetSamplingStats(pool_before) == GpuResult::Ok,
+			            "sampled descriptor statistics are available");
+			for(int repeat = 0; repeat < 32; ++repeat)
+				ok &= Check(renderer.RenderTexture(gpu_image, output) && device.ReadTexturePixels(target, bytes) &&
+				            matches(0, 0, 255, 0, 0) && matches(31, 0, 0, green, 0),
+				            "completed descriptor reuse preserves sampled pixels");
+			ok &= Check(device.GetSamplingStats(pool_after) == GpuResult::Ok &&
+			            pool_after.descriptor_pools_created == pool_before.descriptor_pools_created &&
+			            pool_after.descriptor_pools_reused >= pool_before.descriptor_pools_reused + 32 &&
+			            pool_after.live_commands == 0 && pool_after.retained_descriptor_pools <= 4,
+			            "sampled descriptor creation plateaus with bounded completed reuse");
 			ok &= Check(device.DestroyTexture(gpu_image) == GpuResult::Ok,
 			            "GPU image remains caller-owned after synchronous submission");
 			ok &= Check(!renderer.RenderTexture(GpuTextureId(), output) &&

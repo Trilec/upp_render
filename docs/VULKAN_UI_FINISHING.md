@@ -179,9 +179,9 @@ The cutout recorder now handles native embedded GPU children with bounded disjoi
 regions; exact offset/clip/restore pixels and excessive complexity are tested.
 The software reference's untracked clip-state push was corrected at the same time.
 
-The current executable is build/GpuUiGalleryCompute.exe, SHA-256
+The initial compute-enabled executable was build/GpuUiGalleryCompute.exe, SHA-256
 58d8b611b780016b8368eb607c719959e16aa0042f393724ade5373bfac14716,
-built by exec-056BE168766EBF65B03D4AB6AECA9F27. Current three-workspace/
+built by exec-056BE168766EBF65B03D4AB6AECA9F27. Its three-workspace/
 three-compute-cycle qualification: exec-B78A90D2C8688A1588EFCC5F9E7A8D49.
 Fixed 4K run: exec-A0499BC90A62F40F49BEF87DCB6A1210.
 The five-minute compute soak used the preceding 6b69874985a6e498... artifact
@@ -195,3 +195,25 @@ Current visual/input and 100%/150%/200% monitor-DPI acceptance remain pending.
 See VULKAN_COMPUTE.md for API limits, build-time shaders, measured workload and
 remaining OCIO/source-image/async-streaming work. This baseline does not alter
 the ten-gate denominator or claim the remaining drawing seams complete.
+
+## Sampled-image allocation refinement — 2026-10-13
+
+The current Gallery SHA-256 is
+59d1a2c8e44715c709040e5e9811b13beed1e3ab52d14924c6a6746db7829dcf,
+built by exec-5E239532A79DF8A8BC0602CD0DB615E6.
+Current automated UI qualification: exec-A99866B2F376F481548AE5F7D47F140D.
+Current fixed 4K run: exec-A921FB0035E0C80B95E4CF03F2C1DC11.
+Completed current whole-UI 300-second soak: exec-A0E2E955FEE2100EA888F27E1999426B.
+
+The sampled-image path now retains at most four reset descriptor pools after
+successful synchronous completion; failed/live command descriptors remain separate.
+Release and Debug image tests check repeated pixels and pool-creation plateau.
+The current UI soak created two pools and reused them 38,830 times, with final
+native ownership ZERO. CPU median/p99 was 7.22/15.27 ms; private growth 845,824 B.
+Animation callback/progress/record/present rates remain 64 Hz. The current 4K
+compute run measured 119.94 FPS but a 156.13 ms callback outlier remains.
+This is a resource-allocation improvement, not evidence that latency is finished.
+
+Exact reports/source/artifact identities are in
+build/vulkan-sampling-qualification-2026-10-13.json.
+See WINDOWS_FRAME_PACING.md for the source trace; Core and Animation were not modified.

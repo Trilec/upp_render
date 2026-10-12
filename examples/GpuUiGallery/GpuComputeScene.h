@@ -16,6 +16,7 @@ struct ComputeSceneState {
     int64 retained_image_bytes = 0;
     double compute_copy_cpu_ms = 0;
     GpuComputeStats compute_stats;
+    GpuSamplingStats sampling_stats;
     bool measuring = false;
     Vector<double> frame_cpu_ms;
 };

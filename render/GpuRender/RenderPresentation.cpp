@@ -215,6 +215,7 @@ struct GpuDisplayPresenter::Impl {
 
 		stats.replay_ms = elapsed(started);
 		stats.renderer = renderer->GetStats();
+		device->GetSamplingStats(stats.sampling);
 		started = Clock::now();
 		result = device->Present(frame.frame);
 		stats.present_ms = elapsed(started);

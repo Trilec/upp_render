@@ -65,6 +65,8 @@ struct VulkanGpuDevice::SampledImpl {
 	Impl *core = nullptr;
 	VectorMap<int, PipelineState> pipelines;
 	VectorMap<int, CommandState> commands;
+	Vector<VkDescriptorPool> idle_pools;
+	uint64 pools_created = 0, pools_reused = 0;
 	bool resolved = false;
 
 	PFN_vkCreateSampler create_sampler = nullptr;
@@ -73,6 +75,7 @@ struct VulkanGpuDevice::SampledImpl {
 	PFN_vkDestroyDescriptorSetLayout destroy_descriptor_set_layout = nullptr;
 	PFN_vkCreateDescriptorPool create_descriptor_pool = nullptr;
 	PFN_vkDestroyDescriptorPool destroy_descriptor_pool = nullptr;
+	PFN_vkResetDescriptorPool reset_descriptor_pool = nullptr;
 	PFN_vkAllocateDescriptorSets allocate_descriptor_sets = nullptr;
 	PFN_vkUpdateDescriptorSets update_descriptor_sets = nullptr;
 	PFN_vkCmdBindDescriptorSets cmd_bind_descriptor_sets = nullptr;
@@ -99,6 +102,7 @@ struct VulkanGpuDevice::SampledImpl {
 		           core->Resolve(destroy_descriptor_set_layout, "vkDestroyDescriptorSetLayout") &&
 		           core->Resolve(create_descriptor_pool, "vkCreateDescriptorPool") &&
 		           core->Resolve(destroy_descriptor_pool, "vkDestroyDescriptorPool") &&
+		           core->Resolve(reset_descriptor_pool, "vkResetDescriptorPool") &&
 		           core->Resolve(allocate_descriptor_sets, "vkAllocateDescriptorSets") &&
 		           core->Resolve(update_descriptor_sets, "vkUpdateDescriptorSets") &&
 		           core->Resolve(cmd_bind_descriptor_sets, "vkCmdBindDescriptorSets");
@@ -139,15 +143,21 @@ struct VulkanGpuDevice::SampledImpl {
 		return false;
 	}
 
-	void DestroyCommand(int command_id)
+	void DestroyCommand(int command_id, bool completed = false)
 	{
 		int index = commands.Find(command_id);
 		if(index < 0)
 			return;
 		if(core && core->device && destroy_descriptor_pool)
 			for(VkDescriptorPool pool : commands[index].pools)
-				if(pool)
-					destroy_descriptor_pool(core->device, pool, nullptr);
+				if(pool) {
+					// Only successful synchronous completion releases descriptors for reuse.
+					if(completed && idle_pools.GetCount() < 4 &&
+					   reset_descriptor_pool(core->device, pool, 0) == VK_SUCCESS)
+						idle_pools.Add(pool);
+					else
+						destroy_descriptor_pool(core->device, pool, nullptr);
+				}
 		commands.Remove(index);
 	}
 
@@ -174,6 +184,9 @@ struct VulkanGpuDevice::SampledImpl {
 			core->queue_wait_idle(core->graphics_queue);
 		while(commands.GetCount())
 			DestroyCommand(commands.GetKey(commands.GetCount() - 1));
+		for(VkDescriptorPool pool : idle_pools)
+			if(pool) destroy_descriptor_pool(core->device, pool, nullptr);
+		idle_pools.Clear();
 		while(pipelines.GetCount()) {
 			DestroyPipelineState(pipelines[pipelines.GetCount() - 1]);
 			pipelines.Remove(pipelines.GetCount() - 1);
@@ -191,10 +204,17 @@ struct VulkanGpuDevice::SampledImpl {
 		ci.poolSizeCount = 1;
 		ci.pPoolSizes = &size;
 		VkDescriptorPool pool = VK_NULL_HANDLE;
-		VkResult vr = create_descriptor_pool(core->device, &ci, nullptr, &pool);
-		if(vr != VK_SUCCESS) {
-			core->error = VkFailure("vkCreateDescriptorPool", vr);
-			return false;
+		if(!idle_pools.IsEmpty()) {
+			pool = idle_pools.Pop();
+			++pools_reused;
+		}
+		else {
+			VkResult vr = create_descriptor_pool(core->device, &ci, nullptr, &pool);
+			if(vr != VK_SUCCESS) {
+				core->error = VkFailure("vkCreateDescriptorPool", vr);
+				return false;
+			}
+			++pools_created;
 		}
 		command.pools.Add(pool);
 		command.pool_allocations.Add(0);
@@ -250,6 +270,19 @@ void VulkanGpuDevice::DestroySampledExtension()
 	delete sampled_impl;
 	sampled_impl = nullptr;
 	sampled_cleanup.owner = nullptr;
+}
+
+GpuResult VulkanGpuDevice::GetSamplingStats(GpuSamplingStats& out)
+{
+	out = GpuSamplingStats();
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(sampled_impl) {
+		out.descriptor_pools_created = sampled_impl->pools_created;
+		out.descriptor_pools_reused = sampled_impl->pools_reused;
+		out.live_commands = sampled_impl->commands.GetCount();
+		out.retained_descriptor_pools = sampled_impl->idle_pools.GetCount();
+	}
+	return GpuResult::Ok;
 }
 
 int VulkanGpuDevice::GetLivePipelineCount() const
@@ -662,7 +695,7 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 {
 	GpuResult result = SubmitBase(list);
 	if(result == GpuResult::Ok) {
-		if(sampled_impl) sampled_impl->DestroyCommand(list.value);
+		if(sampled_impl) sampled_impl->DestroyCommand(list.value, true);
 		CompleteComputeCommands(list);
 	}
 	return result;

@@ -231,6 +231,12 @@ struct GpuComputeStats : Moveable<GpuComputeStats> {
 	int live_commands = 0, retained_descriptor_pools = 0;
 };
 
+// Completed sampled-image descriptor pools are bounded and reusable.
+struct GpuSamplingStats : Moveable<GpuSamplingStats> {
+	uint64 descriptor_pools_created = 0, descriptor_pools_reused = 0;
+	int live_commands = 0, retained_descriptor_pools = 0;
+};
+
 struct GpuComputePipelineDesc : Moveable<GpuComputePipelineDesc> {
 	GpuShaderId shader;
 	int storage_buffer_count = 0; // Set 0, consecutive storage-buffer bindings.
@@ -373,6 +379,9 @@ public:
 	// Submit is currently synchronous; these methods do not establish async streaming.
 	virtual GpuResult GetComputeCapabilities(GpuComputeCapabilities& out) {
 		out = GpuComputeCapabilities(); return GpuResult::Unsupported;
+	}
+	virtual GpuResult GetSamplingStats(GpuSamplingStats& out) {
+		out = GpuSamplingStats(); return GpuResult::Unsupported;
 	}
 	virtual GpuResult GetComputeStats(GpuComputeStats& out) {
 		out = GpuComputeStats(); return GpuResult::Unsupported;
