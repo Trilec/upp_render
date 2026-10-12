@@ -65,6 +65,17 @@ public:
 
 	GpuResult CreateShader(const GpuShaderDesc& desc, GpuShaderId& out) override;
 	GpuResult DestroyShader(GpuShaderId id) override;
+	GpuResult GetComputeCapabilities(GpuComputeCapabilities& out) override;
+	GpuResult GetComputeStats(GpuComputeStats& out) override;
+	GpuResult CreateComputePipeline(const GpuComputePipelineDesc& desc, GpuPipelineId& out) override;
+	GpuResult SetComputePipeline(GpuCommandListId list, GpuPipelineId pipeline) override;
+	GpuResult SetStorageBuffer(GpuCommandListId list, int slot, GpuBufferId buffer, int64 offset = 0, int64 size = 0) override;
+	GpuResult SetComputeParameters(GpuCommandListId list, const void *data, int size) override;
+	GpuResult Dispatch(GpuCommandListId list, uint32 x, uint32 y = 1, uint32 z = 1) override;
+	GpuResult CopyBufferToTexture(GpuCommandListId list, GpuBufferId source, int64 offset,
+	                             GpuTextureId target, const GpuTextureWriteDesc& region) override;
+	GpuResult ReadBuffer(GpuBufferId buffer, int64 offset, int64 size, Vector<byte>& out) override;
+
 	GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) override;
 	GpuResult DestroyPipeline(GpuPipelineId id) override;
 	GpuResult BeginCommands(GpuCommandListId& out) override;
@@ -80,6 +91,7 @@ public:
 private:
 	struct Impl;
 	struct SampledImpl;
+	struct ComputeImpl;
 	struct SampledCleanup {
 		VulkanGpuDevice *owner = nullptr;
 		~SampledCleanup();
@@ -88,6 +100,15 @@ private:
 	std::unique_ptr<Impl> impl;
 	SampledImpl *sampled_impl = nullptr;
 	SampledCleanup sampled_cleanup;
+
+	ComputeImpl *compute_impl = nullptr;
+	ComputeImpl& Compute();
+	void DestroyComputeExtension();
+	int GetComputePipelineCount() const;
+	bool ComputeUsesShader(GpuShaderId shader) const;
+	bool IsComputePipeline(GpuPipelineId pipeline) const;
+	GpuResult DestroyComputePipeline(GpuPipelineId pipeline);
+	void CompleteComputeCommands(GpuCommandListId list);
 
 	SampledImpl& Sampled();
 	void DestroySampledExtension();

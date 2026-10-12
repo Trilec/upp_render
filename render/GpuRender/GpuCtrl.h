@@ -4,6 +4,7 @@
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderCanvas/GpuPainter.h>
 #include <RenderRhi/RenderRhi.h>
+#include "RenderPresentation.h"
 
 namespace Upp {
 
@@ -27,6 +28,13 @@ public:
 	// GpuPainter virtual/callback path while presentation ownership stays here.
 	Function<bool(Size, UiDisplayList&, Rgba8&, String&)> WhenBuildFrame;
 
+	// Advanced compute/image/shader content; ownership and GPU cleanup stay in the host.
+	// Select before opening. This bypasses GpuPainter and WhenBuildFrame.
+	GpuCtrl& SetGpuContent(std::unique_ptr<GpuSurfaceContent> content);
+	// Zero draws on invalidation only; 1..240 requests bounded precise host refreshes.
+	// Suitable for GPU procedural/video content; does not drive the Animation scheduler.
+	GpuCtrl& SetContinuousRefresh(int fps = 0);
+	GpuPresentationStats GetGpuStats() const;
 	bool IsNativeHostReady() const;
 	bool IsGpuReady() const;
 	String GetGpuError() const;

@@ -2,12 +2,14 @@
 
 ## Current priority — Windows/Vulkan whole UI
 
-The user's confirmed order (2026-10-11) is:
+The user's confirmed order (2026-10-13) is:
 1. Finish UI drawing through the existing direct Vulkan renderer, including the remaining CPU/GDI drawing seams.
 2. Measure and improve memory use, frame scheduling and responsiveness under load.
 3. Qualify a convincing antialiased whole-UI application with working controls.
 
 Keep C++/U++, Ui controls, themes, Designer and application models. Work on main.
+Core and Animation are read-only by owner instruction. Their write access is not
+a blocker: isolate scheduling and rendering within this repository first.
 WebGPU/browser and Metal follow this Windows milestone. wgpu-native is an optional
 experiment; its successful native proof is not authorization to replace the
 current renderer or postpone Vulkan UI completion.
@@ -47,7 +49,7 @@ A gate counts complete only when its complete stated criterion passes.
 Historical evidence satisfies parts of these gates; none of the earlier RC1,
 inventory-only or native wgpu proofs imply this whole checklist is complete.
 
-## Current measured checkpoint — 2026-10-11
+## Preserved whole-UI checkpoint — 2026-10-11
 
 **5/10 completion gates passed (50%)**: gates 1, 2, 3, 8 and 9.
 This is an equal-count acceptance checklist, not a percentage of coding effort.
@@ -62,9 +64,27 @@ The current artifact's full 300-second heavy validation-requested soak passes:
 private-memory early/late growth 842,752 B, no GPU failure/fallback, final native
 ownership ZERO. Cold preparation is 153 glyph misses and one CPU vector raster;
 warm last-frame misses/rasters are zero. General vectors, other Ui raster helpers,
-the coarse Core/Animation clock and manual current-app/DPI review remain open.
+frame-pacing diagnosis and manual current-app/DPI review remain open. The 64 FPS
+observation does not isolate a sole cause; separate Animation cadence, recording,
+enqueue, GPU submit and acquire/present waits before attributing a limit.
 See VULKAN_UI_FINISHING.md and WINDOWS_FONT_PROVIDER.md for exact scope,
 artifact identity, measurements and remaining work.
+
+## Additional Vulkan compute baseline — 2026-10-13
+
+Optional storage-buffer compute, bounded descriptor reuse, device-local output,
+GPU buffer-to-texture copying and GpuCtrl-owned custom content are implemented.
+Numerical Release/Debug tests and three compute modal control/resize/lifecycle
+cycles pass. A five-minute RTX 4070 Ti run measured 119.99 presented FPS, CPU median/
+p99 2.46/3.66 ms and 5,263,360 B private growth. A later fixed 3840 x 2160 run
+measured 119.93 FPS, CPU median/p99 4.89/8.50 ms and 249,856 B private growth.
+Both reused one shader pipeline, image and descriptor pool; final native ownership
+ZERO. The 4K callback maximum was 141.01 ms and remains an optimization target.
+The instrumented 512-particle scene measured callback/progress/record/present
+cadence at 64.00 Hz; heavy CPU replay p99 was 15.54 ms. These are two observed
+limits, not proof of a sole cause. Core and Animation were not changed.
+This supplements the ten UI gates; it does not complete general vectors, shaping,
+source-image OCIO or asynchronous video. See VULKAN_COMPUTE.md and build/vulkan-compute-qualification-2026-10-13.json.
 
 ## Known starting seams (historical baseline)
 

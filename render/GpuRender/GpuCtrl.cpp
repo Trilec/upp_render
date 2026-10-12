@@ -30,7 +30,7 @@ struct GpuCtrl::Impl {
 	public:
 		Host(){NoWantFocus();} void Attach(Impl *p){impl=p;}
 		void State(int reason) override { if(reason==CLOSE){if(impl)impl->OnHostState(reason);DHCtrl::State(reason);return;} DHCtrl::State(reason);if(impl)impl->OnHostState(reason); }
-		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==WM_ERASEBKGND)return 1; if(message==WM_PAINT){PAINTSTRUCT ps;HWND hwnd=GetHWND();HDC dc=BeginPaint(hwnd,&ps);bool gpu_painted=impl&&impl->OnHostPaint();if(!gpu_painted)FillRect(dc,&ps.rcPaint,GetSysColorBrush(COLOR_WINDOW));EndPaint(hwnd,&ps);return 0;} return DHCtrl::WindowProc(message,wParam,lParam); }
+		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){if(impl&&impl->clock.Consume(wParam)&&IsWindowVisible(GetHWND())&&!IsIconic(GetAncestor(GetHWND(),GA_ROOT)))Refresh();return 0;} if(message==WM_ERASEBKGND)return 1; if(message==WM_PAINT){PAINTSTRUCT ps;HWND hwnd=GetHWND();HDC dc=BeginPaint(hwnd,&ps);bool gpu_painted=impl&&impl->OnHostPaint();if(!gpu_painted)FillRect(dc,&ps.rcPaint,GetSysColorBrush(COLOR_WINDOW));EndPaint(hwnd,&ps);return 0;} return DHCtrl::WindowProc(message,wParam,lParam); }
 	private: Impl *impl=nullptr;
 	};
 	Impl(GpuCtrl& o):owner(&o){host.Attach(this);} ~Impl(){destroying=true;StopGpuSession();}
@@ -41,7 +41,13 @@ struct GpuCtrl::Impl {
 	bool OnHostPaint()
 	{
 		if(!IsGpuReady()) return false;
-		Size requested_size=GetNativeHostSize(); UiDisplayList list; Rgba8 background; String error; bool built=false;
+		Size requested_size=GetNativeHostSize();
+		if(custom_content) {
+			UiDisplayList empty; String error;
+			if(presenter.Present(requested_size, empty, Rgba8(), error)) { presentation_error.Clear(); return true; }
+			presentation_error = error.IsEmpty() ? presenter.GetError() : error; return false;
+		}
+		UiDisplayList list; Rgba8 background; String error; bool built=false;
 		if(owner&&owner->WhenBuildFrame)
 			built=owner->WhenBuildFrame(requested_size,list,background,error);
 		else {
@@ -58,17 +64,44 @@ struct GpuCtrl::Impl {
 	void RetryGpuInit(){if(destroying)return;init_attempted=false;ClearError();if(host_ready&&!gpu_ready)StartGpuSession();}
 	void SetBackend(GpuBackendKind kind){if(kind==backend_kind)return;if(IsGpuReady()){SetApiError("backend change while open is not supported");return;}backend_kind=kind;init_attempted=false;if(kind==GpuBackendKind::Vulkan)ClearError();else if(kind!=GpuBackendKind::Unknown)SetApiError("backend not supported");else SetApiError("backend not selected");if(host_ready&&!gpu_ready&&kind==GpuBackendKind::Vulkan)StartGpuSession();}
 	void SetValidation(bool validation){if(validation_requested==validation)return;if(IsGpuReady()){SetApiError("validation change while open is not supported");return;}validation_requested=validation;init_attempted=false;ClearError();if(host_ready&&!gpu_ready)StartGpuSession();}
-	void OnHostState(int reason){if(destroying)return;switch(reason){case OPEN:case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:host_ready=IsNativeHostReady();if(host_ready&&!gpu_ready&&!init_attempted){ClearError();StartGpuSession();}SyncHostBounds();if(reason==SHOW&&IsGpuReady()){presentation_error.Clear();host.Refresh();}break;case CLOSE:StopGpuSession();host_ready=false;break;}}
-	void OnCtrlState(int reason){switch(reason){case CLOSE:StopGpuSession();host_ready=false;break;case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:SyncHostBounds();break;}}
+	void OnHostState(int reason){if(destroying)return;switch(reason){case OPEN:case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:host_ready=IsNativeHostReady();if(host_ready&&!gpu_ready&&!init_attempted){ClearError();StartGpuSession();}SyncHostBounds();if(reason==SHOW&&IsGpuReady()){StartClock();presentation_error.Clear();host.Refresh();}break;case CLOSE:StopGpuSession();host_ready=false;break;}}
+	void OnCtrlState(int reason){switch(reason){case CLOSE:StopGpuSession();host_ready=false;break;case SHOW:SyncHostBounds();if(IsGpuReady())StartClock();break;case ENABLE:case POSITION:case LAYOUTPOS:SyncHostBounds();break;}}
 	void SyncHostBounds(){Size sz=owner->GetSize();bool changed=sz!=last_host_size;if(changed)presentation_error.Clear();last_host_size=sz;host.SetRect(0,0,sz.cx,sz.cy);if(IsNativeHostReady())EnableWindow(host.GetHWND(),owner->IsEnabled());if(changed&&IsGpuReady()&&sz.cx>0&&sz.cy>0)host.Refresh();}
-	void StartGpuSession(){if(destroying)return;init_attempted=true;if(backend_kind!=GpuBackendKind::Vulkan){gpu_ready=false;SetSessionError(backend_kind==GpuBackendKind::Unknown?"backend not selected":"backend not supported");return;}GpuNativeWindowDesc native_window;String native_error;if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(),native_window,native_error)){SetSessionError(native_error);return;}String open_error;if(!presenter.Open(backend_kind,validation_requested,native_window,open_error)){SetSessionError(open_error.IsEmpty()?presenter.GetError():open_error);return;}gpu_ready=presenter.IsReady();if(gpu_ready){ClearError();host.Refresh();}else SetSessionError(presenter.GetError());}
-	void StopGpuSession(){presenter.Close();ClearError();session_error.Clear();presentation_error.Clear();host_ready=false;gpu_ready=false;init_attempted=false;}
+	void StartGpuSession(){if(destroying)return;init_attempted=true;if(backend_kind!=GpuBackendKind::Vulkan){gpu_ready=false;SetSessionError(backend_kind==GpuBackendKind::Unknown?"backend not selected":"backend not supported");return;}GpuNativeWindowDesc native_window;String native_error;if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(),native_window,native_error)){SetSessionError(native_error);return;}String open_error;if(!presenter.Open(backend_kind,validation_requested,native_window,open_error)){SetSessionError(open_error.IsEmpty()?presenter.GetError():open_error);return;}gpu_ready=presenter.IsReady();if(gpu_ready){ClearError();StartClock();host.Refresh();}else SetSessionError(presenter.GetError());}
+	void StopGpuSession(){clock.Stop();presenter.Close();ClearError();session_error.Clear();presentation_error.Clear();host_ready=false;gpu_ready=false;init_attempted=false;}
 	void SetApiError(const String& m){api_error=m;} void SetSessionError(const String& m){session_error=m;gpu_ready=false;} void ClearError(){api_error.Clear();session_error.Clear();presentation_error.Clear();}
+	void StartClock() {
+		clock.Stop();
+		if(continuous_fps && IsGpuReady() && owner->IsVisible() && !clock.Start(host.GetHWND(), continuous_fps))
+			SetApiError("GPU continuous refresh clock could not start");
+	}
+	Win32GpuFrameClock clock;
+	int continuous_fps = 0;
+	bool custom_content = false;
 	GpuCtrl *owner=nullptr; Host host; GpuDisplayPresenter presenter; GpuBackendKind backend_kind=GpuBackendKind::Vulkan; String api_error,session_error,presentation_error; Size last_host_size=Size(-1,-1); bool validation_requested=false,host_ready=false,gpu_ready=false,init_attempted=false,destroying=false;
 };
 
 GpuCtrl::GpuCtrl(){BackPaint(EXCLUDEPAINT);impl.Create(*this);Add(impl->host.SizePos());}
 GpuCtrl::~GpuCtrl(){if(impl){impl->destroying=true;impl->StopGpuSession();}}
+GpuCtrl& GpuCtrl::SetGpuContent(std::unique_ptr<GpuSurfaceContent> content)
+{
+	if(!impl) return *this;
+	const bool custom = content != nullptr; String error;
+	if(IsOpen() || !impl->presenter.SetContent(std::move(content), error)) {
+		impl->SetApiError(error.IsEmpty() ? String("GPU content must be selected before opening") : error);
+		return *this;
+	}
+	impl->custom_content = custom; return *this;
+}
+GpuCtrl& GpuCtrl::SetContinuousRefresh(int fps)
+{
+	if(!impl) return *this;
+	if(fps < 0 || fps > 240) { impl->SetApiError("GPU refresh target must be 0..240"); return *this; }
+	impl->continuous_fps = fps;
+	if(impl->IsGpuReady()) impl->StartClock();
+	return *this;
+}
+GpuPresentationStats GpuCtrl::GetGpuStats() const { return impl ? impl->presenter.GetStats() : GpuPresentationStats(); }
 void GpuCtrl::GpuPaint(GpuPainter&) {}
 bool GpuCtrl::IsNativeHostReady()const{return impl&&impl->IsNativeHostReady();}
 bool GpuCtrl::IsGpuReady()const{return impl&&impl->IsGpuReady();}

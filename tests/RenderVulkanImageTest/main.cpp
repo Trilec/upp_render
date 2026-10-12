@@ -185,6 +185,39 @@ static bool CheckPixelReadback(VulkanGpuDevice& device)
 			            matches(28, 8, expected(255, 0.375), 0, 0),
 			            "bilinear interpolation must filter premultiplied colour without a dark halo");
 
+			// The caller-owned GPU image path must preserve orientation, premultiplied
+			// alpha and explicit source encoding without a CPU Image cache/upload.
+			GpuTextureDesc gpu_image_desc;
+			gpu_image_desc.size = Size(2, 2);
+			gpu_image_desc.format = GpuFormat::RGBA8;
+			gpu_image_desc.usage = GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst;
+			GpuTextureId gpu_image;
+			ok &= Check(device.CreateTexture(gpu_image_desc, gpu_image) == GpuResult::Ok,
+			            "caller-owned GPU image creates");
+			const byte rgba[] = {255, 0, 0, 255, 0, 128, 0, 128,
+			                     0, 0, 255, 255, 255, 255, 255, 255};
+			GpuTextureWriteDesc write;
+			write.size = gpu_image_desc.size; write.row_pitch = 8;
+			ok &= Check(device.WriteTexture(gpu_image, write, rgba, sizeof(rgba)) == GpuResult::Ok &&
+			            renderer.RenderTexture(gpu_image, output) && device.ReadTexturePixels(target, bytes),
+			            "caller-owned GPU image renders and reads back");
+			// RGBA8 is linear: its explicit source encoding is independent of the target.
+			const int green = srgb ? (int)std::round(
+				(1.055 * std::pow(128.0 / 255, 1.0 / 2.4) - 0.055) * 255) : 128;
+			ok &= Check(matches(0, 0, 255, 0, 0) && matches(31, 0, 0, green, 0) &&
+			            matches(0, 15, 0, 0, 255) && matches(31, 15, 255, 255, 255),
+			            "GPU image preserves orientation, alpha and source/target encoding");
+			ok &= Check(renderer.GetStats().texture_upload_count == 0 &&
+			            renderer.GetStats().textured_vertex_count == 6 && renderer.GetStats().triangle_count == 2,
+			            "GPU image uses one quad and no CPU image upload");
+			ok &= Check(device.DestroyTexture(gpu_image) == GpuResult::Ok,
+			            "GPU image remains caller-owned after synchronous submission");
+			ok &= Check(!renderer.RenderTexture(GpuTextureId(), output) &&
+			            renderer.Render(list, output) && renderer.GetStats().texture_upload_count == 0 &&
+			            device.ReadTexturePixels(target, bytes) &&
+			            matches(0, 0, 0, expected(255, 128.0 / 255), 0),
+			            "ordinary display-list replay recovers after an invalid GPU image");
+
 		}
 		ok &= Check(device.DestroyTexture(target) == GpuResult::Ok, "readback target cleans up");
 	}

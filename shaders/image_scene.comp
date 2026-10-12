@@ -1,0 +1,43 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0, std430) writeonly buffer Output { uint pixels[]; };
+layout(push_constant) uniform Parameters {
+    uint width; uint height; uint mode; uint dither;
+    float time; float exposure; uint seed; uint reserved;
+} p;
+float encode(float v) {
+    v = clamp(v, 0.0, 1.0);
+    return v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+}
+void main() {
+    uvec2 xy = gl_GlobalInvocationID.xy;
+    if(xy.x >= p.width || xy.y >= p.height) return;
+    vec2 size = vec2(p.width, p.height), point = vec2(xy) + 0.5, uv = point / size;
+    vec3 colour;
+    if(p.mode == 1) {
+        // A native-precision ramp, with a magnified dark ramp below it.
+        float ramp = uv.y < 0.5 ? uv.x : 0.003 + uv.x * 0.012;
+        ramp = round(ramp * 65535.0) / 65535.0;
+        colour = vec3(ramp);
+    } else {
+        colour = mix(vec3(0.008, 0.016, 0.035), vec3(0.025, 0.08, 0.12), uv.y);
+        vec2 grid = abs(mod(point, 48.0) - 24.0);
+        colour += vec3(0.015) * (1.0 - smoothstep(0.3, 1.3, min(grid.x, grid.y)));
+        for(uint i = 0; i < 16; ++i) {
+            float f = float(i), seed = float(p.seed % 997u) * 0.017;
+            vec2 center = size * (0.5 + 0.37 * vec2(sin(p.time * (0.4 + f * 0.011) + f * 1.71 + seed),
+                                                   cos(p.time * (0.3 + f * 0.009) + f * 1.27 + seed)));
+            float radius = min(size.x, size.y) * (0.017 + 0.009 * mod(f, 4.0));
+            float distance = length(point - center) - radius;
+            float coverage = 1.0 - smoothstep(-0.75, 0.75, distance);
+            vec3 ball = 0.15 + 0.65 * (0.5 + 0.5 * cos(vec3(0, 2.1, 4.2) + f * 0.71 + seed));
+            colour = mix(colour, ball, coverage);
+        }
+    }
+    colour *= exp2(p.exposure);
+    colour = vec3(encode(colour.r), encode(colour.g), encode(colour.b));
+    const uint bayer[16] = uint[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+    float threshold = p.dither != 0u ? (float(bayer[(xy.y & 3u) * 4u + (xy.x & 3u)]) + 0.5) / 16.0 : 0.5;
+    uvec3 out8 = uvec3(clamp(floor(colour * 255.0 + threshold), vec3(0), vec3(255)));
+    pixels[xy.y * p.width + xy.x] = out8.r | (out8.g << 8u) | (out8.b << 16u) | 0xff000000u;
+}

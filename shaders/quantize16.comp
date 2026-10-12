@@ -1,0 +1,27 @@
+#version 450
+// Native UINT16 UNORM RGBA channels widened to uint in an SSBO.
+// Quantize only at display output; original source samples remain untouched.
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) readonly buffer Source { uint samples[]; } src;
+layout(set = 0, binding = 1, std430) writeonly buffer Output { uint samples[]; } dst;
+layout(push_constant) uniform Parameters {
+    uint sample_count;
+    uint image_width;
+    uint dither_enabled;
+    uint reserved;
+} p;
+const uint bayer[16] = uint[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if(i >= p.sample_count) return;
+    uint v = min(src.samples[i], 65535u);
+    uint threshold = 32767u;
+    if(p.dither_enabled != 0u && (i & 3u) != 3u && p.image_width != 0u) {
+        uint pixel = i >> 2u;
+        uint x = pixel % p.image_width;
+        uint y = pixel / p.image_width;
+        threshold = ((2u * bayer[(y & 3u) * 4u + (x & 3u)] + 1u) * 65535u) / 32u;
+    }
+    dst.samples[i] = min(255u, (v * 255u + threshold) / 65535u);
+}

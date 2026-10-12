@@ -4,4 +4,5 @@ uses
 
 file
 	RenderCtrlBridge.h,
+	RenderCtrlBridgeRegion.h,
 	RenderCtrlBridge.cpp;

@@ -1,4 +1,5 @@
 #include "RenderCtrlBridge.h"
+#include "RenderCtrlBridgeRegion.h"
 
 namespace Upp {
 
@@ -201,7 +202,7 @@ class CtrlDisplayListSystemDraw : public SystemDraw, public GpuDrawTarget {
 public:
 	CtrlDisplayListSystemDraw(UiDisplayListBuilder& target, Size size,
 	                          CtrlDisplayListRecordReport& target_report)
-		: builder(target), page_size(size), report(target_report)
+		: builder(target, size), page_size(size), report(target_report)
 	{
 		state.clip = Rect(size);
 	}
@@ -240,8 +241,8 @@ public:
 		return true;
 	}
 
-	bool Failed() const { return !error.IsEmpty(); }
-	const String& GetError() const { return error; }
+	bool Failed() const { return !error.IsEmpty() || !builder.GetError().IsEmpty(); }
+	const String& GetError() const { return error.IsEmpty() ? builder.GetError() : error; }
 
 	dword GetInfo() const override { return NATIVE; }
 	Size GetPageSize() const override { return page_size; }
@@ -291,7 +292,7 @@ public:
 		state.clip &= OffsetRect(r, state.offset);
 		builder.ClipRect(ToRectf(r));
 		report.clip_count++;
-		return !state.clip.IsEmpty();
+		return !state.clip.IsEmpty() && builder.Intersects(state.clip);
 	}
 
 	bool ClipoffOp(const Rect& r) override
@@ -303,13 +304,15 @@ public:
 		state.offset += r.TopLeft();
 		report.clip_count++;
 		report.transform_count++;
-		return !state.clip.IsEmpty();
+		return !state.clip.IsEmpty() && builder.Intersects(state.clip);
 	}
 
-	bool ExcludeClipOp(const Rect&) override
+	bool ExcludeClipOp(const Rect& r) override
 	{
-		Fail("ExcludeClip (including native child-window cutouts) is not representable by the current rectangular neutral clip contract");
-		return false;
+		const bool active = builder.Exclude(ToRectf(r));
+		if(!builder.GetError().IsEmpty()) Fail(builder.GetError());
+		report.clip_count++;
+		return active && builder.Intersects(state.clip);
 	}
 
 	bool IntersectClipOp(const Rect& r) override
@@ -317,12 +320,13 @@ public:
 		state.clip &= OffsetRect(r, state.offset);
 		builder.ClipRect(ToRectf(r));
 		report.clip_count++;
-		return !state.clip.IsEmpty();
+		return !state.clip.IsEmpty() && builder.Intersects(state.clip);
 	}
 
 	bool IsPaintingOp(const Rect& r) const override
 	{
-		return state.clip.Intersects(OffsetRect(r, state.offset));
+		const Rect device = state.clip & OffsetRect(r, state.offset);
+		return builder.Intersects(device);
 	}
 
 	void DrawRectOp(int x, int y, int cx, int cy, Color color) override
@@ -578,7 +582,7 @@ private:
 		}
 	}
 
-	UiDisplayListBuilder& builder;
+	CtrlRegionCanvas builder;
 	Size page_size;
 	CtrlDisplayListRecordReport& report;
 	State state;
@@ -632,6 +636,7 @@ bool RecordCtrlDisplayList(Ctrl& ctrl, UiDisplayList& out, String& error,
 	}
 	if(draw.Failed()) {
 		error = draw.GetError();
+		result.unsupported_operation = error;
 		return false;
 	}
 	if(draw.GetCloffLevel() != 0) {

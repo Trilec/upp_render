@@ -21,6 +21,7 @@ static bool IsValidShaderStage(GpuShaderStage stage)
 	case GpuShaderStage::Fragment:
 		return true;
 	case GpuShaderStage::Unknown:
+	case GpuShaderStage::Compute: // Optional compute is not implemented by Null.
 		return false;
 	}
 	return false;
@@ -278,7 +279,7 @@ GpuAdapterInfo NullGpuDevice::GetAdapterInfo() const
 
 GpuResult NullGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out)
 {
-	if(desc.size <= 0) {
+	if(desc.size <= 0 || (desc.memory != GpuBufferMemory::HostVisible && desc.memory != GpuBufferMemory::DeviceLocal)) {
 		Fail("CreateBuffer size=" + AsString((int64)desc.size) + " usage=" + DumpGpuBufferUsage(desc.usage) + " reason=zero_size");
 		out = GpuBufferId();
 		return GpuResult::InvalidArgument;
@@ -303,6 +304,9 @@ GpuResult NullGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void *d
 	if(offset < 0 || size <= 0 || data == nullptr) {
 		Fail("WriteBuffer id=" + id.Dump() + " offset=" + AsString(offset) + " size=" + AsString(size) + " reason=invalid_write");
 		return GpuResult::InvalidArgument;
+	}
+	if(buffers[index].desc.memory == GpuBufferMemory::DeviceLocal) {
+		Fail("WriteBuffer reason=device_local"); return GpuResult::InvalidState;
 	}
 	const int64 buffer_size = buffers[index].desc.size;
 	if(offset > buffer_size || size > buffer_size - offset) {

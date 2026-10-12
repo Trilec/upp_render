@@ -3,8 +3,20 @@
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderRhi/RenderRhi.h>
 #include <RenderGpu2D/RenderGpu2D.h>
+#include <memory>
 
 namespace Upp {
+
+// Optional application drawing inside an owned presentation surface. Render must
+// complete its commands, without presenting/closing/re-entering this owner.
+// Close is called with the device alive before any surface/session teardown.
+// The presenter owns the content; after Close it may be rendered on a new device.
+class GpuSurfaceContent {
+public:
+	virtual ~GpuSurfaceContent() {}
+	virtual bool Render(GpuDevice& device, const GpuFrameInfo& frame, String& error) = 0;
+	virtual void Close(GpuDevice& device) = 0;
+};
 
 struct GpuPresentationStats {
 	uint64 presented_frames = 0;
@@ -69,6 +81,8 @@ public:
 	// presenter and any surface opened through it.
 	bool Open(GpuContext& context, GpuBackendKind backend, bool request_validation,
 	          const GpuNativeWindowDesc& native_window, String& error);
+	// Select before Open. Null restores ordinary UiDisplayList replay.
+	bool SetContent(std::unique_ptr<GpuSurfaceContent> content, String& error);
 	void Close();
 
 	GpuPresentationStats GetStats() const;

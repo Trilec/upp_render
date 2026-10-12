@@ -71,14 +71,16 @@ The accepted/implemented stack includes:
 - Vulkan 1.3 bootstrap, surfaces, swapchains and frame presentation;
 - filled/stroked/rounded geometry;
 - clipping, affine transforms, alpha/source-over and batching;
-- sampled images;
+- sampled images, including caller-owned GPU textures without CPU image copies;
+- optional bounded storage-buffer compute, device-local output and GPU buffer-to-image transfer;
 - text through U++ font/glyph authority and persistent glyph atlases;
-- vector paths, fill rules, multi-stop gradients, stroke styles and SVG through U++ Painter raster authority;
+- direct GPU convex fills/closed miter and straight strokes with antialiased coverage;
+- general paths, gradients, other strokes and SVG through the bounded U++ Painter reference path;
 - embedded `GpuCtrl` presentation;
 - full-window custom `GpuWindow` presentation;
 - U++ control-tree recording and `GpuTopWindow` root composition.
 
-Stage-5 vector/SVG, productization/H1 and UI1-C have recorded Windows/Vulkan acceptance in `docs/ACTIVE_WORK.md`. Direct geometry remains single-sample; cached Painter coverage provides vector/SVG antialiasing.
+Historical Stage-5/H1/UI1-C acceptance is retained. Current whole-UI completion is **5/10 gates (50%)**, with general vectors, glyph preparation and shared Ui raster helpers still open. Direct geometry uses single-sample antialiased coverage; complex vectors/SVG retain cached CPU coverage. See [current scope](docs/ACTIVE_WORK.md).
 
 ## Shared application GPU context
 
@@ -113,14 +115,14 @@ See `render/README.md` for the dependency map.
 The three product demonstrations are:
 
 - [GpuSurfaceDemo](examples/GpuSurfaceDemo/README.md) — adjustable embedded Vulkan surfaces in the Ui shell;
-- `examples/GpuUiGallery` — ordinary Ui controls composed into a full GPU window, including transient UI;
+- `examples/GpuUiGallery` — ordinary Ui controls in Vulkan root/dialog windows, including an embedded animated compute image, exposure, optional final quantization dithering and live FPS;
 - `examples/RendererShowcase` — rendering capabilities and software/GPU comparison.
 
 Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; see [examples](examples/README.md). Historical bring-up and stock-control compatibility probes are indexed under [diagnostics](examples/diagnostics/README.md).
 
 ## Version 1 preparation
 
-Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Final regression and native release review are recorded separately. Shader modules exist in the internal RHI, but arbitrary application shaders are not yet exposed by `GpuCtrl`.
+Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Final regression and native release review are recorded separately. `GpuCtrl::SetGpuContent` now supplies an owned custom-content hook for precompiled shaders/compute through the device API. Shipped apps do not need the Vulkan SDK. See [compute contract and measured results](docs/VULKAN_COMPUTE.md); this does not establish async video streaming or an OCIO pipeline.
 
 See [release scope and gates](docs/RELEASE_CANDIDATE.md), [sustained RC1 qualification](docs/RC1_QUALIFICATION.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
 

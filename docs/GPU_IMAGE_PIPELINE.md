@@ -1,6 +1,6 @@
 # GPU source images and CineView integration
 
-Reconciled 2026-10-06 with CineView's docs/VULKAN_HANDOFF.md. Renderer changes
+Updated 2026-10-13; reconciled 2026-10-06 with CineView's docs/VULKAN_HANDOFF.md. Renderer changes
 belong here; CineView retains decoding, source/CPU caches, playback clock,
 seek policy, browser policy, colour intent and authoritative CPU sampling.
 
@@ -50,6 +50,19 @@ covers raw resource transfer, not float shader/OCIO output or video performance.
 Tests: RenderVulkanPrecisionTest checks nine formats, padded rows, partial-origin
 updates, invalid spans, raw HDR/NaN/Inf/signed-zero bits and immutable lifetime.
 
+## Direct Vulkan compute baseline — 2026-10-13
+
+Storage-buffer compute, literal workgroup/device limits, push constants, access
+barriers, bounded descriptor snapshots/reuse and GPU buffer-to-texture copies are
+implemented. Device-local output forbids CPU mapping. Release and Debug tests
+compare exhaustive UINT16 samples with independent references, chained dispatch,
+dither off/on, guard regions and padded image copies; zero validation diagnostics.
+
+GpuCtrl now accepts owned custom GPU content. The Gallery's Vulkan compute modal
+contains ordinary Ui controls plus a GPU-only procedural scene/ramp. Three
+control/pause/resize/open-close cycles pass. This is an embedded custom-pass
+baseline, not the source-image/OCIO gate below. See [Vulkan compute](VULKAN_COMPUTE.md).
+
 ## Staged completion gates
 
 | Gate | Implementation and qualification required |
@@ -59,7 +72,7 @@ updates, invalid spans, raw HDR/NaN/Inf/signed-zero bits and immutable lifetime.
 | Embedded programmable image pass | Pending: GpuCtrl source pass, source identity plus independent exposure/gamma/viewport parameters |
 | Reusable shader/LUT bindings | Pending: uniform updates, multiple texture/sampler slots, real 1D/3D LUT dimensions and explicit colour/target semantics |
 | On-demand asynchronous readback | Pending: bounded output span/format/pitch and pollable completion without per-frame presentation stalls |
-| Compute resources and dispatch | Subsequent: storage buffers/images, access barriers, limits and reductions qualified against source samples |
+| Compute resources and dispatch | Storage-buffer baseline and quantization qualified; storage images and source-aware ROI/histogram/thumbnail reductions remain open |
 
 Current WriteTexture, Submit, DestroyTexture and diagnostic readback still use
 queue-idle waits. Do not use the synchronous source example as evidence of an
@@ -83,7 +96,8 @@ source uploads. Define negative/non-finite handling and alpha/colour semantics
 in the pass rather than altering originals at upload. Integrate pinned OCIO
 generated code, enumerated uniforms, binding indices and all LUT resources through
 reusable renderer bindings. A small built-in tone pass precedes OCIO, then
-asynchronous result access. Compute follows; it remains a shader programme.
+asynchronous result access. The compute baseline is available, but source-aware
+reductions still require their own reference and performance qualification.
 
 ## Qualification and references
 

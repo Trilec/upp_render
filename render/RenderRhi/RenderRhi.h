@@ -71,6 +71,7 @@ enum class GpuShaderStage {
 	Unknown,
 	Vertex,
 	Fragment,
+	Compute,
 };
 
 enum class GpuShaderFormat {
@@ -166,10 +167,14 @@ struct GpuDeviceDesc : Moveable<GpuDeviceDesc> {
 	bool validation = true;
 };
 
+// DeviceLocal forbids host reads/writes, including on unified-memory devices.
+enum class GpuBufferMemory { HostVisible, DeviceLocal };
+
 struct GpuBufferDesc : Moveable<GpuBufferDesc> {
 	int64 size = 0;
 	int usage = GpuBufferUsage_None;
 	String label;
+	GpuBufferMemory memory = GpuBufferMemory::HostVisible;
 };
 
 struct GpuTextureDesc : Moveable<GpuTextureDesc> {
@@ -206,6 +211,30 @@ struct GpuShaderDesc : Moveable<GpuShaderDesc> {
 	GpuShaderFormat format = GpuShaderFormat::Unknown;
 	String code;
 	String entry_point = "main";
+	String label;
+};
+
+// Optional compute support on the device's existing queue. No second queue is implied.
+struct GpuComputeCapabilities : Moveable<GpuComputeCapabilities> {
+	uint32 max_group_count[3] = {};
+	uint32 max_local_size[3] = {};
+	uint32 max_local_invocations = 0;
+	uint32 max_storage_buffers = 0;
+	uint64 max_storage_range = 0;
+	uint64 storage_offset_alignment = 0;
+	uint32 max_parameter_bytes = 0;
+	uint32 max_dispatches_per_command = 0;
+};
+
+struct GpuComputeStats : Moveable<GpuComputeStats> {
+	uint64 descriptor_pools_created = 0, descriptor_pools_reused = 0;
+	int live_commands = 0, retained_descriptor_pools = 0;
+};
+
+struct GpuComputePipelineDesc : Moveable<GpuComputePipelineDesc> {
+	GpuShaderId shader;
+	int storage_buffer_count = 0; // Set 0, consecutive storage-buffer bindings.
+	int parameter_bytes = 0;     // Entire push-constant payload, multiple of 4.
 	String label;
 };
 
@@ -338,6 +367,31 @@ public:
 		return GpuResult::Unsupported;
 	}
 	virtual GpuResult DestroyShader(GpuShaderId) { return GpuResult::Unsupported; }
+
+	// Compute records outside render passes and uses the same command submission.
+	// The caller owns shader bounds, source/target aliasing and exclusive queue access.
+	// Submit is currently synchronous; these methods do not establish async streaming.
+	virtual GpuResult GetComputeCapabilities(GpuComputeCapabilities& out) {
+		out = GpuComputeCapabilities(); return GpuResult::Unsupported;
+	}
+	virtual GpuResult GetComputeStats(GpuComputeStats& out) {
+		out = GpuComputeStats(); return GpuResult::Unsupported;
+	}
+	virtual GpuResult CreateComputePipeline(const GpuComputePipelineDesc&, GpuPipelineId& out) {
+		out = GpuPipelineId(); return GpuResult::Unsupported;
+	}
+	virtual GpuResult SetComputePipeline(GpuCommandListId, GpuPipelineId) { return GpuResult::Unsupported; }
+	virtual GpuResult SetStorageBuffer(GpuCommandListId, int, GpuBufferId, int64 = 0, int64 = 0) { return GpuResult::Unsupported; }
+	virtual GpuResult SetComputeParameters(GpuCommandListId, const void *, int) { return GpuResult::Unsupported; }
+	virtual GpuResult Dispatch(GpuCommandListId, uint32, uint32 = 1, uint32 = 1) { return GpuResult::Unsupported; }
+	// GPU-resident copy. Whole uninitialized images must be defined before partial updates.
+	virtual GpuResult CopyBufferToTexture(GpuCommandListId, GpuBufferId, int64,
+	                                     GpuTextureId, const GpuTextureWriteDesc&) { return GpuResult::Unsupported; }
+	// Synchronous diagnostic native-byte read; host-visible TransferSrc required, <=64 MiB.
+	// Only previously written bytes are defined. Not a per-frame readback API.
+	virtual GpuResult ReadBuffer(GpuBufferId, int64, int64, Vector<byte>& out) {
+		out.Clear(); return GpuResult::Unsupported;
+	}
 
 	virtual GpuResult CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out) = 0;
 	virtual GpuResult DestroyPipeline(GpuPipelineId id) = 0;

@@ -10,7 +10,9 @@ uses(CFONTS)
 	RenderFontWin32;
 
 file
-	main.cpp;
+	main.cpp,
+	GpuComputeScene.h,
+	GpuComputeScene.cpp;
 
 mainconfig
 	"" = "GUI GPUUI CFONTS";

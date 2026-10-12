@@ -31,11 +31,16 @@ Our renderer already creates internal SPIR-V shader modules and neutral pipeline
 
 Recommended small showcase: an animated gradient/ripple fragment shader in the existing GpuSurfaceDemo, driven by time/speed/scale/colour inputs. That demonstrates a programmable surface more directly than randomized CPU-authored shapes. Keep two surfaces and prove one program's reuse, independent parameters and safe survivor behavior.
 
-Prerequisites remain open:
+The 2026-10-13 direct Vulkan implementation now provides source-controlled
+compute shaders and embedded SPIR-V, an in-process development shader baker,
+bounded storage/push-constant bindings, and GpuCtrl-owned custom content with
+resize/teardown. The interactive Gallery modal qualifies program reuse across
+frames and direct GPU compute/copy/sample; it does not yet share one program
+across multiple content owners. See [Vulkan compute](VULKAN_COMPUTE.md).
 
-- source-controlled shader source, compiler version/recipe, backend artifacts and binding/layout validation;
-- neutral program/uniform/resource ownership;
-- a public custom-pass contract for GpuCtrl's owned target, with resize, error and teardown behavior;
+Remaining shader work:
+
+- generic graphics uniforms, multiple sampled resources and actual 1D/3D LUTs;
 - failure diagnostics and a deliberate fallback/unavailable policy;
 - no per-frame shader compilation or pipeline creation.
 
@@ -45,4 +50,7 @@ Prerequisites remain open:
 
 Prioritize resource identity, budgets and measurable responsiveness before adding backend breadth. Current images/glyphs/vectors remain presenter-owned; cached image entries persist until renderer close. Existing renderer counters cover several per-frame operations and buffer capacities, but not complete retained CPU/GPU allocation accounting or UI latency.
 
-Use [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md) for the proposed Windows/Vulkan version 1 gates and [DEMO_ROADMAP.md](DEMO_ROADMAP.md) for demo scope. Custom shaders remain an explicit open capability until implemented and accepted.
+Use [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md) for the proposed Windows/Vulkan version 1 gates and [DEMO_ROADMAP.md](DEMO_ROADMAP.md) for demo scope. The small compute/custom-surface baseline is qualified separately from general
+image/OCIO shader support and video streaming. Build-time shaders and bounded
+completed-frame descriptor reuse apply the reviewed patterns; no BGFX dependency
+has been introduced, and the original fork review remains pinned to its stated commit.

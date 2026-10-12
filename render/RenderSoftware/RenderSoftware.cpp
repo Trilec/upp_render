@@ -82,7 +82,8 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			}
 			break;
 		case UiDisplayOpType::ClipRect:
-			painter.Draw::Clip(ToRect(op.rect));
+			// Neutral ClipRect mutates this state; Draw::Clip would push an extra state.
+			painter.Rectangle(op.rect).Clip();
 			break;
 		case UiDisplayOpType::ConcatTransform:
 			painter.Transform(ToXform(op.transform));

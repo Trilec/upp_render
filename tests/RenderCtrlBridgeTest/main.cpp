@@ -60,6 +60,64 @@ static bool CheckMovingEllipse()
 
 }
 
+
+class ExclusionCtrl : public Ctrl {
+public:
+    bool budget = false;
+    bool probe = true;
+    ExclusionCtrl() { SetRect(0, 0, 180, 120); }
+    void Paint(Draw& w) override {
+        w.DrawRect(GetSize(), White());
+        w.Begin();
+        if(budget) {
+            for(int i = 0; i < 80; ++i) w.ExcludeClip(RectC(2 * i + 1, 1, 1, 118));
+        }
+        else {
+            w.ExcludeClip(RectC(20, 20, 30, 35));
+            probe &= !w.IsPainting(RectC(25, 25, 5, 5));
+            probe &= !w.Clip(RectC(20, 20, 5, 5));
+            probe &= !w.IsPainting(RectC(0, 0, 180, 120));
+            w.End();
+            w.Offset(10, 5);
+            w.ExcludeClip(RectC(70, 15, 25, 35));
+            w.Clip(RectC(0, 0, 150, 100));
+            w.DrawRect(0, 0, 160, 110, Red());
+            w.End();
+            w.End();
+        }
+        w.End();
+        // Restoring the draw state must restore pixels even inside a cutout.
+        w.DrawRect(25, 25, 5, 5, Blue());
+    }
+};
+static bool CheckExclusions()
+{
+    ExclusionCtrl ctrl; UiDisplayList list; String error;
+    bool ok = Check(RecordCtrlDisplayList(ctrl, list, error), "rectangle exclusions should record");
+    ok &= Check(ctrl.probe, "IsPainting should reject a fully excluded rectangle");
+    SoftwareUiRenderer software; ImagePainter painter(ctrl.GetSize()); painter.Clear(RGBAZero());
+    ok &= Check(software.Replay(list, painter), "rectangle exclusions should replay");
+    Image image = painter.GetResult();
+    int mismatch = 0;
+    for(int y = 0; y < 120; ++y) for(int x = 0; x < 180; ++x) {
+        bool cut = RectC(20,20,30,35).Contains(Point(x,y)) || RectC(80,20,25,35).Contains(Point(x,y));
+        Color expected = x >= 10 && x < 160 && y >= 5 && y < 105 && !cut ? Red() : White();
+        if(RectC(25,25,5,5).Contains(Point(x,y))) expected = Blue();
+        RGBA rgba = expected;
+        if(image[y][x] != rgba) {
+            if(mismatch < 8) Cout() << "cutout_pixel x=" << x << " y=" << y
+                << " expected=" << (int)rgba.r << "," << (int)rgba.g << "," << (int)rgba.b
+                << " actual=" << (int)image[y][x].r << "," << (int)image[y][x].g << "," << (int)image[y][x].b << EOL;
+            ++mismatch;
+        }
+    }
+    ok &= Check(mismatch == 0, "disjoint cutouts, nested offset/clip and restore must match exact pixels");
+    ctrl.budget = true; error.Clear();
+    ok &= Check(!RecordCtrlDisplayList(ctrl, list, error) && error.Find("64-region") >= 0,
+                "excessive exclusion complexity must fail with an explicit bounded error");
+    return ok;
+}
+
 class ProbeCtrl : public Ctrl {
 public:
 	ProbeCtrl()
@@ -322,8 +380,10 @@ GUI_APP_MAIN
 	ok &= Check(!RecordCtrlDisplayList(native_draw, native_draw_list, error, &native_draw_report), "native SystemDraw/GDI semantics should not be silently omitted");
 	ok &= Check(error.Find("native") >= 0 && native_draw_report.HasUnsupportedOperation(), "native drawing boundary should be explicit in evidence");
 	DHCtrl native_child; native_child.SetRect(0, 0, 40, 30); UiDisplayList native_list; CtrlDisplayListRecordReport native_report; error.Clear();
-	ok &= Check(!RecordCtrlDisplayList(native_child, native_list, error, &native_report), "native child-window controls should not be silently omitted");
-	ok &= Check(error.Find("ExcludeClip") >= 0 && native_report.HasUnsupportedOperation(), "native child-window exclusion boundary should be explicit in evidence");
+	ok &= Check(RecordCtrlDisplayList(native_child, native_list, error, &native_report),
+	            "native child-window cutouts should record without painting over their surfaces");
+	ok &= Check(!native_report.HasUnsupportedOperation() && native_report.clip_count > 0,
+	            "native child-window cutouts retain explicit clipping intent");
 	Ctrl::GlobalBackBuffer(initial_global_backbuffer);
 	ok &= Check(ProbeGlobalBackBuffer() == initial_global_backbuffer, "focused test should restore the process global backbuffer state it inherited");
 #endif
@@ -346,6 +406,7 @@ GUI_APP_MAIN
 	            "last host restores inherited direct mode");
 #endif
 	ok &= CheckMovingEllipse();
+	ok &= CheckExclusions();
 	if(ok) { Cout() << "RenderCtrlBridgeTest passed" << EOL; return; }
 	SetExitCode(1);
 }

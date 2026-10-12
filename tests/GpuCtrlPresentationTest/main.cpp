@@ -12,7 +12,7 @@ public:
 	PresentationWindow()
 	{
 		Title("GpuCtrlPresentationTest"); SetRect(100, 100, 900, 360);
-		first.SetValidation(true); second.SetValidation(true); fallback.SetBackend(GpuBackendKind::Null);
+		first.SetValidation(true).SetContinuousRefresh(120); second.SetValidation(true); fallback.SetBackend(GpuBackendKind::Null);
 		Add(first); Add(second); Add(fallback);
 	}
 	void Layout() override
@@ -54,6 +54,19 @@ GUI_APP_MAIN
 		ok &= Check(refreshed.swapchain_create_count == stable_swapchain_creates, "explicit refresh should present without recreating same-size swapchains");
 		ok &= Check(refreshed.device_create_count == stable_device_creates && refreshed.device_live_count == 1, "explicit refresh should not recreate the shared logical device");
 		ok &= Check(win.first.GetGpuError().IsEmpty() && win.second.GetGpuError().IsEmpty(), "explicit refresh should remain presentation-clean");
+		const auto first_before_clock = win.first.GetGpuStats().presented_frames;
+		const auto second_before_clock = win.second.GetGpuStats().presented_frames;
+		PumpEvents(100);
+		ok &= Check(win.first.GetGpuStats().presented_frames > first_before_clock + 2,
+		            "continuous refresh should advance only its selected surface");
+		ok &= Check(win.second.GetGpuStats().presented_frames == second_before_clock,
+		            "invalidation-only sibling must not receive continuous refresh frames");
+		win.first.SetContinuousRefresh(0); PumpEvents(30);
+		const auto stopped_frames = win.first.GetGpuStats().presented_frames;
+		PumpEvents(80);
+		ok &= Check(win.first.GetGpuStats().presented_frames == stopped_frames,
+		            "zero refresh target stops queued clock pulses");
+		win.first.SetContinuousRefresh(120);
 		win.SetRect(100, 100, 1050, 420); PumpEvents(120);
 		auto resized = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(resized.swapchain_create_count >= stable_swapchain_creates + 2, "resizing should recreate one swapchain per Vulkan control");
@@ -65,11 +78,17 @@ GUI_APP_MAIN
 		auto hidden = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(win.second.IsGpuReady() && win.second.GetGpuError().IsEmpty(), "hiding one control must not disturb its sibling");
 		ok &= Check(hidden.device_create_count == stable_device_creates && hidden.device_live_count == 1, "hiding one control should retain the shared logical device for its sibling");
+		const auto hidden_frames = win.first.GetGpuStats().presented_frames;
+		PumpEvents(80);
+		ok &= Check(win.first.GetGpuStats().presented_frames == hidden_frames,
+		            "hidden continuous surface must not render clock frames");
 		win.first.Show(); win.first.RequestGpuRefresh(); win.second.RequestGpuRefresh(); PumpEvents(80);
 		auto shown = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		ok &= Check(win.first.IsGpuReady() && win.second.IsGpuReady(), "both controls should remain ready after hide/show");
 		ok &= Check(win.first.GetGpuError().IsEmpty() && win.second.GetGpuError().IsEmpty(), "hide/show presentation should remain error-free");
 		ok &= Check(shown.device_create_count == stable_device_creates && shown.device_live_count == 1, "hide/show should keep the compatible controls on one logical device");
+		ok &= Check(win.first.GetGpuStats().presented_frames > hidden_frames,
+		            "showing the surface restarts continuous refresh");
 		win.Close(); PumpEvents(20);
 	}
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();

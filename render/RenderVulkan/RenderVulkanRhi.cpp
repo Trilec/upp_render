@@ -22,6 +22,8 @@
 #undef Draw
 #undef Submit
 
+#include "RenderVulkanCompute.inc"
+
 namespace Upp {
 
 namespace {
@@ -252,11 +254,12 @@ void VulkanGpuDevice::DestroySampledExtension()
 
 int VulkanGpuDevice::GetLivePipelineCount() const
 {
-	return GetLivePipelineCountBase() + (sampled_impl ? sampled_impl->pipelines.GetCount() : 0);
+	return GetLivePipelineCountBase() + (sampled_impl ? sampled_impl->pipelines.GetCount() : 0) + GetComputePipelineCount();
 }
 
 GpuResult VulkanGpuDevice::DestroyShader(GpuShaderId id)
 {
+	if(ComputeUsesShader(id)) { impl->error = "DestroyShader is forbidden while a compute pipeline references it"; return GpuResult::InvalidState; }
 	if(sampled_impl && sampled_impl->UsesShader(id)) {
 		impl->error = "DestroyShader is forbidden while referenced by a sampled pipeline";
 		return GpuResult::InvalidState;
@@ -450,6 +453,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 
 GpuResult VulkanGpuDevice::DestroyPipeline(GpuPipelineId id)
 {
+	if(IsComputePipeline(id)) return DestroyComputePipeline(id);
 	if(sampled_impl) {
 		int index = sampled_impl->pipelines.Find(id.value);
 		if(index >= 0) {
@@ -573,7 +577,9 @@ GpuResult VulkanGpuDevice::SetSampledTexture(GpuCommandListId list, int slot, Gp
 	}
 	const int layout_index = command.texture_layouts.Find(texture.value);
 	const VkImageLayout layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture_state.layout;
-	if(!texture_state.initialized || layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+	const int initialized_index = command.texture_initialized.Find(texture.value);
+	const bool initialized = initialized_index >= 0 ? command.texture_initialized[initialized_index] : texture_state.initialized;
+	if(!initialized || layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 		impl->error = "SetSampledTexture requires initialized shader-readable image content";
 		return GpuResult::InvalidState;
 	}
@@ -655,8 +661,10 @@ GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int fir
 GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 {
 	GpuResult result = SubmitBase(list);
-	if(result == GpuResult::Ok && sampled_impl)
-		sampled_impl->DestroyCommand(list.value);
+	if(result == GpuResult::Ok) {
+		if(sampled_impl) sampled_impl->DestroyCommand(list.value);
+		CompleteComputeCommands(list);
+	}
 	return result;
 }
 

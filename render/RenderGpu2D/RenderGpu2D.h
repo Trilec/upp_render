@@ -96,6 +96,10 @@ public:
 	bool Render(const UiDisplayList& list, const UiRenderer2DTarget& target);
 	bool RenderFrame(const UiDisplayList& list, const GpuFrameInfo& frame,
 	                 const GpuClearColor& clear_color = GpuClearColor());
+	// Display an already GPU-resident premultiplied image. Caller retains its lifetime;
+	// no CPU Image, texture upload or readback occurs. Texture colour encoding is explicit.
+	bool RenderTexture(GpuTextureId image, const UiRenderer2DTarget& target);
+	bool RenderTextureFrame(GpuTextureId image, const GpuFrameInfo& frame);
 	void Close();
 	// Configure between frames. Zero rejects new cached content.
 	void SetCacheLimits(const UiRenderer2DCacheLimits& limits);

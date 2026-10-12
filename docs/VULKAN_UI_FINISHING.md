@@ -1,6 +1,6 @@
 # Windows/Vulkan whole-UI finishing
 
-Updated 2026-10-11. This is implementation and qualification evidence for the
+Updated 2026-10-13. This is implementation and qualification evidence for the
 current direct Vulkan renderer. It is not a claim that all CPU font/vector work
 has been removed. WebGPU and Metal follow this Windows work.
 
@@ -102,13 +102,13 @@ animation target and real FPS. Its second Vulkan window contains a 2000-row tabl
 expanded checkable tree, single-line and multiline text editors. It shares the
 application GPU domain while owning its own surface, swapchain and renderer.
 
-Commands (run the current built artifact, not an older release ZIP):
+Commands for the current compute-enabled Gallery (identity below; no older release ZIP):
 
-- `GpuUiGalleryVulkanDirectWrite.exe --require-gpu --particles=512 --animation-fps=120`
-- `GpuUiGalleryVulkanDirectWrite.exe --qualify-ui --validation`
-- `GpuUiGalleryVulkanDirectWrite.exe --benchmark --require-gpu --animation-fps=120`
-- `GpuUiGalleryVulkanDirectWrite.exe --benchmark-load --require-gpu --animation-fps=120`
-- `GpuUiGalleryVulkanDirectWrite.exe --benchmark-soak --benchmark-seconds=300 --require-gpu --validation --animation-fps=120`
+- `GpuUiGalleryCompute.exe --require-gpu --particles=512 --animation-fps=120`
+- `GpuUiGalleryCompute.exe --qualify-ui --validation`
+- `GpuUiGalleryCompute.exe --benchmark --require-gpu --animation-fps=120`
+- `GpuUiGalleryCompute.exe --benchmark-load --require-gpu --animation-fps=120`
+- `GpuUiGalleryCompute.exe --benchmark-soak --benchmark-seconds=300 --require-gpu --validation --animation-fps=120`
 
 The automated application qualification passes pause/resume, slider/mode and
 inspector callbacks, native focus/text keys, tree/table keyboard navigation,
@@ -128,12 +128,12 @@ Current whole-application manual visual/input acceptance remains pending.
 Source, artifact hashes, commands and job IDs are retained in
 `build/vulkan-ui-qualification-2026-10-11.json`. The refreshed drawing, vector,
 text, image, bridge, presentation and populated-Ui regressions pass, including
-Release/Debug path tests and implicit renderer-destruction cleanup. The current
+Release/Debug path tests and implicit renderer-destruction cleanup. The preserved 2026-10-11
 Gallery SHA-256 is
 `46939af650e99b8b388a839af886bae48f3d528ebb0ee64bfc4c180f9df16136`.
 
-The matching Ui dependency is main commit `b09b06f99d2fee57f87d8b869c6eff0e10a1aa73`.
-Current Gallery build job: `exec-268FA9EAFEBAE527514A386A78F5CB0E`; automated UI run:
+Its matching Ui dependency was main commit `b09b06f99d2fee57f87d8b869c6eff0e10a1aa73`.
+Preserved 2026-10-11 Gallery build job: `exec-268FA9EAFEBAE527514A386A78F5CB0E`; automated UI run:
 `exec-3D54418774B196312D7FBA5AB04F7DE2`; completed heavy soak:
 `exec-A03A35B5C771ECCF8978378C3515FCF2`. These identify the tested DirectWrite artifact above.
 
@@ -152,10 +152,46 @@ The remaining gates require the full semantics stated in ACTIVE_WORK.md.
 3. Shared Ui shadows, general shape/focus helpers and software layers still need
    semantic GPU paths. The common rounded-face fast path covers only its stated
    subset.
-4. Remove the coarse timer-clock/rearm limitation at the owning U++/Animation
-   layer, with pause/resume/re-entrant lifecycle tests and another throughput run.
+4. Diagnose Animation callback cadence, control recording, enqueue and GPU
+   acquire/submit/present waits separately. Core and Animation remain read-only.
+   The embedded compute host can present at 120 FPS; that does not establish the
+   sole cause of the original particle scene's 64 FPS observation.
 5. Complete current manual controls/AA/DPI acceptance. Only then count those
    gates passed.
 
 See ACTIVE_WORK.md for the ten explicit completion gates. Historical RC1 and
 optional wgpu proofs do not complete these remaining requirements.
+
+## Direct compute and embedded GPU content — 2026-10-13
+
+The RHI now includes optional storage-buffer compute, complete push constants,
+device limits, GPU buffer-to-texture copy and bounded completed-command descriptor
+reuse. Device-local output cannot be mapped by callers. Quantization tests pass
+in Release/Debug, including independent UINT16/dither references and GPU copy
+bytes, zero validation diagnostics and final native ownership ZERO.
+
+GpuUiGalleryCompute adds Scene > Image and compute: an ordinary Vulkan Ui dialog
+with Pause, Randomize, Dither, mode and exposure controls around a GPU-generated
+image. Three automated open/control/pause/resize/close cycles pass in addition
+to the three populated workspace cycles. Shader/pipeline creation occurs once
+per content open; image/buffer allocation changes only on resize.
+The cutout recorder now handles native embedded GPU children with bounded disjoint
+regions; exact offset/clip/restore pixels and excessive complexity are tested.
+The software reference's untracked clip-state push was corrected at the same time.
+
+The current executable is build/GpuUiGalleryCompute.exe, SHA-256
+58d8b611b780016b8368eb607c719959e16aa0042f393724ade5373bfac14716,
+built by exec-056BE168766EBF65B03D4AB6AECA9F27. Current three-workspace/
+three-compute-cycle qualification: exec-B78A90D2C8688A1588EFCC5F9E7A8D49.
+Fixed 4K run: exec-A0499BC90A62F40F49BEF87DCB6A1210.
+The five-minute compute soak used the preceding 6b69874985a6e498... artifact
+and job exec-322E07D137F6505B56BB51719EA8EDD4; the newer optional 4K flag is
+not retroactively included in that soak. Exact identities and reports are in
+build/vulkan-compute-qualification-2026-10-13.json.
+The Ui dependency had concurrent Screenplay extraction changes on top of b09b06f...;
+those changes were left untouched, and observed dependency hashes are recorded.
+Current visual/input and 100%/150%/200% monitor-DPI acceptance remain pending.
+
+See VULKAN_COMPUTE.md for API limits, build-time shaders, measured workload and
+remaining OCIO/source-image/async-streaming work. This baseline does not alter
+the ten-gate denominator or claim the remaining drawing seams complete.

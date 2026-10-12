@@ -157,6 +157,7 @@ String DumpGpuShaderStage(GpuShaderStage stage)
 	case GpuShaderStage::Unknown: return "Unknown";
 	case GpuShaderStage::Vertex: return "Vertex";
 	case GpuShaderStage::Fragment: return "Fragment";
+	case GpuShaderStage::Compute: return "Compute";
 	}
 	return String("Unknown(") + AsString((int)stage) + ")";
 }

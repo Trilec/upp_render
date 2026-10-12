@@ -525,7 +525,8 @@ struct VulkanGpuDevice::Impl {
 		return true;
 	}
 
-	bool CreateRawBuffer(VkDeviceSize size, VkBufferUsageFlags usage, RawBuffer& out)
+	bool CreateRawBuffer(VkDeviceSize size, VkBufferUsageFlags usage, RawBuffer& out,
+	                     GpuBufferMemory memory = GpuBufferMemory::HostVisible)
 	{
 		out = RawBuffer();
 		VkBufferCreateInfo bci {};
@@ -542,12 +543,14 @@ struct VulkanGpuDevice::Impl {
 		VkMemoryRequirements requirements {};
 		get_buffer_memory_requirements(device, out.buffer, &requirements);
 		VkMemoryPropertyFlags memory_flags = 0;
-		const int memory_type = FindMemoryType(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-		                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memory_flags);
+		const bool gpu_only = memory == GpuBufferMemory::DeviceLocal;
+		const int memory_type = FindMemoryType(requirements.memoryTypeBits,
+		                                       gpu_only ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		                                       gpu_only ? 0 : VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memory_flags);
 		if(memory_type < 0) {
 			destroy_buffer(device, out.buffer, nullptr);
 			out.buffer = VK_NULL_HANDLE;
-			error = "no compatible host-visible Vulkan memory type for buffer";
+			error = "no compatible Vulkan memory type for requested buffer memory policy";
 			return false;
 		}
 		VkMemoryAllocateInfo mai {};
@@ -892,6 +895,8 @@ VulkanGpuDevice::VulkanGpuDevice(VulkanSurfaceSession& session)
 
 VulkanGpuDevice::~VulkanGpuDevice()
 {
+	DestroyComputeExtension();
+	DestroySampledExtension();
 	if(impl)
 		impl->DestroyAllResources();
 }
@@ -934,9 +939,11 @@ GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& 
 {
 	out = GpuBufferId();
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
-	if(desc.size <= 0) { impl->error = "CreateBuffer requires positive size"; return GpuResult::InvalidArgument; }
+	if(desc.size <= 0 || (desc.memory != GpuBufferMemory::HostVisible && desc.memory != GpuBufferMemory::DeviceLocal)) {
+		impl->error = "CreateBuffer requires positive size and a valid memory policy"; return GpuResult::InvalidArgument;
+	}
 	Impl::RawBuffer raw;
-	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw)) return GpuResult::InvalidState;
+	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw, desc.memory)) return GpuResult::InvalidState;
 	GpuBufferId id; id.value = impl->next_buffer_id++;
 	Impl::BufferState& state = impl->buffers.Add(id.value, Impl::BufferState());
 	state.desc = desc; state.raw = pick(raw); out = id;
@@ -948,6 +955,9 @@ GpuResult VulkanGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void 
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->buffers.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "WriteBuffer received an unknown buffer"; return GpuResult::InvalidHandle; }
+	if(impl->buffers[index].desc.memory == GpuBufferMemory::DeviceLocal) {
+		impl->error = "WriteBuffer cannot map a device-local buffer"; return GpuResult::InvalidState;
+	}
 	if(offset < 0 || size <= 0 || !data) { impl->error = "WriteBuffer received an invalid write range"; return GpuResult::InvalidArgument; }
 	const int64 buffer_size = impl->buffers[index].desc.size;
 	if(offset > buffer_size || size > buffer_size - offset) { impl->error = "WriteBuffer range exceeds the buffer"; return GpuResult::InvalidArgument; }
@@ -1507,8 +1517,8 @@ GpuResult VulkanGpuDevice::CreateShader(const GpuShaderDesc& desc, GpuShaderId& 
 {
 	out = GpuShaderId();
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
-	if((desc.stage != GpuShaderStage::Vertex && desc.stage != GpuShaderStage::Fragment) || desc.format != GpuShaderFormat::SpirV || desc.entry_point.IsEmpty()) {
-		impl->error = "CreateShader requires a vertex/fragment SPIR-V shader and entry point"; return GpuResult::InvalidArgument;
+	if((desc.stage != GpuShaderStage::Vertex && desc.stage != GpuShaderStage::Fragment && desc.stage != GpuShaderStage::Compute) || desc.format != GpuShaderFormat::SpirV || desc.entry_point.IsEmpty()) {
+		impl->error = "CreateShader requires a vertex/fragment/compute SPIR-V shader and entry point"; return GpuResult::InvalidArgument;
 	}
 	if(desc.code.GetCount() < 20 || (desc.code.GetCount() & 3) != 0) { impl->error = "CreateShader SPIR-V payload has invalid size"; return GpuResult::InvalidArgument; }
 	uint32_t magic = 0; std::memcpy(&magic, desc.code.Begin(), sizeof(magic));

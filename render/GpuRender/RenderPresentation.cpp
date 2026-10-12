@@ -176,6 +176,7 @@ struct GpuDisplayPresenter::Impl {
 		return true;
 	}
 
+	std::unique_ptr<GpuSurfaceContent> content;
 	GpuResult PresentOnce(const UiDisplayList& list, Rgba8 background, String& out_error)
 	{
 		GpuDevice *device = GetDevice();
@@ -202,8 +203,10 @@ struct GpuDisplayPresenter::Impl {
 		}
 
 		started = Clock::now();
-		if(!renderer->RenderFrame(list, frame, ToClearColor(background, frame.color_format))) {
-			String render_error = renderer->GetError();
+		const bool rendered = content ? content->Render(*device, frame, out_error) :
+		                               renderer->RenderFrame(list, frame, ToClearColor(background, frame.color_format));
+		if(!rendered) {
+			String render_error = content ? out_error : renderer->GetError();
 			device->Present(frame.frame); // Release the acquired frame on the failure path.
 			error = render_error.IsEmpty() ? String("UiRenderer2D frame render failed") : render_error;
 			out_error = error;
@@ -331,11 +334,18 @@ bool GpuDisplayPresenter::Open(GpuContext& context, GpuBackendKind backend,
 	return true;
 }
 
+bool GpuDisplayPresenter::SetContent(std::unique_ptr<GpuSurfaceContent> content, String& error)
+{
+	std::lock_guard<std::recursive_mutex> guard(PresentationMutex());
+	if(impl->session) { error = "GPU content must be selected before opening"; return false; }
+	impl->content = std::move(content); error.Clear(); return true;
+}
 void GpuDisplayPresenter::Close()
 {
 	std::lock_guard<std::recursive_mutex> guard(PresentationMutex());
 	if(!impl)
 		return;
+	if(impl->content && impl->GetDevice()) impl->content->Close(*impl->GetDevice());
 	impl->DestroyPresentationObjects();
 	if(impl->session)
 		impl->session->Close();

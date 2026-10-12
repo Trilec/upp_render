@@ -4,6 +4,9 @@ uses
 	GpuRender,
 	RenderVulkan;
 
+uses(CFONTS)
+	RenderFontWin32;
+
 file
 	main.cpp;
 

@@ -12,4 +12,5 @@ file
 	RenderVulkanClearFrame.cpp,
 	RenderVulkanRhiBase.inc,
 	RenderVulkanRhi.cpp,
+	RenderVulkanCompute.inc,
 	RenderVulkanPresentation.cpp;

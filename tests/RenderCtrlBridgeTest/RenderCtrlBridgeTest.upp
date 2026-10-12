@@ -8,6 +8,9 @@ uses
 	RenderSoftware,
 	RenderCtrlBridge;
 
+uses(CFONTS)
+	RenderFontWin32;
+
 file
 	main.cpp;
 

@@ -57,3 +57,19 @@ asynchronous streaming/lifetime, programmable colour/LUT binding, on-demand
 readback and subsequent compute. See [GPU source image pipeline](GPU_IMAGE_PIPELINE.md)
 for the implemented resource contract, native sample and ordered missing gates.
 The synchronous raw-source sample is not an accepted embedded video/OCIO pass.
+
+## Available custom-surface and compute baseline — 2026-10-13
+
+GpuCtrl::SetGpuContent supplies an owned GpuSurfaceContent with the current
+device/target and explicit Close-before-device-teardown. The direct Vulkan RHI
+now supports bounded storage-buffer compute, complete push-constant parameters,
+device-local output, GPU buffer-to-texture copies and completed-command descriptor
+reuse. The Gallery's procedural scene/ramp and quantization tests exercise this
+without per-frame readback; [VULKAN_COMPUTE.md](VULKAN_COMPUTE.md) defines the limits.
+
+This does not complete CineView's source-image colour pass. Keep precision sources
+authoritative; integrate reusable shader uniforms/textures and all OCIO LUT
+resources, then compare with the matching CPU processor. Async streaming,
+generation/media identity, presentation acknowledgements and ROI/histogram
+reductions remain explicit work. A 120 FPS procedural surface does not establish
+decode-through 4K video throughput.
