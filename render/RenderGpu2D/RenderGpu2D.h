@@ -3,6 +3,7 @@
 #include <RenderCanvas/RenderCanvas.h>
 #include <RenderRhi/RenderRhi.h>
 #include "RenderGpu2DPath.h"
+#include "GpuVectorRasterizer.h"
 
 namespace Upp {
 
@@ -41,7 +42,9 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int glyph_count = 0;
 	int glyph_cache_miss_count = 0;
 	int glyph_atlas_page_count = 0;
-	int glyph_atlas_upload_count = 0;
+	int glyph_atlas_upload_count = 0; // Atlas updates from CPU upload or GPU transfer.
+	int gpu_glyph_raster_count = 0;
+	int cpu_glyph_raster_count = 0;
 	int vector_op_count = 0;
 	int vector_path_count = 0;
 	int gradient_count = 0;
@@ -49,6 +52,10 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int vector_cache_miss_count = 0;
 	int vector_cache_entry_count = 0;
 	int vector_raster_count = 0;
+	int gpu_vector_submit_count = 0; // Completed general-path/glyph compute batches this frame.
+	int gpu_vector_raster_count = 0;
+	int gpu_vector_draw_count = 0;
+	int64 gpu_vector_scratch_bytes = 0;
 	int gpu_path_count = 0; // Direct coverage geometry; no image raster/upload.
 	int gpu_path_vertex_count = 0;
 	int gpu_path_coverage_draw_count = 0;
@@ -83,8 +90,9 @@ struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 
 // Backend-neutral 2D renderer. The GpuDevice must outlive this object.
 // Solid convex paths use bounded cached coverage geometry and GPU rasterization.
-// Complex vector/SVG content retains the bounded Painter/image reference path.
-// Glyph preparation currently uses U++ fonts; this is not a GDI-free text host.
+// Compute-capable devices generate general path and glyph coverage on the GPU.
+// SVG and compute-unsupported devices retain an explicitly counted CPU fallback.
+// U++ owns scalar metrics/fallback; CFONTS + RenderFontWin32 removes GDI fonts.
 class UiRenderer2D {
 public:
 	explicit UiRenderer2D(GpuDevice& device);
@@ -166,7 +174,15 @@ private:
 		Rectf clip = Rectf(0, 0, 0, 0);
 	};
 
+	struct GlyphPart : Moveable<GlyphPart> {
+		GpuTextureId texture;
+		Rectf uv;
+		Pointf offset;
+		Size size;
+	};
+
 	struct GlyphDraw : Moveable<GlyphDraw> {
+		Vector<GlyphPart> parts; // Independently composited fallback/diacritic components.
 		GpuTextureId texture;
 		Rectf uv = Rectf(0, 0, 0, 0);
 		Pointf offset = Pointf(0, 0);
@@ -229,6 +245,7 @@ private:
 
 	struct VectorRaster : Moveable<VectorRaster> {
 		Image image;
+		GpuTextureId gpu_texture;
 		Rgba8 tint = Rgba8(255, 255, 255, 255);
 		bool alpha_mask = false;
 		Rectf local_rect = Rectf(0, 0, 0, 0);
@@ -239,6 +256,10 @@ private:
 		struct CacheEntry : Moveable<CacheEntry> {
 			UiDisplayOp op;
 			Image image;
+			GpuTextureId gpu_texture;
+			Transform2D transform;
+			GpuFormat format = GpuFormat::Unknown;
+			int64 gpu_bytes = 0;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
 			uint64 last_frame = 0;
@@ -289,6 +310,9 @@ private:
 	TextCleanup text_cleanup;
 	VectorImpl *vector_impl = nullptr;
 	VectorCleanup vector_cleanup;
+	One<GpuVectorRasterizer> gpu_vector_rasterizer;
+	bool CanGpuVector();
+	bool EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out);
 
 	static Image PrepareImagePixels(const Image& image, GpuFormat format);
 	bool EnsureShaders(bool textured, bool alpha_mask = false);
@@ -296,7 +320,7 @@ private:
 	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver, bool alpha_mask = false);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
-	bool EnsureGlyph(Font font, int ch, GlyphDraw& out);
+	bool EnsureGlyph(Font font, int ch, GlyphDraw& out, int depth = 0);
 	bool EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out,
 	                        UiRenderer2DStats& vector_stats);
 	bool MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,

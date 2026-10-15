@@ -885,7 +885,11 @@ private:
 		       << "cold_texture_uploads=" << stats.first_renderer.texture_upload_count
 		       << " cold_glyph_misses=" << stats.first_renderer.glyph_cache_miss_count
 		       << " cold_vector_rasters=" << stats.first_renderer.vector_raster_count
-		       << " cold_gpu_coverage_renders=" << stats.first_renderer.gpu_path_coverage_render_count << "\n"
+		       << " cold_gpu_coverage_renders=" << stats.first_renderer.gpu_path_coverage_render_count
+		       << " cold_gpu_vector_rasters=" << stats.first_renderer.gpu_vector_raster_count
+		       << " cold_gpu_glyph_rasters=" << stats.first_renderer.gpu_glyph_raster_count
+		       << " cold_cpu_glyph_rasters=" << stats.first_renderer.cpu_glyph_raster_count
+		       << " cold_gpu_vector_submits=" << stats.first_renderer.gpu_vector_submit_count << "\n"
 		       << "frame_clock_active=" << (IsFrameClockActive() ? 1 : 0) << "\n"
 		       << "timer_delay_ms p50=" << Format("%.2f", Percentile(benchmark_delays_, 0.50))
 		       << " p95=" << Format("%.2f", Percentile(benchmark_delays_, 0.95))
@@ -914,7 +918,11 @@ private:
 		       << "gpu_path_cache_entries_last=" << stats.renderer.gpu_path_cache_entry_count << "\n"
 		       << "gpu_path_cache_payload_bytes_last=" << AsString(stats.renderer.gpu_path_cache_bytes) << "\n"
 		       << "cpu_vector_rasters_last=" << stats.renderer.vector_raster_count << "\n"
-		       << "cpu_glyph_misses_last=" << stats.renderer.glyph_cache_miss_count << "\n"
+		       << "glyph_cache_misses_last=" << stats.renderer.glyph_cache_miss_count << "\n"
+		       << "cpu_glyph_rasters_last=" << stats.renderer.cpu_glyph_raster_count << "\n"
+		       << "gpu_glyph_rasters_last=" << stats.renderer.gpu_glyph_raster_count << "\n"
+		       << "gpu_vector_rasters_last=" << stats.renderer.gpu_vector_raster_count << "\n"
+		       << "gpu_vector_scratch_bytes=" << AsString(stats.renderer.gpu_vector_scratch_bytes) << "\n"
 		       << "ui_shared_raster_cache_bytes=" << AsString(UiRasterCache::GetStats().bytes) << "\n"
 		       << "ui_shared_raster_cache_misses_total=" << AsString(UiRasterCache::GetStats().misses) << "\n"
 		       << "ui_software_layer_allocations_total=" << AsString(UiGetRenderLayerStats().allocations) << "\n"

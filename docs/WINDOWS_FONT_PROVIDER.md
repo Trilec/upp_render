@@ -49,15 +49,45 @@ integer Font advances, U++ fallback and decorations. Software replay supplies
 those explicit advances to Painter; otherwise Painter implicitly measures a
 larger font and uses different fractional spacing.
 
-DirectWrite outline preparation removes the GDI font dependency. Glyph misses
-still rasterize grayscale coverage with ImagePainter before a bounded atlas
-upload, and Vulkan draws the cached glyph masks. This is deliberate CPU glyph
-preparation, not proof of GPU-generated glyph coverage. Full shaped glyph runs,
-Arabic/Indic shaping, bidi, colour emoji and IME/accessibility acceptance need
-explicit additional contracts and qualification. Do not infer them from
-individual Unicode scalar tests.
+DirectWrite supplies outlines and metrics; compute-capable Vulkan devices now
+generate grayscale glyph coverage directly on the GPU. CPU work prepares bounded
+edges, without ImagePainter or an intermediate pixel image. Fixed 32-sample
+vertical coverage integrates horizontal spans; the rare crossing-overflow case
+uses a bounded 32 x 32 grid. Glyph masks remain cached in bounded atlas pages.
+Cold glyphs share storage-buffer ranges and at most 128 dispatches per batch;
+warm frames perform no glyph coverage submissions. Devices without optional
+compute retain an explicitly counted CPU reference.
 
-## Evidence
+Fallback/composed characters resolve through U++'s existing GlyphInfo/Compose
+authority. Base and diacritic components composite independently and share their
+ordinary glyph entries. A cold-whitespace bug was fixed: empty outlines now
+return the same advance on their first and cached frames.
+
+The existing scalar contract is deliberate; it does not provide full shaped
+glyph runs, Arabic/Indic shaping, bidi or colour emoji. IME/accessibility and
+monitor-DPI acceptance remain additional work. Individual Unicode tests do not
+qualify those features.
+
+## GPU glyph qualification — 2026-10-15
+
+Release and Debug pass the Unicode readback test in all four RGBA/BGRA
+UNORM/sRGB formats, with zero CPU glyph rasters, ordinary pixel uploads or GDI
+font requests. The existing Unicode tolerance is unchanged: maximum 0.03,
+mean 0.001. Observed maxima are 0.01569 (UNORM) / 0.01884 (sRGB).
+
+The larger printable-character fixture generates 222 cold glyph masks in three
+compute submissions. Cold/warm pixels are identical, and a failed entry-budget
+frame discards queued writes and recovers on the next valid frame. Six glyph
+crossing pixels differ from Painter's legacy area accumulator; independent
+128 x 128 double-precision polygon sampling validates them with maximum error
+0.005124. This declared legacy difference is separate from the original tight
+Unicode test, whose tolerance remains unchanged.
+
+See [GPU coverage](GPU_VECTOR_COVERAGE.md) for bounds, cache semantics and the
+qualification manifest. These results remove CPU glyph coverage for the tested
+Vulkan path; they do not complete the shaped-text gate.
+
+## Historical CPU-glyph evidence — 2026-10-11
 
 The font test covers line/glyph metrics, compound B outlines, Latin, Greek,
 Cyrillic, Han and supplementary Unicode fallback, invalid scalars, OpenType

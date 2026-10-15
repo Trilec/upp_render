@@ -1,10 +1,22 @@
 # Windows/Vulkan whole-UI finishing
 
-Updated 2026-10-13. This is implementation and qualification evidence for the
+Updated 2026-10-15. This is implementation and qualification evidence for the
 current direct Vulkan renderer. It is not a claim that all CPU font/vector work
 has been removed. WebGPU and Metal follow this Windows work.
 
-## Drawing implemented
+## Current general coverage checkpoint — 2026-10-15
+
+General paths and cold glyph masks now have GPU-generated coverage and bounded
+caches. Fill/stroke curves, compound paths, gradient spread/alpha/colour-space,
+clipping, integer placement reuse, bounds and recovery pass current tests.
+The scalar text path preserves U++ metrics/fallback/decorations; full shaped
+runs remain open. SVG and other Ui shared raster helpers remain explicit.
+
+The ten-gate Windows checklist is **6/10 (60%)**, with gate 4 newly passed.
+This does not imply 100% GPU semantics for every helper or completion of manual
+AA/input/DPI review. See [GPU coverage and current evidence](GPU_VECTOR_COVERAGE.md).
+
+## Drawing implemented (earlier fast-path checkpoint)
 
 - Solid convex fills, closed miter strokes and straight butt/square strokes use device-space coverage
   triangles. Curves flatten adaptively within a 0.35 device-pixel control-hull
@@ -57,7 +69,49 @@ presented FPS, dropped/pending frames, CPU timing, cache misses and CPU raster
 counts. Precise host wakes do not remove the coarse U++ timer clock. A 120 FPS
 target is not a guarantee of 120 presented frames.
 
-## Measured comparisons
+## Current application measurements — 2026-10-15
+
+Current executable: build/GpuUiGalleryVector.exe, SHA-256
+8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7.
+Build job: exec-429A5938219CA0D10AE31A0E1C31F170.
+Both runs below requested validation and required GPU presentation, used a
+4-second warmup and 20-second measurement, with grid enabled and Animation target 120.
+
+| Workload | Presented FPS | First frame CPU | Median / p99 replay CPU | Private peak |
+| --- | ---: | ---: | ---: | ---: |
+| 96 particles | 64.01 | 87.03 ms | 6.03 / 11.52 ms | 194,785,280 B |
+| 512 particles | 64.01 | 80.26 ms | 6.57 / 14.06 ms | 195,473,408 B |
+
+Both cold frames generated 148 drawable glyph masks and one general vector mask
+on the GPU, using four compute submissions including atlas clear. CPU glyph
+and vector rasters were zero. Warm glyph/vector coverage submissions were zero;
+retained coverage scratch was 4,247,552 B. Existing Ui helper images remain
+separately reported (nine shared raster-cache misses); this is not all-helper
+GPU acceptance. Both runs passed responsiveness, reported no GPU error or
+presentation fallback, and ended with native ownership ZERO and zero GDI fonts.
+
+Initial unbatched measurements were 403.11 ms (point-grid coverage) and 258.76 ms
+(horizontal integration); bounded glyph batching produced the current 87.03 ms
+normal first frame. These are observed process-cold timings with driver/cache
+effects, not a controlled GPU microbenchmark or a claim that warm throughput
+improved. The Animation callback/record/present cadence still measured 64.01 Hz.
+
+Current automated workspace/compute-dialog qualification:
+exec-8BC58631CAA064A3244C8919B53200AB. Current 216-case control drawing test:
+exec-1EA9360C46772C782DD0A2BC3BF91883.
+General vectors and glyph pixel tests pass Release/Debug; see GPU_VECTOR_COVERAGE.md
+and the exact qualification manifest for identities, limits and legacy-AA differences.
+
+The current 300-second measured heavy soak (plus 4-second warmup) also passed:
+63.96 presented FPS, CPU median/p99 6.47/13.62 ms, timer delay p99/max
+18.15/42.72 ms. Private early/late means were 198,071,296 / 198,521,856 B:
+450,560 B growth against the unchanged 33,554,432 B allowance. Peak was
+199,172,096 B. Warm coverage misses remained zero; two sampled descriptor pools
+were created and reused 38,718 times. No GPU error/fallback occurred and final
+native ownership was ZERO, with zero GDI font requests.
+Soak job: exec-A14A8BFB8F450D48F8F3891DF91E3EA5.
+
+## Historical measured comparisons — 2026-10-11
 
 Same-machine 512 particles with grid, 4-second warmup and 20-second measurement:
 
@@ -102,13 +156,13 @@ animation target and real FPS. Its second Vulkan window contains a 2000-row tabl
 expanded checkable tree, single-line and multiline text editors. It shares the
 application GPU domain while owning its own surface, swapchain and renderer.
 
-Commands for the current compute-enabled Gallery (identity below; no older release ZIP):
+Commands for the current Gallery build/GpuUiGalleryVector.exe (SHA-256 below):
 
-- `GpuUiGalleryCompute.exe --require-gpu --particles=512 --animation-fps=120`
-- `GpuUiGalleryCompute.exe --qualify-ui --validation`
-- `GpuUiGalleryCompute.exe --benchmark --require-gpu --animation-fps=120`
-- `GpuUiGalleryCompute.exe --benchmark-load --require-gpu --animation-fps=120`
-- `GpuUiGalleryCompute.exe --benchmark-soak --benchmark-seconds=300 --require-gpu --validation --animation-fps=120`
+- `GpuUiGalleryVector.exe --require-gpu --particles=512 --animation-fps=120`
+- `GpuUiGalleryVector.exe --qualify-ui --validation`
+- `GpuUiGalleryVector.exe --benchmark --require-gpu --animation-fps=120`
+- `GpuUiGalleryVector.exe --benchmark-load --require-gpu --animation-fps=120`
+- `GpuUiGalleryVector.exe --benchmark-soak --benchmark-seconds=300 --require-gpu --validation --animation-fps=120`
 
 The automated application qualification passes pause/resume, slider/mode and
 inspector callbacks, native focus/text keys, tree/table keyboard navigation,
@@ -137,18 +191,19 @@ Preserved 2026-10-11 Gallery build job: `exec-268FA9EAFEBAE527514A386A78F5CB0E`;
 `exec-3D54418774B196312D7FBA5AB04F7DE2`; completed heavy soak:
 `exec-A03A35B5C771ECCF8978378C3515FCF2`. These identify the tested DirectWrite artifact above.
 
-The ten-gate checklist currently passes gates 1, 2, 3, 8 and 9: **5/10 (50%)**.
+The 2026-10-11 checkpoint passed gates 1, 2, 3, 8 and 9: **5/10 (50%)**.
+The current checklist adds gate 4: **6/10 (60%)**.
 This is an equal-count acceptance checklist, not an estimate of development effort.
 The remaining gates require the full semantics stated in ACTIVE_WORK.md.
 
 ## Still required for the full non-GDI milestone
 
-1. General compound/concave paths, gradients, dashes/open strokes and SVG still
-   use the bounded Painter/image reference path. GPU composition is not proof
-   that their coverage was generated on the GPU.
-2. DirectWrite removes the current assembly's GDI metrics/outline dependency.
-   Glyph cache misses still use ImagePainter; full shaped runs/bidi, colour emoji
-   and IME are not qualified. Warm reuse does not remove that cold CPU work.
+1. SVG retains the bounded Painter/image reference path. General FillPath/StrokePath
+   coverage is now GPU-generated and independently qualified; this does not remove
+   SVG or Ui helpers that create images before recording.
+2. DirectWrite removes this assembly's GDI font dependency and cold glyph masks
+   now generate on the GPU. Full shaped runs/bidi, colour emoji and IME still
+   need explicit contracts and acceptance. Warm reuse does not remove that cold CPU work.
 3. Shared Ui shadows, general shape/focus helpers and software layers still need
    semantic GPU paths. The common rounded-face fast path covers only its stated
    subset.
@@ -196,7 +251,7 @@ See VULKAN_COMPUTE.md for API limits, build-time shaders, measured workload and
 remaining OCIO/source-image/async-streaming work. This baseline does not alter
 the ten-gate denominator or claim the remaining drawing seams complete.
 
-## Sampled-image allocation refinement — 2026-10-13
+## Historical sampled-image allocation refinement — 2026-10-13
 
 The current Gallery SHA-256 is
 59d1a2c8e44715c709040e5e9811b13beed1e3ab52d14924c6a6746db7829dcf,

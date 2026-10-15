@@ -6,7 +6,7 @@
 
 // Keep the base replay and feature extensions in one translation unit so text/vector
 // wrappers can reuse UiRenderer2D private state without publishing a second internal API.
-// Vector/SVG content is materialized into ordinary DrawImage intent before replay.
+// General paths/glyphs prepare bounded GPU coverage; SVG retains its counted CPU image fallback.
 #define BuildGeometry BuildGeometryBase
 #define Render RenderBase
 #define RenderFrame RenderFrameBase
@@ -214,8 +214,21 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 
 	auto append_gpu_path = [&](const UiDisplayOp& op) -> bool {
 		const GpuPathMesh *prepared = PreparePath(op, state.transform);
-		if(!prepared)
-			return Fail("internal error: direct path preparation changed after materialization");
+		if(!prepared) {
+			VectorRaster raster;
+			if(!EnsureGpuVectorRaster(op, state.transform, raster)) return false;
+			stats.vector_op_count++; stats.vector_path_count++; stats.primitive_count++;
+			if(op.paint.kind != UiPaintKind::Solid) stats.gradient_count++;
+			if(!raster.drawable) { stats.clipped_primitive_count++; return true; }
+			Transform2D saved = state.transform;
+			state.transform = Transform2D();
+			bool ok = append_textured(raster.local_rect, Rectf(0, 0, 1, 1), raster.gpu_texture,
+			                          raster.tint, "GPU vector", raster.alpha_mask);
+			state.transform = saved;
+			if(!ok) return false;
+			stats.gpu_vector_draw_count++; stats.emitted_primitive_count++;
+			return true;
+		}
 		// Reuse raster coverage only at exact device-pixel translations. Fractional
 		// placement stays direct geometry, avoiding a second AA filtering kernel.
 		if(current_path_entry && state.transform.t.x == floor(state.transform.t.x) &&
@@ -382,16 +395,17 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 				if(!EnsureGlyph(run_font, op.text[c], glyph))
 					return false;
 				stats.glyph_count++;
-				if(glyph.drawable) {
-					Rectf glyph_rect(pen_x + glyph.offset.x,
-					                 op.point.y + glyph.offset.y,
-					                 pen_x + glyph.offset.x + glyph.size.cx,
-					                 op.point.y + glyph.offset.y + glyph.size.cy);
+				auto emit_glyph = [&](GpuTextureId texture, Rectf uv, Pointf offset, Size size) {
+					Rectf glyph_rect(pen_x + offset.x, op.point.y + offset.y,
+					                 pen_x + offset.x + size.cx, op.point.y + offset.y + size.cy);
 					const int before = textured_vertices.GetCount();
-					if(!append_textured(glyph_rect, glyph.uv, glyph.texture, op.color, "glyph", true))
-						return false;
+					if(!append_textured(glyph_rect, uv, texture, op.color, "glyph", true)) return false;
 					emitted = emitted || textured_vertices.GetCount() > before;
-				}
+					return true;
+				};
+				if(glyph.drawable && !emit_glyph(glyph.texture,glyph.uv,glyph.offset,glyph.size)) return false;
+				for(const auto& part : glyph.parts)
+					if(!emit_glyph(part.texture,part.uv,part.offset,part.size)) return false;
 				pen_x += glyph.advance;
 			}
 			if(emitted)
@@ -448,7 +462,8 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 		else if(op.type == UiDisplayOpType::ConcatTransform) transform = transform * op.transform;
 		else if(op.type == UiDisplayOpType::FillPath || op.type == UiDisplayOpType::StrokePath ||
 		        op.type == UiDisplayOpType::DrawSvg) {
-			if(!PreparePath(op, transform)) {
+			if(!PreparePath(op, transform) &&
+			   !(op.type != UiDisplayOpType::DrawSvg && CanGpuVector())) {
 				has_vector = true;
 				break;
 			}
@@ -474,7 +489,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 		stats.vector_path_count = vector_stats.vector_path_count;
 		stats.gradient_count = vector_stats.gradient_count;
 		stats.svg_count = vector_stats.svg_count;
-		stats.vector_cache_miss_count = vector_stats.vector_cache_miss_count;
+		stats.vector_cache_miss_count += vector_stats.vector_cache_miss_count;
 		stats.vector_cache_entry_count = vector_stats.vector_cache_entry_count;
 		stats.vector_raster_count = vector_stats.vector_raster_count;
 		return true;
@@ -488,8 +503,17 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 	if(!target.color_target.IsValid() || target.size.cx <= 0 || target.size.cy <= 0 ||
 	   !IsSupportedColorFormat(target.color_format))
 		return Fail("UiRenderer2D target is invalid or unsupported");
-	if(!BuildGeometry(list, target.size))
+	if(!BuildGeometry(list, target.size)) {
+		DestroyTextExtension(); // Discard queued glyph writes and their unpublished cache entries.
 		return false;
+	}
+	if(gpu_vector_rasterizer) {
+		String detail;
+		if(!gpu_vector_rasterizer->Flush(detail)) {
+			DestroyTextExtension();
+			return Fail("GPU glyph batch: " + detail);
+		}
+	}
 
 	GpuPipelineId solid_pipeline;
 	GpuPipelineId invert_pipeline;
@@ -664,6 +688,7 @@ const GpuPathMesh *UiRenderer2D::PreparePath(const UiDisplayOp& op, const Transf
 void UiRenderer2D::SetCacheLimits(const UiRenderer2DCacheLimits& limits)
 {
 	ClosePathCoverage();
+	gpu_vector_rasterizer.Clear();
 	cache_limits.path_coverage_bytes = max<int64>(0, limits.path_coverage_bytes);
 	cache_limits.path_geometry_bytes = max<int64>(0, limits.path_geometry_bytes);
 	cache_limits.path_geometry_entries = max(0, limits.path_geometry_entries);
@@ -692,7 +717,7 @@ int64 UiRenderer2D::VectorCacheBytes() const
 	int64 bytes = 0;
 	if(vector_impl)
 		for(const VectorImpl::CacheEntry& entry : vector_impl->cache)
-			bytes += (int64)entry.image.GetLength() * sizeof(RGBA);
+			bytes += (int64)entry.image.GetLength() * sizeof(RGBA) + entry.gpu_bytes;
 	return bytes;
 }
 
@@ -731,6 +756,9 @@ bool UiRenderer2D::ReserveVectorCache(int64 bytes)
 				oldest = i;
 		if(oldest < 0)
 			return Fail("UiRenderer2D active vector frame exceeds the configured raster cache budget");
+		if(vector_impl->cache[oldest].gpu_texture.IsValid() &&
+		   device->DestroyTexture(vector_impl->cache[oldest].gpu_texture) != GpuResult::Ok)
+			return Fail("GPU vector cache retirement failed: " + device->GetLastError());
 		vector_impl->cache.Remove(oldest);
 		frame_vector_evictions++;
 	}
@@ -753,7 +781,11 @@ void UiRenderer2D::TrimCaches()
 		while(!vector_impl->cache.IsEmpty() &&
 		      (VectorCacheBytes() > cache_limits.vector_bytes ||
 		       vector_impl->cache.GetCount() > cache_limits.vector_entries))
+		{
+			if(vector_impl->cache[0].gpu_texture.IsValid() &&
+			   device->DestroyTexture(vector_impl->cache[0].gpu_texture) != GpuResult::Ok) break;
 			vector_impl->cache.Remove(0);
+		}
 }
 
 void UiRenderer2D::UpdateCacheStats()
@@ -768,12 +800,14 @@ void UiRenderer2D::UpdateCacheStats()
 	stats.image_cache_eviction_count = frame_image_evictions;
 	stats.vector_cache_eviction_count = frame_vector_evictions;
 	stats.image_upload_bytes = frame_image_upload_bytes;
+	stats.gpu_vector_scratch_bytes = gpu_vector_rasterizer ? gpu_vector_rasterizer->GetScratchBytes() : 0;
 	if(vector_impl)
 		stats.vector_cache_entry_count = vector_impl->cache.GetCount();
 }
 
 bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& target)
 {
+	const int64 submits_before = gpu_vector_rasterizer ? gpu_vector_rasterizer->GetSubmitCount() : 0;
 	++cache_frame;
 	frame_image_hits = frame_image_evictions = frame_vector_evictions = 0;
 	frame_image_upload_bytes = 0;
@@ -786,6 +820,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 		 text_impl->glyphs.GetCount() >= cache_limits.glyph_entries);
 	if(reset_glyphs) DestroyTextExtension();
 	bool result = RenderInternal(list, target);
+	stats.gpu_vector_submit_count = gpu_vector_rasterizer ? (int)(gpu_vector_rasterizer->GetSubmitCount() - submits_before) : 0;
 	stats.glyph_cache_reset_count = reset_glyphs ? 1 : 0;
 	stats.gpu_path_cache_miss_count = frame_path_misses;
 	stats.gpu_path_cache_entry_count = path_cache.GetCount();
@@ -813,6 +848,7 @@ void UiRenderer2D::Close()
 	ClosePathCoverage();
 	path_cache.Clear(); scratch_path.triangles.Clear(); path_cache_bytes = 0;
 	DestroyVectorExtension();
+	gpu_vector_rasterizer.Clear();
 	DestroyTextExtension();
 	CloseBase();
 	stats = UiRenderer2DStats();

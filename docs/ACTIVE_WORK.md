@@ -14,6 +14,26 @@ WebGPU/browser and Metal follow this Windows milestone. wgpu-native is an option
 experiment; its successful native proof is not authorization to replace the
 current renderer or postpone Vulkan UI completion.
 
+## Current implementation checkpoint — 2026-10-15
+
+**6/10 completion gates passed (60%)**: gates 1, 2, 3, 4, 8 and 9.
+The denominator and gate criteria are unchanged. This is acceptance coverage,
+not a percentage of engineering effort or a completion date.
+
+General filled/stroked curves, compound winding/even-odd paths, gradients,
+rectangular clipping and explicit bounds now have direct GPU coverage. Release
+and Debug pixel tests pass. Glyph masks also generate on the GPU, with bounded
+batching, Unicode/fallback/decorations and cold/warm whitespace tests. Full shaped
+text remains open under gate 5. SVG's CPU fallback and remaining Ui shared
+shape/shadow/layer helpers are explicitly outstanding, as are current manual
+input/AA and monitor-DPI acceptance. See GPU_VECTOR_COVERAGE.md.
+
+The rebuilt whole-UI Gallery has passed three populated workspace cycles and
+three compute dialog cycles, with no software presentation fallback and final
+native ownership ZERO. Current load/soak results and artifact identities are
+recorded in the qualification document/manifest; historical measurements below
+remain historical.
+
 ## Starting checkpoint
 
 - KlickCurt / Render: project-028DDA9C9C89, E:/apps/github/upp_render.

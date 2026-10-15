@@ -1,0 +1,10 @@
+uses
+	RenderGpu2D,
+	RenderVulkan,
+	RenderSoftware;
+
+uses(CFONTS)
+	RenderFontWin32;
+
+file
+	main.cpp;

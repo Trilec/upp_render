@@ -169,8 +169,18 @@ failure stop the clock; retry starts a new generation and rejects stale wakes.
 Clock creation failure is reported rather than silently using coarse timing.
 Static roots leave this opt-in disabled. `IsFrameClockActive()` reports status.
 
-GpuUiGallery uses upp_animation at 60 Hz and shows actual presented FPS,
+GpuUiGallery requests upp_animation at 120 Hz and shows actual presented FPS,
 sampled over approximately one second. Replay milliseconds are CPU timing;
 neither value is a GPU timestamp. `--particles=512` starts the interactive load
 scene; the inspector permits 6–512 particles. `--no-grid` disables the grid for
 comparison. Benchmark reports record grid state and measured presentation FPS.
+
+## General vectors and cold glyphs
+
+Compute-capable Vulkan devices now generate bounded FillPath/StrokePath and
+glyph coverage on the GPU. Curves, compound paths, gradient spread, opacity and
+colour-space are preserved. GPU coverage and CPU reference rasters have separate
+counters; warm masks reuse retained textures. SVG and some Ui shared raster
+helpers remain CPU-prepared. See [GPU coverage](GPU_VECTOR_COVERAGE.md) and
+[font contracts](WINDOWS_FONT_PROVIDER.md). Required presentation alone does not
+assert that every helper used GPU coverage.

@@ -2,5 +2,8 @@ uses
 	RenderGpu2D,
 	RenderVulkan;
 
+uses(CFONTS)
+	RenderFontWin32;
+
 file
 	main.cpp;

@@ -1,0 +1,729 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-15",
+  "source_parent": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+  "source_files": [
+    {
+      "path": "examples/GpuUiGallery/main.cpp",
+      "sha256": "c16aa0a494ba128d13f1938a8d2bfa2b9b14adc772a70e2633208e99057edc34",
+      "size": 45100
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.cpp",
+      "sha256": "57c008760153d7f99c559bd5d2ea4c970bd3122fbb8e809707fa1b6444efeb5d",
+      "size": 37469
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.h",
+      "sha256": "dbac6111fb9675bb7aa65407cdff24dba02f241eabc242d6b24cf45fec2b92c7",
+      "size": 11522
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.upp",
+      "sha256": "4caf451de2d6f108784e7c52197680cfa7ba74704295faa4609281999bd46705",
+      "size": 297
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DText.cpp",
+      "sha256": "786724cb4eee3ed7f8bd488856765a67cd4bc747e9beda9be01b7a82dc35d2bd",
+      "size": 11981
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DVector.cpp",
+      "sha256": "f33a1ee3549ebfdd3a796c3cc9e2d9a6aaf56611434679e8f235382834389481",
+      "size": 11269
+    },
+    {
+      "path": "render/RenderGpu2D/GpuVectorRasterizer.cpp",
+      "sha256": "e5e5ea080884f1f80cb5874bc4086a3d95b895f2daa57987095fab3b662e8bc1",
+      "size": 17880
+    },
+    {
+      "path": "render/RenderGpu2D/GpuVectorRasterizer.h",
+      "sha256": "b10b0ef634df370ec55fe3b9a3ba9fdd72a9275c0d9504acec6eb2adf4328226",
+      "size": 2513
+    },
+    {
+      "path": "shaders/vector_coverage.comp",
+      "sha256": "246ed32cc5302f6795d21220e8c6232a86787e2cf05df8c4dd1c52944d24fe3d",
+      "size": 4980
+    },
+    {
+      "path": "shaders/VectorCoverageSpirv.h",
+      "sha256": "4d9ee22b7de8de07febe00507d460019db62637aac7bac5d81af73d97323f1a8",
+      "size": 78962
+    },
+    {
+      "path": "tests/RenderVulkanGeneralVectorTest/main.cpp",
+      "sha256": "dd1bca348b61dbd4c038f537d311aa738274a1bd3be8170185d60f5a1bb365ff",
+      "size": 13293
+    },
+    {
+      "path": "tests/RenderVulkanGeneralVectorTest/RenderVulkanGeneralVectorTest.upp",
+      "sha256": "f08742bd27f9cb34ef3c395be33c701c606d62aa7800cbe17d48e4bbc20ae756",
+      "size": 100
+    },
+    {
+      "path": "tests/RenderVulkanTextTest/main.cpp",
+      "sha256": "097e1721e15bb583d7c11a87ad8377516940db54ec62f1d50e4143c1d22c0e1e",
+      "size": 18863
+    },
+    {
+      "path": "tests/RenderVulkanTextTest/RenderVulkanTextTest.upp",
+      "sha256": "b3eefdec18709b7eaabc66af3ac14d257a31234d1ec388b487cd68eea4665ce5",
+      "size": 92
+    },
+    {
+      "path": "tests/RenderVulkanVectorTest/main.cpp",
+      "sha256": "d7db3809e89bebc650a21e602c2b40090019891e2e12b35d1588a6766535723a",
+      "size": 11220
+    },
+    {
+      "path": "tests/RenderVulkanVectorTest/RenderVulkanVectorTest.upp",
+      "sha256": "b3eefdec18709b7eaabc66af3ac14d257a31234d1ec388b487cd68eea4665ce5",
+      "size": 92
+    }
+  ],
+  "dependencies": {
+    "ui_head": "fc4980a045551c78b3e1dece887dac3b5f926ee8",
+    "ui_status": [
+      " M Ui/UiBoxLayout.cpp",
+      " M Ui/UiBoxLayout.h",
+      " M Ui/UiItemRender.cpp",
+      "?? Ui/tests/",
+      "?? tests/UiItemRenderTextFitTest/",
+      "?? tests/UiLabelTextFitTest/"
+    ],
+    "animation_head": "4a01b6f4e2a9f122ea1a93457b62a4054d01f970",
+    "animation_status": [],
+    "source_hashes": [
+      {
+        "Path": "E:\\apps\\github\\upp_animation\\Animation\\Animation.cpp",
+        "Hash": "47C99BA8DBC1390B6BF79E3C611695C2F96C476EF7CC8EBCDE669CC30B204030"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_animation\\Animation\\Animation.h",
+        "Hash": "FCFF041E26E7B76EA7EA1DB0ABD337902FD95553D97806AE399B381EF0D46A5E"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiBoxLayout.cpp",
+        "Hash": "9E1DD49E891078B164666C88617B4AADEE6FB35C24A3C7E288851ADC473C0D1A"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiBoxLayout.h",
+        "Hash": "7D56AC02E56A8F4761F581952FB0502296CDBB6AC08FD9138A19A0314B899FD2"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiItemRender.cpp",
+        "Hash": "F4D62085288933590545ECC30A0907416E65D558A8DC1D8609D803D9C0A3E417"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiDraw.cpp",
+        "Hash": "BD7479D342D6584CD44205BF49CA5F395DE0D4D5209B8FAA3E9053D9AC288629"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiDraw.h",
+        "Hash": "146909D9A0FE1D7AF849C641C1454D8AB2AFD89BA127AEEA16ECCFE6E7CE2145"
+      },
+      {
+        "Path": "E:\\apps\\github\\upp_Ui\\Ui\\UiDrawBase.h",
+        "Hash": "5770D8631EB124BE3C5EAF7E6F5A67DB59F8DBDB6CCDE1C8E7FFB0D5BB528445"
+      }
+    ]
+  },
+  "raw_evidence": "build/vulkan-vector-glyph-qualification-2026-10-15.json",
+  "shader_bake": {
+    "job_id": "exec-C628468192313696D229664551458480",
+    "status": "succeeded",
+    "exit_code": 0,
+    "duration_ms": 282,
+    "executable_sha256": "1ff780ea13ce24b7342aa0c11182d84354d6ffe16d8472384d863c69bbdda0dd",
+    "source_before": {
+      "workspace_id": "folder-D804EA49C6B4",
+      "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+      "git_head_available": true,
+      "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+      "git_ref": "refs/heads/main",
+      "scope": "configured_workspace_and_direct_git_head"
+    },
+    "source_after": {
+      "workspace_id": "folder-D804EA49C6B4",
+      "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+      "git_head_available": true,
+      "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+      "git_ref": "refs/heads/main",
+      "scope": "configured_workspace_and_direct_git_head"
+    },
+    "compiler": "C:/VulkanSDK/1.4.350.0/Bin/shaderc_shared.dll",
+    "compiler_sha256": "ff7eb3639f2c72e99b0d904af13401ff994c6471446b1e8792fe4c9250bb3d17"
+  },
+  "glyph_release": {
+    "build": {
+      "job_id": "exec-732694356356FBB503EA4365B16A78ED",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 8954,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "run": {
+      "job_id": "exec-B94C1E588FB84080E3F63581282DA997",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 953,
+      "executable_sha256": "02f86296464b8791c3ae55bd6c2d319571872126f7f40de57004a0692583165f",
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "artifact": "02f86296464b8791c3ae55bd6c2d319571872126f7f40de57004a0692583165f",
+    "stdout": "Unicode pixel format=1 max_error=0.015686274509804 mean_error=0.000110294117647059 aa_pixels=881\r\nUnicode pixel format=2 max_error=0.015686274509804 mean_error=0.000110294117647059 aa_pixels=881\r\nUnicode pixel format=3 max_error=0.0188319091732524 mean_error=0.00013115788801991 aa_pixels=881\r\nUnicode pixel format=4 max_error=0.0188319091732524 mean_error=0.00013115788801991 aa_pixels=881\r\nglyph_batch_gpu_rasters=222 compute_submissions=3\r\nglyph_batch_max_error=0.227450980392157 mean_error=0.000320416791504342 worst=[231, 181] actual=190 reference=248\r\nglyph_legacy_crossing_pixels=6 independent_max_error=0.00512336282169112\r\nfont_backend=DirectWrite legacy_gdi_font_requests=0\r\nRenderVulkanTextTest passed\r\n"
+  },
+  "tests": [
+    {
+      "package": "RenderVulkanGeneralVectorTest",
+      "mode": "Release",
+      "build": {
+        "job_id": "exec-B6ECA27668429447C72B84681589D3E7",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4281,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-3A1C356F5973D873B4A0792331D407A7",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 1500,
+        "executable_sha256": "17e942a4997387cfbe6bc704623ed38b0c8e37523c7155b5ba8f95e097e82d09",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "17e942a4997387cfbe6bc704623ed38b0c8e37523c7155b5ba8f95e097e82d09",
+      "result": "RenderVulkanGeneralVectorTest passed"
+    },
+    {
+      "package": "RenderVulkanGeneralVectorTest",
+      "mode": "Debug",
+      "build": {
+        "job_id": "exec-E4BE543B61B2FD64214264EF956619A8",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 17797,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-46A1B5006A4CC3AC9D4CD6CF38116BE9",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 1828,
+        "executable_sha256": "8f238adc3626fbf9818d3f5658f4bd6efc5704d89dcf76b783f7cc925089d558",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "8f238adc3626fbf9818d3f5658f4bd6efc5704d89dcf76b783f7cc925089d558",
+      "result": "RenderVulkanGeneralVectorTest passed"
+    },
+    {
+      "package": "RenderVulkanTextTest",
+      "mode": "Debug",
+      "build": {
+        "job_id": "exec-13807E2098465C739C39E702933D34CC",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 3984,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-D00141E7473556C6400FABA688B34A03",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 1359,
+        "executable_sha256": "ac4a45309fd34b2c499547c1af2c2f9633bdfa66ad39381918df5fbcc1c11fc6",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "ac4a45309fd34b2c499547c1af2c2f9633bdfa66ad39381918df5fbcc1c11fc6",
+      "result": "RenderVulkanTextTest passed"
+    },
+    {
+      "package": "RenderVulkanVectorTest",
+      "mode": "Release",
+      "build": {
+        "job_id": "exec-0E9F23CC1EFAEBA5D78EB385D195A92F",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 3953,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-E4FF5DEEEF73F53B23074EBF34AE942B",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 797,
+        "executable_sha256": "f2ea6077875b3f1027dce501a66e9b786cb23808a6c43dfdf065d99269c27640",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "f2ea6077875b3f1027dce501a66e9b786cb23808a6c43dfdf065d99269c27640",
+      "result": "RenderVulkanVectorTest passed"
+    },
+    {
+      "package": "RenderGpuVectorTest",
+      "mode": "Release",
+      "build": {
+        "job_id": "exec-526B92371F64F7D9ACD637EB848E45EE",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 12219,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-10218DF0045A631E47133115A2AE1846",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 109,
+        "executable_sha256": "3d220b334bd48cee45af2aa65726ed1066ec904436545f915c3dda4251e45d19",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "3d220b334bd48cee45af2aa65726ed1066ec904436545f915c3dda4251e45d19",
+      "result": "RenderGpuVectorTest passed"
+    },
+    {
+      "package": "RenderVulkanPathTest",
+      "mode": "Release",
+      "build": {
+        "job_id": "exec-E01F0B8C12C95E4D4B39A4C341201AF6",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4266,
+        "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "run": {
+        "job_id": "exec-FCD75AD3E7B5B164C316AD5A747ADC34",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 1469,
+        "executable_sha256": "87516102b3d4ac6d51f79611a1410780a003ba5e0ddbca956b7ba465690751b5",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "artifact": "87516102b3d4ac6d51f79611a1410780a003ba5e0ddbca956b7ba465690751b5",
+      "result": "RenderVulkanPathTest passed"
+    }
+  ],
+  "inventory": {
+    "build": {
+      "job_id": "exec-F7AA31D11F98A8D7460FFDB1A1545DF7",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 12719,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "run": {
+      "job_id": "exec-1EA9360C46772C782DD0A2BC3BF91883",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 2031,
+      "executable_sha256": "1e64eb97478aa26df4c380318777be2a5e6a45dacffe5e45258e820940d4ed73",
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "artifact": "1e64eb97478aa26df4c380318777be2a5e6a45dacffe5e45258e820940d4ed73",
+    "summary": [
+      "UI_GPU_DRAW_SUMMARY painted_inventory_entries=54 cases=216 failures=0 os_file_dialog=HOST_SERVICE validation_warnings=0 validation_errors=0 result=PASS"
+    ]
+  },
+  "gallery": {
+    "build": {
+      "job_id": "exec-429A5938219CA0D10AE31A0E1C31F170",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 15078,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "artifact": "8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7",
+    "ui": {
+      "job": {
+        "job_id": "exec-8BC58631CAA064A3244C8919B53200AB",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 6438,
+        "executable_sha256": "8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": "workspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=36 dispatches=36 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=40 dispatches=40 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=38 dispatches=38 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "normal": {
+      "job": {
+        "job_id": "exec-705EABFDC43B589B56005F84B4D26401",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 24484,
+        "executable_sha256": "8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": "GpuUiGallery Windows/Vulkan 96 particles\nwarmup_ms=4000 measured_ms=20009.95\npresented_frames=1485 dropped_frames=7 pending_frames=0\nmeasured_presented_frames=1280 throughput_elapsed_ms=19997.71 presented_fps=64.01\nanimation_callback_hz=64.01 distinct_animation_hz=64.01 scene_record_hz=64.01\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=87.03\ncold_texture_uploads=13 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=31 cold_gpu_vector_rasters=1 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=4\nframe_clock_active=1\ntimer_delay_ms p50=10.61 p95=17.60 p99=18.41 max=21.92\nacquire_replay_present_cpu_ms p50=6.03 p95=10.79 p99=11.52 max=13.92\nroot_record_ms last=0.73 lifetime_max=1.14\nroot_enqueue_ms last=0.01 lifetime_max=0.17\nprocess_private_peak_bytes=194785280\nsampled_descriptor_pools_created=2 reused=2968 retained=2\nimage_cache_entry_peak=13\nimage_pixel_payload_peak_bytes=22816\nvector_pixel_payload_peak_bytes=8280\ngpu_paths_last=246\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=218\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=59\ngpu_path_cache_payload_bytes_last=144592\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4247552\nui_shared_raster_cache_bytes=12896\nui_shared_raster_cache_misses_total=9\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=262144\ngrid=1\nanimation_driver=upp_animation scheduler_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "heavy": {
+      "job": {
+        "job_id": "exec-D59F2BD8E4A6DF54C9BC8391730B5802",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 24454,
+        "executable_sha256": "8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=20011.36\npresented_frames=1488 dropped_frames=13 pending_frames=0\nmeasured_presented_frames=1280 throughput_elapsed_ms=19996.50 presented_fps=64.01\nanimation_callback_hz=64.01 distinct_animation_hz=64.01 scene_record_hz=64.01\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=80.26\ncold_texture_uploads=13 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=31 cold_gpu_vector_rasters=1 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=4\nframe_clock_active=1\ntimer_delay_ms p50=10.73 p95=17.65 p99=18.18 max=19.11\nacquire_replay_present_cpu_ms p50=6.57 p95=13.11 p99=14.06 max=14.31\nroot_record_ms last=1.62 lifetime_max=2.71\nroot_enqueue_ms last=0.01 lifetime_max=0.17\nprocess_private_peak_bytes=195473408\nsampled_descriptor_pools_created=2 reused=2974 retained=2\nimage_cache_entry_peak=13\nimage_pixel_payload_peak_bytes=24076\nvector_pixel_payload_peak_bytes=8280\ngpu_paths_last=1078\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1050\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=59\ngpu_path_cache_payload_bytes_last=144592\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4247552\nui_shared_raster_cache_bytes=14156\nui_shared_raster_cache_misses_total=9\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation scheduler_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "soak": {
+      "job": {
+        "job_id": "exec-A14A8BFB8F450D48F8F3891DF91E3EA5",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 304766,
+        "executable_sha256": "8f52c2de6ff7c737e9e40529f1f3247833a8551c5e0fee7c342c99e177b4abe7",
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "8f0bfc81f7516ef66e814ce92ede43a69eb15d5c",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300002.16\npresented_frames=19360 dropped_frames=9 pending_frames=0\nmeasured_presented_frames=19189 throughput_elapsed_ms=299999.50 presented_fps=63.96\nanimation_callback_hz=63.96 distinct_animation_hz=63.96 scene_record_hz=63.96\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=82.83\ncold_texture_uploads=13 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=31 cold_gpu_vector_rasters=1 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=4\nframe_clock_active=1\ntimer_delay_ms p50=12.44 p95=17.60 p99=18.15 max=42.72\nacquire_replay_present_cpu_ms p50=6.47 p95=12.09 p99=13.62 max=42.16\nroot_record_ms last=1.74 lifetime_max=3.10\nroot_enqueue_ms last=0.01 lifetime_max=0.16\nprocess_private_peak_bytes=199172096\nsampled_descriptor_pools_created=2 reused=38718 retained=2\nimage_cache_entry_peak=13\nimage_pixel_payload_peak_bytes=24076\nvector_pixel_payload_peak_bytes=8280\ngpu_paths_last=1078\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1050\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=59\ngpu_path_cache_payload_bytes_last=144592\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4247552\nui_shared_raster_cache_bytes=14156\nui_shared_raster_cache_misses_total=9\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation scheduler_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=198071296 late_mean_bytes=198521856 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=194973696\nprivate_sample_bytes=199135232\nprivate_sample_bytes=199135232\nprivate_sample_bytes=199041024\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199172096\nprivate_sample_bytes=199139328\nprivate_sample_bytes=198348800\nprivate_sample_bytes=198348800\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198512640\nprivate_sample_bytes=198549504\nupp_heap_sample_bytes=2322432\nupp_heap_sample_bytes=2318336\nupp_heap_sample_bytes=2387968\nupp_heap_sample_bytes=2387968\nupp_heap_sample_bytes=2383872\nupp_heap_sample_bytes=2387968\nupp_heap_sample_bytes=2387968\nupp_heap_sample_bytes=2453504\nupp_heap_sample_bytes=2449408\nupp_heap_sample_bytes=2453504\nupp_heap_sample_bytes=2449408\nupp_heap_sample_bytes=2449408\nupp_heap_sample_bytes=2453504\nupp_heap_sample_bytes=2449408\nupp_heap_sample_bytes=2449408\nupp_heap_sample_bytes=2453504\nupp_heap_sample_bytes=2453504\nupp_heap_sample_bytes=2547712\nupp_heap_sample_bytes=2572288\nupp_heap_sample_bytes=2576384\nupp_heap_sample_bytes=2965504\nupp_heap_sample_bytes=2576384\nupp_heap_sample_bytes=3985408\nupp_heap_sample_bytes=2572288\nupp_heap_sample_bytes=2572288\nupp_heap_sample_bytes=2576384\nupp_heap_sample_bytes=2576384\nupp_heap_sample_bytes=2625536\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    }
+  },
+  "acceptance": {
+    "checklist_passed": [
+      1,
+      2,
+      3,
+      4,
+      8,
+      9
+    ],
+    "checklist_total": 10,
+    "progress_percent": 60,
+    "manual_current_app": "pending",
+    "physical_monitor_dpi": "pending",
+    "remaining": [
+      "SVG CPU fallback",
+      "Ui shared shape/shadow/layer semantics",
+      "Full shaped glyph runs/bidi",
+      "Current manual visual/input/monitor-DPI acceptance",
+      "Animation callback/presentation cadence remains approximately 64 Hz at target 120"
+    ]
+  },
+  "core_and_animation_writes": false,
+  "published": false
+}

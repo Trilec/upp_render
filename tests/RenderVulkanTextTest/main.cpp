@@ -92,6 +92,9 @@ static bool CheckTextPixels(VulkanGpuDevice& device)
 			Vector<byte> bytes;
 			bool read = renderer.Render(list, output) && device.ReadTexturePixels(target, bytes);
 			ok &= Check(read && bytes.GetCount() == size.cx * size.cy * 4, "Unicode pixels render/read back");
+			ok &= Check(renderer.GetStats().gpu_glyph_raster_count > 0 &&
+			            renderer.GetStats().cpu_glyph_raster_count == 0 && renderer.GetStats().texture_upload_count == 0,
+			            "Vulkan generates cold glyph coverage on the GPU without CPU raster uploads");
 			if(read && bytes.GetCount() == size.cx * size.cy * 4) {
 				double max_error = 0, sum = 0;
 				int covered = 0, antialiased = 0;
@@ -129,6 +132,113 @@ static bool CheckTextPixels(VulkanGpuDevice& device)
 	return ok;
 }
 
+
+
+// Independent double-precision point-in-polygon raster reference for the
+// few pixels where Painter's legacy area accumulator differs at crossings.
+struct GlyphCoverageOracle : LinearPathConsumer {
+	Vector<Pointf> starts, ends; Pointf at, first; bool begun = false;
+	Rectf bounds = Rectf(1e100,1e100,-1e100,-1e100);
+	void Finish() { if(begun && at != first) { starts.Add(at); ends.Add(first); } }
+	void Bound(Pointf p) { bounds.left=min(bounds.left,p.x); bounds.top=min(bounds.top,p.y); bounds.right=max(bounds.right,p.x); bounds.bottom=max(bounds.bottom,p.y); }
+	void Move(const Pointf& p) override { Finish(); at=first=p; begun=true; Bound(p); }
+	void Line(const Pointf& p) override { if(begun && p!=at) { starts.Add(at); ends.Add(p); } at=p; Bound(p); }
+	double Sample(Point pixel) const {
+		if(bounds.right<=pixel.x || bounds.left>=pixel.x+1 || bounds.bottom<=pixel.y || bounds.top>=pixel.y+1) return 0;
+		double coverage=0;
+		for(int y=0;y<128;++y) for(int x=0;x<128;++x) {
+			Pointf q(pixel.x+(x+.5)/128,pixel.y+(y+.5)/128); bool inside=false;
+			for(int i=0;i<starts.GetCount();++i) {
+				Pointf a=starts[i],b=ends[i];
+				if((a.y>q.y)!=(b.y>q.y) && a.x+(q.y-a.y)*(b.x-a.x)/(b.y-a.y)>q.x) inside=!inside;
+			}
+			coverage+=inside?1.0/(128*128):0;
+		}
+		return coverage;
+	}
+};
+
+static bool CheckGlyphBatching(VulkanGpuDevice& device)
+{
+	bool ok = true;
+	const Size size(620, 190);
+	GpuTextureDesc desc; desc.size = size; desc.format = GpuFormat::RGBA8;
+	desc.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_TransferSrc;
+	GpuTextureId target;
+	if(!Check(device.CreateTexture(desc, target) == GpuResult::Ok, "glyph batching target creates")) return false;
+	{
+		UiRenderer2D renderer(device); UiRenderer2DTarget output;
+		output.color_target = target; output.size = size; output.color_format = desc.format;
+		output.clear_color.alpha = 1;
+		UiDisplayListBuilder builder; ImagePainter painter(size); painter.Clear(RGBA{0,0,0,255});
+		Font font = SansSerif(18);
+		for(int line = 0; line < 8; ++line) {
+			WString text; Vector<int> advances;
+			for(int i = 0; i < 28; ++i) {
+				int cp = 32 + line * 28 + i; if(cp >= 127) cp += 33;
+				text.Cat(cp); advances.Add(max(0, font.GetWidth(cp)));
+			}
+			builder.DrawText(Pointf(3, 3 + line * 23), text, font, Rgba8(255,255,255));
+			int pen = 3;
+			for(int i = 0; i < text.GetCount(); ++i) {
+				WString one; one.Cat(text[i]);
+				painter.DrawText(pen, 3 + line * 23, one, font, White());
+				pen += advances[i];
+			}
+		}
+		UiDisplayList list; builder.Finish(list);
+		ok &= Check(renderer.Render(list, output), "more than one cold glyph batch renders");
+		const auto first = renderer.GetStats();
+		Cout() << "glyph_batch_gpu_rasters=" << first.gpu_glyph_raster_count
+		       << " compute_submissions=" << first.gpu_vector_submit_count << EOL;
+		ok &= Check(first.gpu_glyph_raster_count > 128 && first.cpu_glyph_raster_count == 0 &&
+		            first.gpu_vector_submit_count >= 3 && first.gpu_vector_submit_count <= 6,
+		            "cold glyphs use bounded multi-dispatch batches");
+		Vector<byte> bytes; bool read = device.ReadTexturePixels(target, bytes);
+		ok &= Check(read && bytes.GetCount() == size.cx*size.cy*4, "batched glyph pixels read back");
+		if(read && bytes.GetCount() == size.cx*size.cy*4) {
+			Image reference = painter.GetResult(); double maximum = 0, total = 0; Point worst(0,0);
+			for(int y = 0; y < size.cy; ++y) for(int x = 0; x < size.cx; ++x) {
+				double delta = abs((int)bytes[4*(y*size.cx+x)] - (int)reference[y][x].r)/255.0;
+				if(delta > maximum) { maximum = delta; worst = Point(x,y); } total += delta/(size.cx*size.cy);
+			}
+			Cout() << "glyph_batch_max_error=" << maximum << " mean_error=" << total
+			       << " worst=" << worst << " actual=" << (int)bytes[4*(worst.y*size.cx+worst.x)] << " reference=" << (int)reference[worst.y][worst.x].r << EOL;
+			Array<GlyphCoverageOracle> oracle;
+			for(int line=0;line<8;++line) {
+				int pen=3;
+				for(int i=0;i<28;++i) {
+					int cp=32+line*28+i; if(cp>=127) cp+=33;
+					auto& shape=oracle.Add(); ApproximateChar(shape,Point(pen,3+line*23),cp,font,.3); shape.Finish();
+					pen+=max(0,font.GetWidth(cp));
+				}
+			}
+			int outliers=0; double oracle_error=0;
+			for(int y=0;y<size.cy;++y) for(int x=0;x<size.cx;++x)
+				if(abs((int)bytes[4*(y*size.cx+x)]-(int)reference[y][x].r)>8) {
+					double expected=0;
+					for(const auto& shape:oracle) { double a=shape.Sample(Point(x,y)); expected=a+expected*(1-a); }
+					oracle_error=max(oracle_error,fabs(bytes[4*(y*size.cx+x)]/255.0-expected)); ++outliers;
+				}
+			Cout()<<"glyph_legacy_crossing_pixels="<<outliers<<" independent_max_error="<<oracle_error<<EOL;
+			ok &= Check(maximum<=.25 && total<=.001 && oracle_error<=.02,
+			            "batched text preserves reference pixels and independent crossing coverage");
+		}
+		ok &= Check(renderer.Render(list, output) && !renderer.GetStats().gpu_vector_submit_count &&
+		            !renderer.GetStats().gpu_glyph_raster_count, "warm batched text has no compute submissions");
+		Vector<byte> warm_pixels; ok &= Check(device.ReadTexturePixels(target, warm_pixels) && warm_pixels == bytes,
+		                                    "cold and warm text preserve whitespace advances exactly");
+		UiRenderer2DCacheLimits limits = renderer.GetCacheLimits(); limits.glyph_entries = 1; renderer.SetCacheLimits(limits);
+		ok &= Check(!renderer.Render(list, output) && !renderer.GetError().IsEmpty(),
+		            "failed frame discards queued glyph writes explicitly");
+		limits.glyph_entries = 8192; renderer.SetCacheLimits(limits);
+		ok &= Check(renderer.Render(list, output) && renderer.GetStats().cpu_glyph_raster_count == 0,
+		            "glyph cache recovers after an interrupted batch");
+	}
+	ok &= Check(device.DestroyTexture(target) == GpuResult::Ok, "glyph batching target retires");
+	return ok;
+}
+
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
@@ -151,6 +261,7 @@ CONSOLE_APP_MAIN
 			VulkanGpuDevice device(session);
 			ok &= Check(device.IsReady(), "VulkanGpuDevice should be ready for glyph-atlas rendering");
 			ok &= CheckTextPixels(device);
+			ok &= CheckGlyphBatching(device);
 			UiDisplayList scene;
 			ok &= Check(MakeScene(scene), "text display list should build");
 			const String scene_dump = scene.Dump();
@@ -180,6 +291,8 @@ CONSOLE_APP_MAIN
 				            "first Vulkan text frame should place four glyphs");
 				ok &= Check(first.glyph_cache_miss_count == 2 && first.glyph_atlas_page_count == 1,
 				            "first Vulkan text frame should cache two distinct glyphs in one atlas page");
+				ok &= Check(first.gpu_glyph_raster_count == 2 && first.cpu_glyph_raster_count == 0,
+				            "cold glyph regions use GPU coverage only");
 				ok &= Check(first.glyph_atlas_upload_count == 2,
 				            "first Vulkan text frame should upload only two padded glyph regions");
 				ok &= Check(first.batch_count == 3 && first.draw_count == 3,
@@ -191,6 +304,8 @@ CONSOLE_APP_MAIN
 
 				ok &= Check(renderer.Render(scene, offscreen), "second Vulkan text frame should render from atlas cache");
 				const UiRenderer2DStats second = renderer.GetStats();
+				ok &= Check(second.gpu_glyph_raster_count == 0 && second.cpu_glyph_raster_count == 0,
+				            "warm text performs no glyph coverage work");
 				ok &= Check(second.glyph_cache_miss_count == 0 && second.glyph_atlas_upload_count == 0,
 				            "second Vulkan text frame should perform no glyph raster/upload work");
 				ok &= Check(second.glyph_atlas_page_count == 1 && second.batch_count == 3 && second.draw_count == 3,

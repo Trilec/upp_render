@@ -12,4 +12,6 @@ file
 	RenderGpu2DBase.inc,
 	RenderGpu2DImage.cpp,
 	RenderGpu2DText.cpp,
-	RenderGpu2DVector.cpp;
+	RenderGpu2DVector.cpp,
+	GpuVectorRasterizer.h,
+	GpuVectorRasterizer.cpp;

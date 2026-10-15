@@ -147,11 +147,12 @@ CONSOLE_APP_MAIN
 				ok &= Check(first.vector_op_count == 3 && first.vector_path_count == 2 &&
 				            first.svg_count == 1 && first.gradient_count == 1,
 				            "first Vulkan vector frame should account for path/gradient/SVG intent");
-				ok &= Check(first.vector_cache_miss_count == 3 && first.vector_raster_count == 3 &&
+				ok &= Check(first.vector_cache_miss_count == 3 && first.vector_raster_count == 1 &&
+				            first.gpu_vector_raster_count == 2 &&
 				            first.vector_cache_entry_count == 3,
-				            "first Vulkan vector frame should rasterize three unique assets");
-				ok &= Check(first.texture_upload_count == 3,
-				            "first Vulkan vector frame should upload three materialized images");
+				            "first Vulkan vector frame uses GPU paths and explicitly counts the remaining CPU SVG");
+				ok &= Check(first.texture_upload_count == 1,
+				            "only the remaining SVG image is uploaded");
 				ok &= Check(first.text_run_count == 1 && first.glyph_count == 2 &&
 				            first.glyph_cache_miss_count == 2 && first.glyph_atlas_upload_count == 2,
 				            "vector materialization should preserve and populate the accepted text path");
@@ -196,12 +197,13 @@ CONSOLE_APP_MAIN
 				ok &= Check(renderer.RenderFrame(scene, frame, clear),
 				            "mixed vector/text scene should render into acquired swapchain image");
 				const bool srgb_frame = frame.color_format == GpuFormat::RGBA8Srgb || frame.color_format == GpuFormat::BGRA8Srgb;
-				ok &= Check(renderer.GetStats().vector_cache_miss_count == 0 &&
+				ok &= Check(renderer.GetStats().vector_cache_miss_count == (srgb_frame ? 1 : 0) &&
+				            renderer.GetStats().gpu_vector_raster_count == (srgb_frame ? 1 : 0) &&
 				            renderer.GetStats().vector_raster_count == 0 &&
-				            renderer.GetStats().texture_upload_count == (srgb_frame ? 3 : 0) &&
+				            renderer.GetStats().texture_upload_count == (srgb_frame ? 1 : 0) &&
 				            renderer.GetStats().glyph_cache_miss_count == 0 &&
 				            renderer.GetStats().glyph_atlas_upload_count == 0,
-				            "swapchain Stage-5 replay should reuse CPU rasters/glyphs and select colour-space-correct image variants");
+				            "swapchain reuses glyph/coverage/SVG caches and prepares only the required sRGB gradient/image variants");
 				ok &= Check(device.Present(frame.frame) == GpuResult::Ok,
 				            "vector swapchain frame should present through session authority");
 				ok &= Check(device.BeginFrame(swapchain, frame) == GpuResult::Ok && renderer.RenderFrame(scene, frame, clear) &&

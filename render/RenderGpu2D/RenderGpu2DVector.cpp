@@ -58,9 +58,65 @@ void UiRenderer2D::DestroyVectorExtension()
 {
 	if(!vector_impl)
 		return;
+	for(const auto& entry : vector_impl->cache)
+		if(entry.gpu_texture.IsValid()) device->DestroyTexture(entry.gpu_texture);
 	delete vector_impl;
 	vector_impl = nullptr;
 	vector_cleanup.owner = nullptr;
+}
+
+bool UiRenderer2D::CanGpuVector()
+{
+	if(!device) return false;
+	if(!gpu_vector_rasterizer) gpu_vector_rasterizer.Create(*device);
+	return gpu_vector_rasterizer->IsSupported();
+}
+
+bool UiRenderer2D::EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2D& transform,
+                                        VectorRaster& out)
+{
+	out = VectorRaster();
+	if(!CanGpuVector()) return Fail("GPU vector coverage is unavailable");
+	UiDisplayOp key = op;
+	if(op.paint.kind == UiPaintKind::Solid) {
+		key.paint.color = Rgba8(255, 255, 255, 255);
+		out.tint = op.paint.color; out.alpha_mask = true;
+	}
+	Transform2D normalized = transform;
+	Pointf placement(floor(transform.t.x), floor(transform.t.y));
+	normalized.t -= placement;
+	const bool srgb = !out.alpha_mask &&
+	                  (working_color_format == GpuFormat::RGBA8Srgb || working_color_format == GpuFormat::BGRA8Srgb);
+	const GpuFormat format = srgb ? GpuFormat::RGBA8Srgb : GpuFormat::RGBA8;
+	auto placed = [&](Rectf r) { return Rectf(r.left + placement.x, r.top + placement.y,
+	                                        r.right + placement.x, r.bottom + placement.y); };
+	VectorImpl& cache = VectorCache();
+	for(auto& entry : cache.cache)
+		if(entry.raster_scale == 0 && entry.op == key && entry.transform == normalized && entry.format == format) {
+			entry.last_frame = cache_frame; out.gpu_texture = entry.gpu_texture;
+			out.local_rect = placed(entry.local_rect); out.drawable = entry.gpu_texture.IsValid();
+			return true;
+		}
+	GpuVectorGeometry geometry; String detail;
+	if(!PrepareGpuVectorGeometry(key, normalized, geometry, detail)) return Fail(detail);
+	const int64 bytes = (int64)geometry.bounds.Width() * geometry.bounds.Height() * 4;
+	if(!ReserveVectorCache(bytes)) return false;
+	GpuTextureId texture;
+	if(!geometry.bounds.IsEmpty()) {
+		GpuTextureDesc desc; desc.size = geometry.bounds.GetSize(); desc.format = format;
+		desc.usage = GpuTextureUsage_Sampled | GpuTextureUsage_TransferDst;
+		if(device->CreateTexture(desc, texture) != GpuResult::Ok) return Fail(device->GetLastError());
+		if(!gpu_vector_rasterizer->Render(geometry, texture, Point(0, 0), srgb, detail)) {
+			device->DestroyTexture(texture); return Fail(detail);
+		}
+		stats.gpu_vector_raster_count++;
+	}
+	auto& entry = cache.cache.Add(); entry.op = pick(key); entry.transform = normalized;
+	entry.raster_scale = 0; entry.format = format; entry.gpu_texture = texture; entry.gpu_bytes = bytes;
+	entry.local_rect = Rectf(geometry.bounds); entry.last_frame = cache_frame;
+	out.gpu_texture = texture; out.local_rect = placed(entry.local_rect); out.drawable = texture.IsValid();
+	stats.vector_cache_miss_count++;
+	return true;
 }
 
 bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform,
@@ -120,7 +176,7 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 	VectorImpl& cache = VectorCache();
 	for(int i = 0; i < cache.cache.GetCount(); ++i) {
 		VectorImpl::CacheEntry& entry = cache.cache[i];
-		if(entry.raster_scale == raster_scale && entry.op == key) {
+		if(!entry.gpu_texture.IsValid() && entry.raster_scale == raster_scale && entry.op == key) {
 			entry.last_frame = cache_frame;
 			out.image = entry.image;
 			out.local_rect = placed(entry.local_rect);
@@ -217,7 +273,8 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 				if(op.paint.kind != UiPaintKind::Solid)
 					vector_stats.gradient_count++;
 			}
-			if(PreparePath(op, state.transform)) {
+			if(PreparePath(op, state.transform) ||
+			   (op.type != UiDisplayOpType::DrawSvg && CanGpuVector())) {
 				if(op.type == UiDisplayOpType::FillPath) builder.FillPath(op.path, op.paint, op.fill_rule);
 				else builder.StrokePath(op.path, op.paint, op.stroke);
 				break;
