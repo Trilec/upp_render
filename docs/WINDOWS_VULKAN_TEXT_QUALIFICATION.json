@@ -1,0 +1,343 @@
+{
+  "schema": 1,
+  "scope": "Windows shared text layout and Vulkan shaped glyph foundation",
+  "status": "passed_for_recorded_binary_only",
+  "recorded_at": "2026-10-22",
+  "baseline_render_head": "2ebf036506f612e20d24e3786a498a61a5d655a7",
+  "ui_head_observed": "cf237c78e4ef0155b18fa077adc5ca45b7e86604",
+  "uncommitted_sources": true,
+  "source_file_manifest_at_build": null,
+  "source_manifest_note": "Per-file source manifest was not captured before this build. Subsequent Ui wrapper/control integration is not covered by this binary.",
+  "build_job": "exec-26F0B69CFEE565EAA757247FA6A74500",
+  "run_job": "exec-ED7D356BF776E029747AC9CA4652584F",
+  "binary": {
+    "path": "build/UiTextLayoutTest.exe",
+    "bytes": 5361664,
+    "sha256": "ba2467af23e4fca270497119ffdff2f38d5bb3f8733e843f6fa9759ed941666e"
+  },
+  "result": {
+    "exit_code": 0,
+    "duration_ms": 1610,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "unicode_version": "13.0.0.0",
+    "grapheme_fixtures": 7,
+    "native_outline_cases": 14,
+    "vulkan_pixel_cases": 56,
+    "formats": [
+      "RGBA8",
+      "BGRA8",
+      "RGBA8Srgb",
+      "BGRA8Srgb"
+    ],
+    "native_outline_max_position_error_pixels": 0.00000524520874023438,
+    "vulkan_max_pixel_error_linear": 0.0240528958181096,
+    "vulkan_max_mean_pixel_error_linear": 0.000163819116850589,
+    "cold_cpu_glyph_rasters": 0,
+    "warm_glyph_cache_misses": 0,
+    "warm_glyph_rasters": 0,
+    "warm_pixels_identical": true,
+    "final_adapter_resources": 0,
+    "vulkan_validation_errors": 0,
+    "vulkan_validation_warnings": 0
+  },
+  "oracle": "Glyph-ID outline commands and positions are compared with DirectWrite GetGlyphRunOutline for complete native runs (<0.0002px). GPU pixels are separately compared with a per-glyph Painter compositor (maximum <=0.04, mean <=0.001) to account for overlapping glyph alpha composition. Whole-run Painter union pixel differences remain diagnostic, not a placement oracle. The independent native reference skips whitespace-only outlines.",
+  "raw_report": "started=10/22/2026 01:12:59\ngeometry sample=0 style=0 native=104 shaped=104 error=0.00000286102294921875\nnative_outline_case=0 style=0 max=12 mean=0.000508626302083333\nshaped_gpu_case=0 style=0 format=1 max=0.015686274509804 mean=0.0000165153952205882 aa=239\nshaped_gpu_case=0 style=0 format=2 max=0.015686274509804 mean=0.0000165153952205882 aa=239\nshaped_gpu_case=0 style=0 format=3 max=0.0161029490435737 mean=0.0000190177218430372 aa=238\nshaped_gpu_case=0 style=0 format=4 max=0.0161029490435737 mean=0.0000190177218430372 aa=238\ngeometry sample=0 style=1 native=100 shaped=100 error=0.00000286102294921875\nnative_outline_case=0 style=1 max=42 mean=0.001708984375\nshaped_gpu_case=0 style=1 format=1 max=0.015686274509804 mean=0.0000307968239379084 aa=330\nshaped_gpu_case=0 style=1 format=2 max=0.015686274509804 mean=0.0000307968239379084 aa=330\nshaped_gpu_case=0 style=1 format=3 max=0.0157059089682799 mean=0.0000359508471848709 aa=329\nshaped_gpu_case=0 style=1 format=4 max=0.0157059089682799 mean=0.0000359508471848709 aa=329\ngeometry sample=1 style=0 native=147 shaped=147 error=0.00000286102294921875\nnative_outline_case=1 style=0 max=12 mean=0.000508626302083333\nshaped_gpu_case=1 style=0 format=1 max=0.015686274509804 mean=0.0000183504391339869 aa=283\nshaped_gpu_case=1 style=0 format=2 max=0.015686274509804 mean=0.0000183504391339869 aa=283\nshaped_gpu_case=1 style=0 format=3 max=0.0161029490435737 mean=0.0000214943911756968 aa=282\nshaped_gpu_case=1 style=0 format=4 max=0.0161029490435737 mean=0.0000214943911756968 aa=282\ngeometry sample=1 style=1 native=143 shaped=143 error=0.00000286102294921875\nnative_outline_case=1 style=1 max=42 mean=0.001708984375\nshaped_gpu_case=1 style=1 format=1 max=0.015686274509804 mean=0.0000358232485702614 aa=379\nshaped_gpu_case=1 style=1 format=2 max=0.015686274509804 mean=0.0000358232485702614 aa=379\nshaped_gpu_case=1 style=1 format=3 max=0.0157059089682799 mean=0.0000413021395392025 aa=378\nshaped_gpu_case=1 style=1 format=4 max=0.0157059089682799 mean=0.0000413021395392025 aa=378\ngeometry sample=2 style=0 native=111 shaped=111 error=0.00000286102294921875\nnative_outline_case=2 style=0 max=1 mean=0.0000203450520833333\nshaped_gpu_case=2 style=0 format=1 max=0.0196078431372549 mean=0.0000571257148692809 aa=628\nshaped_gpu_case=2 style=0 format=2 max=0.0196078431372549 mean=0.0000571257148692809 aa=628\nshaped_gpu_case=2 style=0 format=3 max=0.0204259555994937 mean=0.000066059897668421 aa=627\nshaped_gpu_case=2 style=0 format=4 max=0.0204259555994937 mean=0.000066059897668421 aa=627\ngeometry sample=2 style=1 native=109 shaped=109 error=0.00000286102294921875\nnative_outline_case=2 style=1 max=0 mean=0\nshaped_gpu_case=2 style=1 format=1 max=0.0196078431372549 mean=0.0000846513735702612 aa=754\nshaped_gpu_case=2 style=1 format=2 max=0.0196078431372549 mean=0.0000846513735702612 aa=754\nshaped_gpu_case=2 style=1 format=3 max=0.0236198560457577 mean=0.000103141422384881 aa=751\nshaped_gpu_case=2 style=1 format=4 max=0.0236198560457577 mean=0.000103141422384881 aa=751\ngeometry sample=3 style=0 native=145 shaped=145 error=0.00000500679016113281\nnative_outline_case=3 style=0 max=29 mean=0.0010986328125\nshaped_gpu_case=3 style=0 format=1 max=0.0156862745098039 mean=0.000041567733864379 aa=631\nshaped_gpu_case=3 style=0 format=2 max=0.0156862745098039 mean=0.000041567733864379 aa=631\nshaped_gpu_case=3 style=0 format=3 max=0.0191957277223682 mean=0.0000519971686950655 aa=630\nshaped_gpu_case=3 style=0 format=4 max=0.0191957277223682 mean=0.0000519971686950655 aa=630\ngeometry sample=3 style=1 native=147 shaped=147 error=0.00000524520874023438\nnative_outline_case=3 style=1 max=24 mean=0.00120035807291667\nshaped_gpu_case=3 style=1 format=1 max=0.0156862745098039 mean=0.000106592116013072 aa=908\nshaped_gpu_case=3 style=1 format=2 max=0.0156862745098039 mean=0.000106592116013072 aa=908\nshaped_gpu_case=3 style=1 format=3 max=0.0166225559000157 mean=0.000127189122895358 aa=903\nshaped_gpu_case=3 style=1 format=4 max=0.0166225559000157 mean=0.000127189122895358 aa=903\ngeometry sample=4 style=0 native=211 shaped=211 error=0.0000019073486328125\nnative_outline_case=4 style=0 max=34 mean=0.0020751953125\nshaped_gpu_case=4 style=0 format=1 max=0.0196078431372549 mean=0.0000517801521650325 aa=701\nshaped_gpu_case=4 style=0 format=2 max=0.0196078431372549 mean=0.0000517801521650325 aa=701\nshaped_gpu_case=4 style=0 format=3 max=0.0231041665017445 mean=0.0000649410650707165 aa=719\nshaped_gpu_case=4 style=0 format=4 max=0.0231041665017445 mean=0.0000649410650707165 aa=719\ngeometry sample=4 style=1 native=198 shaped=198 error=0.0000019073486328125\nnative_outline_case=4 style=1 max=19 mean=0.00181070963541667\nshaped_gpu_case=4 style=1 format=1 max=0.0235294117647059 mean=0.000101086984272875 aa=900\nshaped_gpu_case=4 style=1 format=2 max=0.0235294117647059 mean=0.000101086984272875 aa=900\nshaped_gpu_case=4 style=1 format=3 max=0.0232676699860717 mean=0.000108317839748259 aa=898\nshaped_gpu_case=4 style=1 format=4 max=0.0232676699860717 mean=0.000108317839748259 aa=898\ngeometry sample=5 style=0 native=239 shaped=239 error=0.000003814697265625\nnative_outline_case=5 style=0 max=0 mean=0\nshaped_gpu_case=5 style=0 format=1 max=0.0235294117647059 mean=0.000106272977941176 aa=1032\nshaped_gpu_case=5 style=0 format=2 max=0.0235294117647059 mean=0.000106272977941176 aa=1032\nshaped_gpu_case=5 style=0 format=3 max=0.0235283714592163 mean=0.000126472557194479 aa=1027\nshaped_gpu_case=5 style=0 format=4 max=0.0235283714592163 mean=0.000126472557194479 aa=1027\ngeometry sample=5 style=1 native=220 shaped=220 error=0.00000238418579101562\nnative_outline_case=5 style=1 max=0 mean=0\nshaped_gpu_case=5 style=1 format=1 max=0.0235294117647059 mean=0.000142894071691176 aa=1371\nshaped_gpu_case=5 style=1 format=2 max=0.0235294117647059 mean=0.000142894071691176 aa=1371\nshaped_gpu_case=5 style=1 format=3 max=0.0240528958181096 mean=0.000163819116850589 aa=1363\nshaped_gpu_case=5 style=1 format=4 max=0.0240528958181096 mean=0.000163819116850589 aa=1363\ngeometry sample=6 style=0 native=146 shaped=146 error=0\nnative_outline_case=6 style=0 max=0 mean=0\nshaped_gpu_case=6 style=0 format=1 max=0.0156862745098039 mean=0.0000662211499183005 aa=752\nshaped_gpu_case=6 style=0 format=2 max=0.0156862745098039 mean=0.0000662211499183005 aa=752\nshaped_gpu_case=6 style=0 format=3 max=0.0147499931195921 mean=0.0000791235045663537 aa=753\nshaped_gpu_case=6 style=0 format=4 max=0.0147499931195921 mean=0.0000791235045663537 aa=753\ngeometry sample=6 style=1 native=153 shaped=153 error=0\nnative_outline_case=6 style=1 max=0 mean=0\nshaped_gpu_case=6 style=1 format=1 max=0.0235294117647059 mean=0.000117203456903594 aa=1010\nshaped_gpu_case=6 style=1 format=2 max=0.0235294117647059 mean=0.000117203456903594 aa=1010\nshaped_gpu_case=6 style=1 format=3 max=0.0229450267693311 mean=0.0001233395314744 aa=1002\nshaped_gpu_case=6 style=1 format=4 max=0.0229450267693311 mean=0.0001233395314744 aa=1002\npassed=1\n",
+  "open_scope": [
+    "Ui editor/label/document integration and regressions",
+    "colour and bitmap font layers",
+    "IME and physical input/DPI acceptance",
+    "post-integration memory/frame scheduling/load qualification",
+    "Debug, native non-GPU and BLITZ regressions"
+  ],
+  "integration_checkpoint": {
+    "recorded_at": "2026-10-22",
+    "scope": "Plain-control entry points, basic editor and uniform-label selection; full rich document and colour-font work remains open",
+    "build_job": "exec-75E6BF0D43A489BB34F4A1A3A768774D",
+    "run_job": "exec-B708A7E396E38101519B55111B1468BE",
+    "binary": {
+      "path": "build/UiTextLayoutTest.exe",
+      "bytes": 5956608,
+      "sha256": "c631e0dc5b628c56440877abfc00b7b8ac311c92f33b2ff6d76d85053c0f4e4c"
+    },
+    "result": {
+      "exit_code": 0,
+      "duration_ms": 2781,
+      "editor_checks": 37,
+      "native_outline_cases": 16,
+      "vulkan_pixel_cases": 64,
+      "independent_pixels_per_case": 49152,
+      "max_linear_error": 0.0244943727642856,
+      "max_mean_linear_error": 0.000220441481143146,
+      "cold_cpu_glyph_rasters": 0,
+      "warm_misses_and_rasters": 0,
+      "identical_warm_pixels": true,
+      "final_gpu_resources": 0,
+      "validation_errors_and_warnings": 0
+    },
+    "oracle": "Every pixel is independently compared with 128 vertical non-zero winding samples and exact horizontal polygon intervals, composed per glyph; no production GPU row builder/shader or Painter rasterizer is used. Native complete-run DirectWrite outline commands independently validate positions. The separate Painter overlap diagnostic returns 0 for two same-direction half-pixel contours, versus analytic non-zero union 0.5; Painter pixels remain diagnostic. Gates remain maximum 0.04 / mean 0.001 linear error.",
+    "source_manifest": {
+      "note": "Observed after successful build/run with no intervening edits to listed sources; not a locked prebuild manifest. Concurrent Ui files are outside this owned-change list.",
+      "render": [
+        {
+          "path": "render/RenderCanvas/RenderCanvas.cpp",
+          "sha256": "f2b2ee065698731cba4b99ef7cb31162352240808ecaa82e4524fa93024585cd"
+        },
+        {
+          "path": "render/RenderCanvas/RenderCanvas.h",
+          "sha256": "8711f247d7cbcc705bc0dbabbd090853cea1355eeec08366da69da6c3400a56a"
+        },
+        {
+          "path": "render/RenderCore/GpuDrawTarget.h",
+          "sha256": "2a18418b25ec4c61afae106fc5cd8a1e63edeae75a7e974a94761a935f33cc23"
+        },
+        {
+          "path": "render/RenderCore/RenderCore.upp",
+          "sha256": "a9d2982a693bcc916dbb917b405f9d28c23043eb45b2e583ccbeee01e886ccc3"
+        },
+        {
+          "path": "render/RenderCtrlBridge/RenderCtrlBridge.cpp",
+          "sha256": "2829bee0e54017639b18bd88e45640d75b6b1e5dc5c0e0677501a2546945ddc3"
+        },
+        {
+          "path": "render/RenderCtrlBridge/RenderCtrlBridgeRegion.h",
+          "sha256": "555d1a4749dbc70a066c3e83c99258467e277787b0c9b63dd604cd24a89c7f4f"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2D.cpp",
+          "sha256": "d929b2dae248eca4b3bcf4158d885cbe38e5af913a0374295f39fb5898600e24"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2D.h",
+          "sha256": "05e7639e3202e901e4947840500e9e38aeac35c985a5ca7d4023999ad5a324aa"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2DBase.inc",
+          "sha256": "2fb4fd89f7bd8a18ac074cc93897078f5c84bc9d69fc130d5b75ef961cbcbb01"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2DText.cpp",
+          "sha256": "7954e86068e5e9e75bc67f33f4415e9ec4f66589f2b3e2089d67fe4ae4525aa3"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2DVector.cpp",
+          "sha256": "373d0fa5d3b8c0eac4f90e60a3824cc241a10157343c0958806ae109b2b1ed2f"
+        },
+        {
+          "path": "render/RenderSoftware/RenderSoftware.cpp",
+          "sha256": "3260e6d8aa68c53bd50d756d1824c05514b29e5db5ebac7143520fc902cab5ad"
+        },
+        {
+          "path": "render/RenderVector/SemanticPainter.cpp",
+          "sha256": "4cadcdd395d5b470166b4e497a042e52627c1253051196bd4e6d1184e0144b75"
+        },
+        {
+          "path": "render/RenderCore/GpuTextLayout.cpp",
+          "sha256": "65b39f815dfa3c1c70d7383fadea41c852dd47b7d1da4840e4b3925536fc2f8b"
+        },
+        {
+          "path": "render/RenderCore/GpuTextLayout.h",
+          "sha256": "c92cac8bdad0572f345f35fe5257b6fc056ba16d9b67114a04160b3cdd1e515a"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/main.cpp",
+          "sha256": "aa41661130516e45bd8ad0672779f8897e035d97d8da73e0a1a4287e0111d51c"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/Editing.cpp",
+          "sha256": "58db9ff0dcf6c92676084103014e3381fd42f03745a71cb090178beae295c363"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/NativeReference.cpp",
+          "sha256": "811424b31b9d3abb2b8258cd8325cd843d4d1df87537d24b4ed614edfe6db3bb"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/UiTextLayoutTest.upp",
+          "sha256": "a43bf190f6732a2ac0d5bf9b8276a540fcd2202670d8840d347cdeeda08e1d6a"
+        }
+      ],
+      "ui": [
+        {
+          "path": "Ui/Ui.h",
+          "sha256": "5112e358828337f75eb87b8a55c9e85824c0f572640b42d3ba1cca8aeb92beb8"
+        },
+        {
+          "path": "Ui/Ui.upp",
+          "sha256": "923ec9d264468b8a6aeac3e94cd3666052d65004c26a1690e56550d363729fe6"
+        },
+        {
+          "path": "Ui/UiBaseEdit.cpp",
+          "sha256": "86431d5908a9398e990f765b1b164ccc4c321cdc0c258d29dab9bee6d059e4cf"
+        },
+        {
+          "path": "Ui/UiBaseEdit.h",
+          "sha256": "fee0866e8b0f57571268bafa2e913e33c89ab8aa0e67bf3eab27fc820b26da57"
+        },
+        {
+          "path": "Ui/UiLabel.cpp",
+          "sha256": "04a304e0170838e3722590c8955031561979f027d2238076c670cb4eb5d2a89e"
+        },
+        {
+          "path": "Ui/UiTextLayout.h",
+          "sha256": "b873aeb4172968054ee394a2a809bad73faae3fd557f07fc16042095c799e593"
+        },
+        {
+          "path": "Ui/UiTextLayout.cpp",
+          "sha256": "90431510401b8e4fd2020e08bc9d64b2f4e37529cfb19ecddc897ff23446566e"
+        },
+        {
+          "path": "Ui/UiTextLayoutInternal.h",
+          "sha256": "bb148bcd52d6ddd455c97446dc8bf028e9c42f65197583be5705193d1deeab57"
+        },
+        {
+          "path": "Ui/UiTextLayoutInternal.cpp",
+          "sha256": "00aec78c6fdc6aa0a307be8ed1c254a2c15d7d825641d45d2d2e84687342df21"
+        },
+        {
+          "path": "Ui/UiBreadcrumbs.cpp",
+          "sha256": "ded70723ce3bc0f608b091471d0ead411b9a9c4024af804b4cec0d7a392cd7a2"
+        },
+        {
+          "path": "Ui/UiChartRing.cpp",
+          "sha256": "ae0071afb9a90a171c68673ee812fde12ba853a67b73f3a7a7bb0f2beb769c08"
+        },
+        {
+          "path": "Ui/UiCheckBox.cpp",
+          "sha256": "d81cd3203ebd9c7de551dbc09c7167c5dd26fc4a6bc9348969a6b3493006b645"
+        },
+        {
+          "path": "Ui/UiColorPickerMicro.cpp",
+          "sha256": "6a056e6099be740407077feefcb9bea03091859d99e6f0f034503573979cbb51"
+        },
+        {
+          "path": "Ui/UiColorPickerMicro.h",
+          "sha256": "6e575780ea185e223474fa64341a5e9b14809fe12b6d3edcb7af32164ebf93b7"
+        },
+        {
+          "path": "Ui/UiColorPicker/UiColorPicker.cpp",
+          "sha256": "f50b16dbb638a9b889bb5b94ba57cb2e371cf5c8c02f2140e54093ac2fe33f66"
+        },
+        {
+          "path": "Ui/UiDropdown.cpp",
+          "sha256": "64c115aff6d7bad22f0617447998d60226c00766ddf05b64890afae7f4c16018"
+        },
+        {
+          "path": "Ui/UiDrawBase.h",
+          "sha256": "dfa5c29cc7fca0151390c4b44abf5d6fcd2a11446d5df85b5a2ecd6b504e85d2"
+        },
+        {
+          "path": "Ui/UiGroupPanel.cpp",
+          "sha256": "08e0b3a5882974a85b09fa18543f862283fc1728dac457efb08a0a2b1f72b4e5"
+        },
+        {
+          "path": "Ui/UiIndicatorBase.cpp",
+          "sha256": "ef20dd24774893e110969f1a81bd391ff131df52d14db15a4cc7daff4faeb372"
+        },
+        {
+          "path": "Ui/UiGraph/UiGraphNodeComponent.cpp",
+          "sha256": "706c1a7a59f3f320101b95e01b464d46bee4b982bad59461e18ff80da9be49f7"
+        },
+        {
+          "path": "Ui/UiGraph/UiGraphNodeComponentPaint.cpp",
+          "sha256": "ca5456c06574c47ea5a8224b80736c9f9f0f6628ed02dfd8b71e1e2f9016a6ce"
+        },
+        {
+          "path": "Ui/UiItemRender.cpp",
+          "sha256": "37e58068d34a4c1e780d384a9175c1b84dcd9461075f01bc95fc30ad1778b1f1"
+        },
+        {
+          "path": "Ui/UiListModelView.cpp",
+          "sha256": "413e151af3b79aa603a900fb35dacc7e694237f89ad48242fcd367f378ccc3d2"
+        },
+        {
+          "path": "Ui/UiListPaint.cpp",
+          "sha256": "931b383cdb36b24a28aed66a09e78299b8b73191813a06524ad2c728edbeca87"
+        },
+        {
+          "path": "Ui/UiMatrixSelector.cpp",
+          "sha256": "db7b21e45759e3d7aacf38d93927fcf7e40b37951f394402f938260c92b44ade"
+        },
+        {
+          "path": "Ui/UiMediaCard.cpp",
+          "sha256": "f57a57a4169e44bd4f1b57e873e4d8f6c97f8bd8b6ac16af8dce85e6b0e1ac16"
+        },
+        {
+          "path": "Ui/UiMenu.cpp",
+          "sha256": "421a158ca752e987d05bcf25fec68914f920749be554a906b0ea8ad9f9faafc5"
+        },
+        {
+          "path": "Ui/UiProgressBar.cpp",
+          "sha256": "35e1074d6969d8f32ec1c2ad0bb1f439086637fd2b7f94f747fff7c382e6b2f2"
+        },
+        {
+          "path": "Ui/UiRadioButton.cpp",
+          "sha256": "aa3e1f68c6e8458d25f9c63a0e3ca14f4c3744e3c0fa2f0e201d522f31d69073"
+        },
+        {
+          "path": "Ui/UiPlaybackBar.cpp",
+          "sha256": "393a12842fd9a60c17b1d2bb77853c52ed7a1997a4750410b454bf1238a3f0b0"
+        },
+        {
+          "path": "Ui/UiProgressRing.cpp",
+          "sha256": "db67023c24fefa6f4133bce30a823ea1e2a412431adf045cee725d380c59c0d4"
+        },
+        {
+          "path": "Ui/UiRangeSegmentsGeometry.cpp",
+          "sha256": "9638622ad961cd4051f39f466329b86a32e3b6cfbadf2c7c253da2d4f1e82987"
+        },
+        {
+          "path": "Ui/UiRangeSegmentsPaint.cpp",
+          "sha256": "78597bec05f4d5fbbc13658c68ff3fd5b12e95de69ef2ed1b5d7403fc874e4bb"
+        },
+        {
+          "path": "Ui/UiSplitButton.cpp",
+          "sha256": "829a8038b9608bb5af0a4dd0fbc580f3ed8a8f2eda4bac9c5e71bdad11bbcfab"
+        },
+        {
+          "path": "Ui/UiTab.cpp",
+          "sha256": "21ee90321501f6ba12def8b7f340d05b4dba5cf8178f6a2a16352ff360eb8c3d"
+        },
+        {
+          "path": "Ui/UiTag.cpp",
+          "sha256": "f2c1ce36c9bc79abe3c7be90146e93e801bb278c59be5e08a087fc605756167e"
+        },
+        {
+          "path": "Ui/UiTreeInteraction.cpp",
+          "sha256": "6798c586042217c745d6be6716ffb334fc0d15ad581d4d62b11ee77c96744a23"
+        },
+        {
+          "path": "Ui/UiTreeModelView.cpp",
+          "sha256": "08419305e84664b472f45a4f210f3c1bf4340d9f6a44dd53f898704263fc27ab"
+        }
+      ]
+    },
+    "raw_stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n",
+    "raw_report": "started=10/22/2026 03:03:03\noverlap_analytic=.5 painter=0\ngeometry sample=0 style=0 native=104 shaped=104 error=0.00000286102294921875\nnative_outline_case=0 style=0 max=12 mean=0.000508626302083333\nshaped_gpu_case=0 style=0 format=1 max=0.0117332286913147 mean=0.0000128428927325968 aa=239 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=0 style=0 format=2 max=0.0117332286913147 mean=0.0000128428927325968 aa=239 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=0 style=0 format=3 max=0.0136425300964778 mean=0.0000149618734829553 aa=238 legacy_max=0.0161029490435737 independently_checked=49152\nshaped_gpu_case=0 style=0 format=4 max=0.0136425300964778 mean=0.0000149618734829553 aa=238 legacy_max=0.0161029490435737 independently_checked=49152\ngeometry sample=0 style=1 native=100 shaped=100 error=0.00000286102294921875\nnative_outline_case=0 style=1 max=42 mean=0.001708984375\nshaped_gpu_case=0 style=1 format=1 max=0.0142983230890013 mean=0.0000268203136952187 aa=330 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=0 style=1 format=2 max=0.0142983230890013 mean=0.0000268203136952187 aa=330 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=0 style=1 format=3 max=0.0177356271055349 mean=0.000031627995811238 aa=329 legacy_max=0.0157059089682799 independently_checked=49152\nshaped_gpu_case=0 style=1 format=4 max=0.0177356271055349 mean=0.000031627995811238 aa=329 legacy_max=0.0157059089682799 independently_checked=49152\ngeometry sample=1 style=0 native=147 shaped=147 error=0.00000286102294921875\nnative_outline_case=1 style=0 max=12 mean=0.000508626302083333\nshaped_gpu_case=1 style=0 format=1 max=0.0117332286913147 mean=0.0000144903251298891 aa=283 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=1 style=0 format=2 max=0.0117332286913147 mean=0.0000144903251298891 aa=283 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=1 style=0 format=3 max=0.0136425300964778 mean=0.000016798188894806 aa=282 legacy_max=0.0161029490435737 independently_checked=49152\nshaped_gpu_case=1 style=0 format=4 max=0.0136425300964778 mean=0.000016798188894806 aa=282 legacy_max=0.0161029490435737 independently_checked=49152\ngeometry sample=1 style=1 native=143 shaped=143 error=0.00000286102294921875\nnative_outline_case=1 style=1 max=42 mean=0.001708984375\nshaped_gpu_case=1 style=1 format=1 max=0.0142983230890013 mean=0.0000310012361357216 aa=379 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=1 style=1 format=2 max=0.0142983230890013 mean=0.0000310012361357216 aa=379 legacy_max=0.015686274509804 independently_checked=49152\nshaped_gpu_case=1 style=1 format=3 max=0.0177356271055349 mean=0.0000359575653370065 aa=378 legacy_max=0.0157059089682799 independently_checked=49152\nshaped_gpu_case=1 style=1 format=4 max=0.0177356271055349 mean=0.0000359575653370065 aa=378 legacy_max=0.0157059089682799 independently_checked=49152\ngeometry sample=2 style=0 native=111 shaped=111 error=0.00000286102294921875\nnative_outline_case=2 style=0 max=1 mean=0.0000203450520833333\nshaped_gpu_case=2 style=0 format=1 max=0.0184283736484502 mean=0.0000515342495835522 aa=628 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=2 style=0 format=2 max=0.0184283736484502 mean=0.0000515342495835522 aa=628 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=2 style=0 format=3 max=0.019246486110689 mean=0.0000606436827167301 aa=627 legacy_max=0.0204259555994937 independently_checked=49152\nshaped_gpu_case=2 style=0 format=4 max=0.019246486110689 mean=0.0000606436827167301 aa=627 legacy_max=0.0204259555994937 independently_checked=49152\ngeometry sample=2 style=1 native=109 shaped=109 error=0.00000286102294921875\nnative_outline_case=2 style=1 max=0 mean=0\nshaped_gpu_case=2 style=1 format=1 max=0.0207742279651118 mean=0.0000862934712070809 aa=754 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=2 style=1 format=2 max=0.0207742279651118 mean=0.0000862934712070809 aa=754 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=2 style=1 format=3 max=0.0244943727642856 mean=0.000101881725302991 aa=751 legacy_max=0.0236198560457577 independently_checked=49152\nshaped_gpu_case=2 style=1 format=4 max=0.0244943727642856 mean=0.000101881725302991 aa=751 legacy_max=0.0236198560457577 independently_checked=49152\ngeometry sample=3 style=0 native=145 shaped=145 error=0.00000500679016113281\nnative_outline_case=3 style=0 max=29 mean=0.0010986328125\nshaped_gpu_case=3 style=0 format=1 max=0.0177676246279761 mean=0.0000401238349532789 aa=631 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=3 style=0 format=2 max=0.0177676246279761 mean=0.0000401238349532789 aa=631 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=3 style=0 format=3 max=0.0212770778405404 mean=0.000047359490524858 aa=630 legacy_max=0.0191957277223682 independently_checked=49152\nshaped_gpu_case=3 style=0 format=4 max=0.0212770778405404 mean=0.000047359490524858 aa=630 legacy_max=0.0191957277223682 independently_checked=49152\ngeometry sample=3 style=1 native=147 shaped=147 error=0.00000524520874023438\nnative_outline_case=3 style=1 max=24 mean=0.00120035807291667\nshaped_gpu_case=3 style=1 format=1 max=0.0157565137042095 mean=0.000102584011580812 aa=908 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=3 style=1 format=2 max=0.0157565137042095 mean=0.000102584011580812 aa=908 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=3 style=1 format=3 max=0.0177356271055349 mean=0.000120940065935548 aa=903 legacy_max=0.0166225559000157 independently_checked=49152\nshaped_gpu_case=3 style=1 format=4 max=0.0177356271055349 mean=0.000120940065935548 aa=903 legacy_max=0.0166225559000157 independently_checked=49152\ngeometry sample=4 style=0 native=211 shaped=211 error=0.0000019073486328125\nnative_outline_case=4 style=0 max=34 mean=0.0020751953125\nshaped_gpu_case=4 style=0 format=1 max=0.0183528410453423 mean=0.0000484009661389911 aa=701 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=4 style=0 format=2 max=0.0183528410453423 mean=0.0000484009661389911 aa=701 legacy_max=0.0196078431372549 independently_checked=49152\nshaped_gpu_case=4 style=0 format=3 max=0.0178384930326497 mean=0.0000587836474877882 aa=719 legacy_max=0.0231041665017445 independently_checked=49152\nshaped_gpu_case=4 style=0 format=4 max=0.0178384930326497 mean=0.0000587836474877882 aa=719 legacy_max=0.0231041665017445 independently_checked=49152\ngeometry sample=4 style=1 native=198 shaped=198 error=0.0000019073486328125\nnative_outline_case=4 style=1 max=19 mean=0.00181070963541667\nshaped_gpu_case=4 style=1 format=1 max=0.0176285841502249 mean=0.0000914293719131338 aa=900 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=4 style=1 format=2 max=0.0176285841502249 mean=0.0000914293719131338 aa=900 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=4 style=1 format=3 max=0.0180447614325301 mean=0.0000977709340004281 aa=898 legacy_max=0.0232676699860717 independently_checked=49152\nshaped_gpu_case=4 style=1 format=4 max=0.0180447614325301 mean=0.0000977709340004281 aa=898 legacy_max=0.0232676699860717 independently_checked=49152\ngeometry sample=5 style=0 native=239 shaped=239 error=0.000003814697265625\nnative_outline_case=5 style=0 max=0 mean=0\nshaped_gpu_case=5 style=0 format=1 max=0.0201749913832721 mean=0.0000956175315403082 aa=1032 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=5 style=0 format=2 max=0.0201749913832721 mean=0.0000956175315403082 aa=1032 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=5 style=0 format=3 max=0.020166147396251 mean=0.000112875717786942 aa=1027 legacy_max=0.0235283714592163 independently_checked=49152\nshaped_gpu_case=5 style=0 format=4 max=0.020166147396251 mean=0.000112875717786942 aa=1027 legacy_max=0.0235283714592163 independently_checked=49152\ngeometry sample=5 style=1 native=220 shaped=220 error=0.00000238418579101562\nnative_outline_case=5 style=1 max=0 mean=0\nshaped_gpu_case=5 style=1 format=1 max=0.0206188725490196 mean=0.00012739991968847 aa=1371 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=5 style=1 format=2 max=0.0206188725490196 mean=0.00012739991968847 aa=1371 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=5 style=1 format=3 max=0.0210817634768104 mean=0.000147528612057348 aa=1363 legacy_max=0.0240528958181096 independently_checked=49152\nshaped_gpu_case=5 style=1 format=4 max=0.0210817634768104 mean=0.000147528612057348 aa=1363 legacy_max=0.0240528958181096 independently_checked=49152\ngeometry sample=6 style=0 native=146 shaped=146 error=0\nnative_outline_case=6 style=0 max=0 mean=0\nshaped_gpu_case=6 style=0 format=1 max=0.0163602941176471 mean=0.0000552068749441001 aa=752 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=6 style=0 format=2 max=0.0163602941176471 mean=0.0000552068749441001 aa=752 legacy_max=0.0156862745098039 independently_checked=49152\nshaped_gpu_case=6 style=0 format=3 max=0.0153014637078274 mean=0.0000665732933937517 aa=753 legacy_max=0.0147499931195921 independently_checked=49152\nshaped_gpu_case=6 style=0 format=4 max=0.0153014637078274 mean=0.0000665732933937517 aa=753 legacy_max=0.0147499931195921 independently_checked=49152\ngeometry sample=6 style=1 native=153 shaped=153 error=0\nnative_outline_case=6 style=1 max=0 mean=0\nshaped_gpu_case=6 style=1 format=1 max=0.0171109068627451 mean=0.000106030449898089 aa=1010 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=6 style=1 format=2 max=0.0171109068627451 mean=0.000106030449898089 aa=1010 legacy_max=0.0235294117647059 independently_checked=49152\nshaped_gpu_case=6 style=1 format=3 max=0.0180954693650821 mean=0.00011014095682764 aa=1002 legacy_max=0.0229450267693311 independently_checked=49152\nshaped_gpu_case=6 style=1 format=4 max=0.0180954693650821 mean=0.00011014095682764 aa=1002 legacy_max=0.0229450267693311 independently_checked=49152\ngeometry sample=7 style=0 native=366 shaped=366 error=0.0000200271606445312\nnative_outline_case=7 style=0 max=0 mean=0\nshaped_gpu_case=7 style=0 format=1 max=0.0160539215686275 mean=0.000136082315886485 aa=1843 legacy_max=0.207843137254902 independently_checked=49152\nshaped_gpu_case=7 style=0 format=2 max=0.0160539215686275 mean=0.000136082315886485 aa=1843 legacy_max=0.207843137254902 independently_checked=49152\nshaped_gpu_case=7 style=0 format=3 max=0.0183268821180337 mean=0.000162207949787379 aa=1844 legacy_max=0.20870205966737 independently_checked=49152\nshaped_gpu_case=7 style=0 format=4 max=0.0183268821180337 mean=0.000162207949787379 aa=1844 legacy_max=0.20870205966737 independently_checked=49152\ngeometry sample=7 style=1 native=366 shaped=366 error=0.0000200271606445312\nnative_outline_case=7 style=1 max=0 mean=0\nshaped_gpu_case=7 style=1 format=1 max=0.0207414215686275 mean=0.000189469138367444 aa=2157 legacy_max=0.686274509803922 independently_checked=49152\nshaped_gpu_case=7 style=1 format=2 max=0.0207414215686275 mean=0.000189469138367444 aa=2157 legacy_max=0.686274509803922 independently_checked=49152\nshaped_gpu_case=7 style=1 format=3 max=0.0204064228175085 mean=0.000220441481143146 aa=2160 legacy_max=0.686685312435313 independently_checked=49152\nshaped_gpu_case=7 style=1 format=4 max=0.0204064228175085 mean=0.000220441481143146 aa=2160 legacy_max=0.686685312435313 independently_checked=49152\npassed=1\n",
+    "debug": {
+      "build_job": "exec-04F71759CAD71B74C8C5CC1362FFD7A1",
+      "run_job": "exec-E8A113732560D1B76A81BA723C091DE0",
+      "exit_code": 0,
+      "binary_sha256": "9452176318611350f72bb9a1b6c0cd61e2ee7472ed32ed860cd310758c558141",
+      "editor_checks": 37,
+      "gpu_cases": 64
+    },
+    "native_no_render_nest_blitz": {
+      "build_job": "exec-800CC8D2BABB73CC4EB786EAC3871E29",
+      "exit_code": 0,
+      "output_bytes": 9691648
+    },
+    "catalogue": {
+      "build_job": "exec-F38748CC83415CCDC0FFCD494E7B9CFB",
+      "run_job": "exec-26CF6FD19FB4740F5578DB99E9D2D087",
+      "exit_code": 0,
+      "binary_sha256": "9892cc4463e1ed8590232b74427a681feee11103d17cd14cc973ece2de4faa95",
+      "entries": 56,
+      "probes": 224,
+      "failures": 0,
+      "legacy_gdi_font_requests": 0,
+      "validation_warnings": 0,
+      "validation_errors": 0,
+      "note": "ASCII drawing catalogue, not complete complex-script document or physical input qualification."
+    }
+  }
+}

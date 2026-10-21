@@ -380,6 +380,44 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size, Po
 			if(!append_image(op))
 				return false;
 			break;
+		case UiDisplayOpType::DrawShapedText: {
+			stats.primitive_count++; stats.text_run_count++;
+			if(!IsFinitePoint(op.point) || !op.shaped_text || !op.shaped_text->IsValid())
+				return Fail("UiRenderer2D received invalid shaped text");
+			bool emitted=false;
+			for(const auto& run:op.shaped_text->runs) for(const auto& positioned:run.glyphs) {
+				GlyphDraw glyph;
+				Pointf origin=op.point+positioned.origin;
+				Pointf phase(origin.x-floor(origin.x),origin.y-floor(origin.y));
+				if(!EnsureGlyph(Font(),positioned.glyph,glyph,0,run.face.get(),run.em_size,phase)) return false;
+				stats.glyph_count++;
+				if(!glyph.drawable) continue;
+				Pointf p=op.point+positioned.origin+glyph.offset;
+				Rectf rect(p.x,p.y,p.x+glyph.size.cx,p.y+glyph.size.cy);
+				int before=textured_vertices.GetCount();
+				if(!append_textured(rect,glyph.uv,glyph.texture,op.color,"shaped glyph",true)) return false;
+				emitted=emitted || textured_vertices.GetCount()>before;
+			}
+			if(emitted) stats.emitted_primitive_count++;
+			for(const auto& decoration:op.shaped_text->decorations) {
+				Rectf r=decoration+op.point;
+				UiDisplayOp line; line.type=UiDisplayOpType::FillPath;
+				line.paint=UiPaint::Solid(op.color);
+				line.path.MoveTo(r.TopLeft()).LineTo(r.TopRight()).LineTo(r.BottomRight()).LineTo(r.BottomLeft()).Close();
+				// Thin fractional decorations need area coverage rather than a
+				// one-pixel tessellation fringe. Reuse the bounded GPU vector cache.
+				VectorRaster raster;
+				if(!EnsureGpuVectorRaster(line,state.transform,raster,true)) return false;
+				if(raster.drawable) {
+					Transform2D saved=state.transform; state.transform=Transform2D();
+					bool ok=append_textured(raster.local_rect,Rectf(0,0,1,1),raster.gpu_texture,
+					                        raster.tint,"shaped decoration",raster.alpha_mask);
+					state.transform=saved; if(!ok) return false;
+				}
+				stats.vector_op_count++; stats.vector_path_count++;
+			}
+			break;
+		}
 		case UiDisplayOpType::DrawText: {
 			stats.primitive_count++;
 			stats.text_run_count++;

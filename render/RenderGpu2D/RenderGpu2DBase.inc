@@ -801,6 +801,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 			if(!append_image(op.rect, op.image))
 				return false;
 			break;
+		case UiDisplayOpType::DrawShapedText:
 		case UiDisplayOpType::DrawText:
 		case UiDisplayOpType::FillPath:
 		case UiDisplayOpType::StrokePath:

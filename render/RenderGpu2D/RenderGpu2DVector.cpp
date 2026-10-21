@@ -73,7 +73,7 @@ bool UiRenderer2D::CanGpuVector()
 }
 
 bool UiRenderer2D::EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2D& transform,
-                                        VectorRaster& out)
+                                        VectorRaster& out, bool font_coverage)
 {
 	out = VectorRaster();
 	if(!CanGpuVector()) return Fail("GPU vector coverage is unavailable");
@@ -92,13 +92,14 @@ bool UiRenderer2D::EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2
 	                                        r.right + placement.x, r.bottom + placement.y); };
 	VectorImpl& cache = VectorCache();
 	for(auto& entry : cache.cache)
-		if(entry.raster_scale == 0 && entry.op == key && entry.transform == normalized && entry.format == format) {
+		if(entry.raster_scale == 0 && entry.font_coverage == font_coverage && entry.op == key && entry.transform == normalized && entry.format == format) {
 			entry.last_frame = cache_frame; out.gpu_texture = entry.gpu_texture;
 			out.local_rect = placed(entry.local_rect); out.drawable = entry.gpu_texture.IsValid();
 			return true;
 		}
 	GpuVectorGeometry geometry; String detail;
 	if(!PrepareGpuVectorGeometry(key, normalized, geometry, detail)) return Fail(detail);
+	if(font_coverage) geometry.parameters.reserved=32;
 	const int64 bytes = (int64)geometry.bounds.Width() * geometry.bounds.Height() * 4;
 	if(!ReserveVectorCache(bytes)) return false;
 	GpuTextureId texture;
@@ -112,7 +113,7 @@ bool UiRenderer2D::EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2
 		stats.gpu_vector_raster_count++;
 	}
 	auto& entry = cache.cache.Add(); entry.op = pick(key); entry.transform = normalized;
-	entry.raster_scale = 0; entry.format = format; entry.gpu_texture = texture; entry.gpu_bytes = bytes;
+	entry.raster_scale = 0; entry.font_coverage=font_coverage; entry.format = format; entry.gpu_texture = texture; entry.gpu_bytes = bytes;
 	entry.local_rect = Rectf(geometry.bounds); entry.last_frame = cache_frame;
 	out.gpu_texture = texture; out.local_rect = placed(entry.local_rect); out.drawable = texture.IsValid();
 	stats.vector_cache_miss_count++;
@@ -260,6 +261,8 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 		case UiDisplayOpType::DrawImage:
 			builder.DrawImage(op.rect, op.image, op.image_source, op.image_tint, op.image_alpha_mask);
 			break;
+		case UiDisplayOpType::DrawShapedText:
+			builder.DrawShapedText(op.point,op.shaped_text,op.color); break;
 		case UiDisplayOpType::DrawText:
 			builder.DrawText(op.point, op.text, op.font, op.color);
 			break;

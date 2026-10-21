@@ -203,8 +203,9 @@ public:
 	virtual void DrawImage(const Rectf& rect, const Image& image, const Rect& source,
 	                       Rgba8 tint = Rgba8(255, 255, 255, 255), bool alpha_mask = false) = 0;
 	// U++ control text: per-scalar integer Font advances, including U++ fallback.
-	// A future shaped-glyph run must have an explicit separate contract.
+	// Shaped text has a separate glyph-ID contract below.
 	virtual void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) = 0;
+	virtual void DrawShapedText(const Pointf& point, const std::shared_ptr<const GpuShapedText>& text, Rgba8 color) = 0;
 	virtual void FillPath(const UiPath& path, const UiPaint& paint,
 	                      UiFillRule rule = UiFillRule::NonZero) = 0;
 	virtual void StrokePath(const UiPath& path, const UiPaint& paint,
@@ -225,6 +226,7 @@ enum class UiDisplayOpType {
 	FillRoundedRect,
 	DrawImage,
 	DrawText,
+	DrawShapedText,
 	FillPath,
 	StrokePath,
 	DrawSvg,
@@ -243,6 +245,7 @@ struct UiDisplayOp : Moveable<UiDisplayOp> {
 	Rgba8 image_tint = Rgba8(255, 255, 255, 255);
 	bool image_alpha_mask = false;
 	WString text;
+	std::shared_ptr<const GpuShapedText> shaped_text;
 	Font font;
 	UiPath path;
 	UiPaint paint;
@@ -296,6 +299,7 @@ public:
 	void DrawImage(const Rectf& rect, const Image& image, const Rect& source,
 	               Rgba8 tint = Rgba8(255, 255, 255, 255), bool alpha_mask = false) override;
 	void DrawText(const Pointf& point, const WString& text, Font font, Rgba8 color) override;
+	void DrawShapedText(const Pointf& point, const std::shared_ptr<const GpuShapedText>& text, Rgba8 color) override;
 	void FillPath(const UiPath& path, const UiPaint& paint,
 	              UiFillRule rule = UiFillRule::NonZero) override;
 	void StrokePath(const UiPath& path, const UiPaint& paint,

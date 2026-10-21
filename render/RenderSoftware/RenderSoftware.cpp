@@ -28,6 +28,17 @@ static Xform2D ToXform(const Transform2D& m)
 	return x;
 }
 
+namespace {
+struct ShapedOutlinePainter : FontGlyphConsumer {
+	Painter& painter; Pointf origin; bool used=false;
+	ShapedOutlinePainter(Painter& painter,Pointf origin):painter(painter),origin(origin) {}
+	void Move(Pointf p) override { painter.Move(p+origin); used=true; }
+	void Line(Pointf p) override { painter.Line(p+origin); }
+	void Quadratic(Pointf a,Pointf b) override { painter.Quadratic(a+origin,b+origin); }
+	void Cubic(Pointf a,Pointf b,Pointf c) override { painter.Cubic(a+origin,b+origin,c+origin); }
+	void Close() override { painter.Close(); }
+};
+}
 bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 {
 	error.Clear();
@@ -132,6 +143,16 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 					               (double)dest.GetHeight() / resolved.GetHeight()) *
 					Xform2D::Translation(dest.left, dest.top), FILL_PAD);
 			}
+			break;
+		case UiDisplayOpType::DrawShapedText:
+			if(!op.shaped_text || !op.shaped_text->IsValid(&error)) return false;
+			painter.EvenOdd(false);
+			for(const auto& run:op.shaped_text->runs) for(const auto& glyph:run.glyphs) {
+				ShapedOutlinePainter sink(painter,op.point+glyph.origin);
+				if(!run.face->GetOutline(glyph.glyph,run.em_size,sink,error)) return false;
+				if(sink.used) painter.Fill(ToRgba(op.color));
+			}
+			for(const auto& r:op.shaped_text->decorations) painter.Rectangle(r+op.point).Fill(ToRgba(op.color));
 			break;
 		case UiDisplayOpType::DrawText:
 			if(!op.text.IsEmpty()) {

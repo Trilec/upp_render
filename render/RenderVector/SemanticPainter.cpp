@@ -25,6 +25,7 @@ void ReplayUiDisplayOp(const UiDisplayOp& op, UiCanvas& target)
 		case UiDisplayOpType::FillRoundedRect: target.FillRoundedRect(op.rounded, op.color); break;
 		case UiDisplayOpType::DrawImage:
 			target.DrawImage(op.rect, op.image, op.image_source, op.image_tint, op.image_alpha_mask); break;
+		case UiDisplayOpType::DrawShapedText: target.DrawShapedText(op.point,op.shaped_text,op.color); break;
 		case UiDisplayOpType::DrawText: target.DrawText(op.point, op.text, op.font, op.color); break;
 		case UiDisplayOpType::FillPath: target.FillPath(op.path, op.paint, op.fill_rule); break;
 		case UiDisplayOpType::StrokePath: target.StrokePath(op.path, op.paint, op.stroke); break;
@@ -44,6 +45,9 @@ UiGradientSpread Spread(int s) {
 class SemanticPainter : public NilPainter, public GpuPainterEffects {
 public:
 	SemanticPainter(Size size) : size(size) {}
+	bool DrawShapedText(Pointf origin,const std::shared_ptr<const GpuShapedText>& text,Color ink) override {
+		builder.DrawShapedText(origin,text,ColorValue((RGBA)ink)); return builder.GetError().IsEmpty();
+	}
 	void BlurLayer(int radius) override { builder.BlurLayer(radius); }
 	void PaintAngular(Pointf centre, double start, double sweep,
 	                  Color first, Color last, double width) override {

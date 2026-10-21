@@ -422,7 +422,8 @@ bool UiDisplayOp::operator==(const UiDisplayOp& other) const
 	       point == other.point && width == other.width && transform == other.transform &&
 	       color == other.color && rounded == other.rounded && image == other.image &&
 	       image_source == other.image_source && image_tint == other.image_tint &&
-	       image_alpha_mask == other.image_alpha_mask && text == other.text && font == other.font && path == other.path && paint == other.paint &&
+	       image_alpha_mask == other.image_alpha_mask &&
+	       (shaped_text == other.shaped_text || (shaped_text && other.shaped_text && *shaped_text == *other.shaped_text)) && text == other.text && font == other.font && path == other.path && paint == other.paint &&
 	       fill_rule == other.fill_rule && stroke == other.stroke && svg == other.svg;
 }
 
@@ -487,6 +488,17 @@ String UiDisplayList::Dump() const
 			   << op.image.GetHeight() << " hash=" << StableImageHash(op.image)
 			   << " source=" << DumpRect(Rectf(op.image_source)) << " tint=" << DumpColor(op.image_tint)
 			   << " mask=" << (op.image_alpha_mask ? 1 : 0);
+			break;
+		case UiDisplayOpType::DrawShapedText:
+			sb << "DrawShapedText " << DumpPoint(op.point) << ' ' << DumpColor(op.color);
+			if(op.shaped_text) {
+				for(const auto& run:op.shaped_text->runs) {
+					sb << " face=" << StableBytesHash((const byte *)run.face->GetIdentity().Begin(),run.face->GetIdentity().GetCount())
+					   << " em=" << StableDouble(run.em_size);
+					for(const auto& glyph:run.glyphs) sb << ' ' << glyph.glyph << ':' << DumpPoint(glyph.origin);
+				}
+				for(const auto& r:op.shaped_text->decorations) sb << " decoration=" << DumpRect(r);
+			}
 			break;
 		case UiDisplayOpType::DrawText:
 			sb << "DrawText " << DumpPoint(op.point) << " chars=" << op.text.GetCount()
@@ -682,6 +694,18 @@ void UiDisplayListBuilder::DrawText(const Pointf& point, const WString& text, Fo
 	op.font = font;
 	op.color = color;
 	Append(op);
+}
+
+void UiDisplayListBuilder::DrawShapedText(const Pointf& point,
+    const std::shared_ptr<const GpuShapedText>& text, Rgba8 color)
+{
+	if(!CanRecord()) return;
+	String detail;
+	if(!std::isfinite(point.x) || !std::isfinite(point.y) || !text || !text->IsValid(&detail)) {
+		Fail("invalid shaped text: " + detail); return;
+	}
+	UiDisplayOp op; op.type=UiDisplayOpType::DrawShapedText;
+	op.point=point; op.shaped_text=text; op.color=color; Append(op);
 }
 
 void UiDisplayListBuilder::FillPath(const UiPath& path, const UiPaint& paint, UiFillRule rule)

@@ -266,6 +266,7 @@ private:
 			int64 gpu_bytes = 0;
 			Rectf local_rect = Rectf(0, 0, 0, 0);
 			int raster_scale = 1;
+			bool font_coverage = false;
 			uint64 last_frame = 0;
 		};
 
@@ -334,7 +335,7 @@ private:
 	VectorCleanup vector_cleanup;
 	One<GpuVectorRasterizer> gpu_vector_rasterizer;
 	bool CanGpuVector();
-	bool EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out);
+	bool EnsureGpuVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out, bool font_coverage = false);
 
 	static Image PrepareImagePixels(const Image& image, GpuFormat format);
 	bool EnsureShaders(bool textured, bool alpha_mask = false);
@@ -342,7 +343,9 @@ private:
 	                   GpuBlendMode blend_mode = GpuBlendMode::SourceOver, bool alpha_mask = false);
 	bool EnsureVertexBuffer(bool textured, int64 required_bytes);
 	bool EnsureImageTexture(const Image& image, GpuTextureId& out);
-	bool EnsureGlyph(Font font, int ch, GlyphDraw& out, int depth = 0);
+	bool EnsureGlyph(Font font, int ch, GlyphDraw& out, int depth = 0,
+	                 const GpuGlyphFaceSource *source = nullptr, double em_size = 0,
+	                 Pointf phase = Pointf(0,0));
 	bool EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& transform, VectorRaster& out,
 	                        UiRenderer2DStats& vector_stats);
 	bool MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,

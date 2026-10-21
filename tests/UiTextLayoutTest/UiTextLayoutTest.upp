@@ -1,0 +1,14 @@
+uses
+	Ui,
+	CtrlLib,
+	RenderCore,
+	RenderSoftware,
+	RenderCtrlBridge,
+	RenderGpu2D,
+	RenderVulkan,
+	plugin/png;
+uses(CFONTS)
+	RenderFontWin32;
+file main.cpp, NativeReference.cpp, Editing.cpp;
+mainconfig
+	"" = "GUI GPUUI CFONTS";
