@@ -73,11 +73,24 @@ Ui main commit 594ba7d follows 83ac3bd. Renderer foundation main commit 3598226 
 - Readback build/UiTextLayout-document.png inspected after named-channel capture fix. Exact hashes/evidence in WINDOWS_VULKAN_TEXT_QUALIFICATION.json rich_text_checkpoint.
 - Dashboard revision19: overall strict acceptance70% (7/10), text implementation62.5% (5/8). Do not mark final text gate complete.
 
+## IME automated checkpoint (2026-10-22)
+
+Current IME changes are ready for intended local commits. External Core and Animation remain read-only. Renderer base b235977; Ui base 594ba7d. No publishing.
+- Ui-owned lazy composition state, shaped root-child overlay and native candidate positioning share the existing GPU device. Derived numeric validation, selection replacement/undo, empty-result handling, read-only/disabled/focus/close cancellation and callback destruction are tested.
+- Release build exec-DD66DBA608BEA73E858B67734862DD74, run exec-E5CAC4DC442BEB9CF4D5FC1F1CAFA823: 16 independent native /64 Vulkan pixels,37 editor,36 style,27 document and34 IME/native-host checks PASS.
+- Debug build exec-C64916B87685C354D157F3306B87EE4F, run exec-F6F3D2A5EBD1222AA9DC3CC7929F647E: same checks PASS.
+- Ordinary Ui no-renderer-nest Release BLITZ exec-9BC2FAB307C75DEA04AD1FF49256E737 PASS.
+- Current Gallery build exec-9369DBF0D1E0D16A113C109A5B316CCA, run exec-166B5312176A4C4CA658F7CC1DCB133D PASS. Browser/full picker/micro,3 workspace cycles,3 compute dialogs and text idle/preedit/commit captures pass; CPU vector/glyph raster0, GDI fonts0, final native ownership ZERO.
+- New scene-preservation gate: unchanged document region has0 changed pixels across idle/preedit/commit and705 baseline ink pixels. A preview tool displayed the lower scene as black, but independent file pixel comparison confirms it is present. No speculative replay fix was made.
+- Exact binary hashes, reports and source manifest are in WINDOWS_VULKAN_TEXT_QUALIFICATION.json ime_checkpoint.
+- Host tests generate native messages; live OS IME conversion/candidate selection and physical input/DPI are still open. Keyboard preload currently lists English/German. Do not claim real OS conversion acceptance.
+- Dashboard revision20: overall strict acceptance70% (7/10); text implementation62.5% (5/8). IME input item remains open until live input/DPI/bidi edges are qualified.
+
 ## Remaining implementation and qualification
 
-1. Complete renderer rich commit/evidence and verify no owned code remains uncommitted. Preserve foreign dirty files. Temporary Ui/.renderer-text-only.patch was used solely to stage owned TitleCard/Olive hunks; rollback of its create transaction requested, verify removed.
+1. Commit the qualified IME slice and preserve foreign dirty files. Rich text commits are already complete; temporary staging patch removal was verified.
 2. Implement colour/bitmap font layers; current emoji is outline monochrome. Preserve existing monochrome geometry oracle as an explicit mode and add separate colour/bitmap pixels/caches/ownership tests.
-3. IME composition remains open. Read-only Core Win32Proc converts WM_CHAR surrogate pairs and IME results to UTF32, but its app-owned PreeditCtrl draws legacy scalar text/prefix metrics. UiBaseEdit has GetCaret; UiDoc now has GetCaret override. Returning Null GetPreedit is NOT a fix: Core PreeditSync disables ImmAssociateContext when absent. Do not edit Core. A small renderer-host IME bridge and Ui-owned composition capability can intercept WM_IME_COMPOSITION before Core, use shared layout for preedit, leave native candidate selection to Windows, and commit atomically. This is a proposed next implementation, not completed.
+3. Finish live OS IME/candidate, physical input/DPI and remaining bidi edge acceptance. Native host composition implementation and34 automated checks are complete; do not reimplement the bridge or edit Core.
 4. Broaden bidi affinity/selection collapse/wrapped edge/table navigation and cache-bound/failure/concurrency/memory tests. Table image/caret pagination text_origin now shifts with cell rect.
 5. Final Debug/native BLITZ, Canvas/semantic/vector/scalar regressions; rebuild Gallery preserving GpuUiGalleryFinish.exe. Re-run all controls/browser/full picker/micro/dialog/captures/input/DPI; normal/heavy/full300s after complete text.
 6. Final evidence/docs/dashboard and local commits; no100% claim or publishing until acceptance passes.

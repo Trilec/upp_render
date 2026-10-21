@@ -17,6 +17,8 @@ file
 	GpuCtrl.cpp,
 	GpuTopWindow.h,
 	GpuTopWindow.cpp,
+	Win32GpuIme.h,
+	Win32GpuIme.cpp,
 	GpuTransientWindows.h,
 	GpuTransientWindows.cpp,
 	GpuWindow.h,

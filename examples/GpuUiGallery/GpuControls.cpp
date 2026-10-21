@@ -1,4 +1,5 @@
 #include "GpuControls.h"
+#include <RenderVulkan/RenderVulkanTestHooks.h>
 #include "GpuCapture.h"
 #include <plugin/png/png.h>
 #include <chrono>
@@ -41,9 +42,9 @@ struct UiFileBrowserTest {
 GpuControlsDialog::GpuControlsDialog(bool validation)
 {
 	SetRequireGpu().SetValidation(validation).SetAsyncPresentation();
-	Title("Vulkan controls: file browser and colour pickers").Sizeable().Zoomable()
+	Title("Vulkan UI controls and text").Sizeable().Zoomable()
 	     .SetRect(0,0,1240,800);
-	heading.SetText("File browser, full colour picker and micro picker — Vulkan client drawing");
+	heading.SetText("File browser, colour pickers and multilingual text");
 	status.SetText("Select a tab. Browser previews and palette data are prepared once and uploaded.");
 	close.SetText("Close"); close.WhenAction=[=] { Close(); };
 	browser.WhenAccept=[=](const UiFileBrowserSelection& selection) {
@@ -56,6 +57,13 @@ GpuControlsDialog::GpuControlsDialog(bool validation)
 	micro.SetColor(Color(40,130,220));
 	micro.WhenAction=[=] { ++actions; status.SetText("Micro picker applied "+micro.GetHex()); };
 	tabs.Add(browser,"File browser"); tabs.Add(picker,"Colour picker"); micro_page.Add(micro); tabs.Add(micro_page,"Micro picker");
+	text_help.SetText("Select, edit and compose text with your active input method. All application text is drawn in Vulkan.");
+	WString sample("Arabic: "); for(int cp:{0x633,0x644,0x627,0x645}) sample.Cat(cp);
+	sample.Cat("\nIndic: "); for(int cp:{0x915,0x94d,0x937,0x93f}) sample.Cat(cp);
+	sample.Cat("\nMixed: A "); for(int cp:{0x5d0,0x5d1,0x5d2}) sample.Cat(cp); sample.Cat(" 42");
+	text_entry.SetText(WString("Type or paste here")); text_document.SetText(ToUtf8(sample));
+	text_page.Add(text_help); text_page.Add(text_entry); text_page.Add(text_document); tabs.Add(text_page,"Text & IME");
+
 	micro.WhenLayoutChange=[=] { Layout(); };
 	Add(heading); Add(tabs); Add(status); Add(close);
 }
@@ -72,6 +80,10 @@ void GpuControlsDialog::Layout()
 	status.SetRect(pad,max(pad,s.cy-pad-DPI(30)),max(0,s.cx-2*pad-DPI(100)),DPI(28));
 	Size ms=micro.GetMinSize();
 	micro.SetRect(pad,pad,min(ms.cx,max(0,micro_page.GetSize().cx-2*pad)),ms.cy);
+	Size ts=text_page.GetSize(); int content_width=max(0,ts.cx-2*pad);
+	text_help.SetRect(pad,pad,content_width,DPI(38));
+	text_entry.SetRect(pad,pad+DPI(44),content_width,DPI(36));
+	text_document.SetRect(pad,pad+DPI(88),content_width,max(0,ts.cy-2*pad-DPI(88)));
 	close.SetRect(max(pad,s.cx-pad-DPI(92)),max(pad,s.cy-pad-DPI(30)),DPI(92),DPI(28));
 }
 void GpuControlsDialog::StartQualification(String& output)
@@ -175,7 +187,52 @@ void GpuControlsDialog::Tick()
 		*report<<evidence; if(!ok) { Finish(false,"full picker capture"); return; }
 		tabs.SetActiveTab(0); ++step; return;
 	}
-	String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-browser-dark",evidence); *report<<evidence;
-	Finish(ok,"scan/preview/selection/accept/cancel/nested micro popup/16 picker states/hex/themes/resize");
+	if(step==25) {
+		String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-browser-dark",evidence); *report<<evidence;
+		if(!ok) { Finish(false,"browser capture"); return; }
+		tabs.SetActiveTab(3); ++step; return;
+	}
+	if(step==26) {
+		text_entry.SetFocus(); text_entry.SetSelection(0,text_entry.GetText().GetCount());
+		String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-text-idle",evidence); *report<<evidence;
+		if(!ok) { Finish(false,"text baseline capture"); return; }
+		GpuImeComposition value; for(int cp:{0x633,0x644,0x627,0x645}) value.text.Cat(cp);
+		value.caret=2; value.attributes.SetCount(4,1);
+		preedit_device_count=VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics().device_live_count;
+		if(!text_entry.UpdateGpuComposition(value)) { Finish(false,"text composition update"); return; }
+		++step; return;
+	}
+	if(step==27) {
+		if(text_entry.GetCaret().bottom<=text_entry.GetSize().cy ||
+		   VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics().device_live_count!=preedit_device_count) {
+			Finish(false,"composition must escape field clipping without a new GPU device"); return;
+		}
+		String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-text-preedit",evidence); *report<<evidence;
+		text_entry.CancelGpuComposition();
+		if(!ok || text_entry.GetText()!=WString("Type or paste here")) { Finish(false,"preedit capture/cancel"); return; }
+		WString value; for(int cp:{0x633,0x644,0x627,0x645}) value.Cat(cp);
+		if(!text_entry.CommitGpuComposition(value) || text_entry.GetText()!=value) { Finish(false,"text composition commit"); return; }
+		++step; return;
+	}
+	*report<<"text_document_shown="<<text_document.IsShown()<<" size="<<text_document.GetSize()
+	       <<" text_length="<<text_document.GetTextW().GetCount()<<" active_tab="<<tabs.GetActiveTab()<<"\n";
+	String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-text-committed",evidence); *report<<evidence;
+	Image idle=StreamRaster::LoadFileAny(GetExeDirFile("GpuUi-text-idle.png"));
+	Image preedit=StreamRaster::LoadFileAny(GetExeDirFile("GpuUi-text-preedit.png"));
+	Image committed=StreamRaster::LoadFileAny(GetExeDirFile("GpuUi-text-committed.png"));
+	Point origin=text_document.GetScreenView().TopLeft()-GetScreenView().TopLeft();
+	Rect unchanged=RectC(origin.x+8,origin.y+20,text_document.GetSize().cx-16,text_document.GetSize().cy-28);
+	int changed=0,ink_pixels=0;
+	ok &= !idle.IsEmpty() && idle.GetSize()==preedit.GetSize() && idle.GetSize()==committed.GetSize() &&
+	      unchanged.left>=0 && unchanged.top>=0 && unchanged.right<=idle.GetWidth() && unchanged.bottom<=idle.GetHeight();
+	if(ok) for(int y=unchanged.top;y<unchanged.bottom;++y) for(int x=unchanged.left;x<unchanged.right;++x) {
+		const RGBA& a=idle[y][x]; const RGBA& b=preedit[y][x]; const RGBA& c=committed[y][x];
+		if(a.r>100 && a.g>100 && a.b>100) ++ink_pixels;
+		if(a.r!=b.r || a.g!=b.g || a.b!=b.b || a.r!=c.r || a.g!=c.g || a.b!=c.b) ++changed;
+	}
+	*report<<"text_unchanged_document_pixels="<<changed<<" baseline_ink_pixels="<<ink_pixels<<"\n";
+	ok &= changed==0 && ink_pixels>50;
+	Finish(ok,"scan/preview/selection/accept/cancel/nested micro/16 picker states/themes/resize/text composition overlay/cancel/commit");
+
 }
 }

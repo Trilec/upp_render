@@ -1,5 +1,6 @@
 uses
 	Ui,
+	GpuRender,
 	CtrlLib,
 	RenderCore,
 	RenderSoftware,
@@ -9,6 +10,6 @@ uses
 	plugin/png;
 uses(CFONTS)
 	RenderFontWin32;
-file main.cpp, NativeReference.cpp, Editing.cpp, Styled.cpp, Document.cpp;
+file main.cpp, NativeReference.cpp, Editing.cpp, Styled.cpp, Document.cpp, Ime.cpp;
 mainconfig
 	"" = "GUI GPUUI CFONTS";

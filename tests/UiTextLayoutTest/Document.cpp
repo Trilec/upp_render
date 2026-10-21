@@ -6,7 +6,7 @@
 using namespace Upp;
 namespace {
 WString S(std::initializer_list<int> values) { WString s; for(int cp:values) s.Cat(cp); return s; }
-bool NativeGpuDocument(const UiDisplayList& list) {
+bool NativeGpuDocument(const UiDisplayList& list,const char *path="build/UiTextLayout-document.png") {
  HWND hwnd=CreateWindowExW(0,L"STATIC",L"Document offscreen qualification",WS_OVERLAPPEDWINDOW,0,0,32,32,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
  auto resolver=[](HMODULE,LPCSTR)->FARPROC { return reinterpret_cast<FARPROC>(1); };
  VulkanSurfaceSession session; GpuNativeWindowDesc native; native.kind=GpuNativeWindowKind::Win32; native.handle=(uintptr_t)hwnd;
@@ -18,24 +18,26 @@ bool NativeGpuDocument(const UiDisplayList& list) {
   if(ok) {
    {
     UiRenderer2D renderer(device); UiRenderer2DTarget output; output.color_target=target; output.size=desc.size; output.color_format=desc.format;
+    output.clear_color.red=output.clear_color.green=output.clear_color.blue=output.clear_color.alpha=1;
     Vector<byte> pixels; ok=renderer.Render(list,output) && device.ReadTexturePixels(target,pixels);
     if(ok) {
      ImageBuffer image(640,420);
      for(int y=0;y<420;++y) for(int x=0;x<640;++x) {
       const byte *p=pixels.Begin()+4*(y*640+x); auto& c=image[y][x]; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
      }
-     ok=PNGEncoder().SaveFile("build/UiTextLayout-document.png",Image(image));
+     ok=PNGEncoder().SaveFile(path,Image(image));
     }
     ok=ok && renderer.GetStats().cpu_glyph_raster_count==0 && renderer.GetStats().vector_raster_count==0;
    }
    device.DestroyTexture(target);
   }
-  ok=ok && device.GetLiveTextureCount()==0 && device.GetLiveBufferCount()==0 && device.GetLiveCommandCount()==0;
+  ok=ok && device.GetLiveTextureCount()==0 && device.GetLiveBufferCount()==0 && device.GetLiveCommandCount()==0 && device.GetLiveShaderCount()==0 && device.GetLivePipelineCount()==0;
  }
  session.Close(); if(hwnd) DestroyWindow(hwnd);
  return ok && session.GetReport().validation_error_count==0 && session.GetReport().validation_warning_count==0;
 }
 }
+bool TestUiTextImageGpu(const UiDisplayList& list,const char *path) { return NativeGpuDocument(list,path); }
 bool TestDocumentText()
 {
  bool ok=true; int checks=0;

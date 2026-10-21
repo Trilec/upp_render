@@ -18,7 +18,10 @@ private:
 	UiFileBrowser browser;
 	UiColorPicker picker;
 	UiColorPickerMicro micro;
-	UiPanel micro_page;
+	UiPanel micro_page,text_page;
+	UiLabel text_help;
+	UiLineEdit text_entry;
+	UiDoc text_document;
 	UiTab tabs;
 	UiLabel heading,status;
 	UiButton close;
@@ -28,5 +31,6 @@ private:
 	bool passed=false, theme_changed=false;
 	double started=0;
 	uint64 frame=0;
+	int preedit_device_count=0;
 };
 }

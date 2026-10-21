@@ -9,6 +9,7 @@ bool CaptureGpuUiClient(GpuTopWindow& window,const String& name,String& evidence
 {
 	UiDisplayList list; String detail;
 	bool ok=RecordCtrlDisplayList(window,list,detail);
+	if(ok && name.StartsWith("GpuUi-text")) SaveFile(GetExeDirFile(name+".canvas.txt"),list.Dump());
 	VulkanSurfaceSession session;
 	GpuNativeWindowDesc native; native.kind=GpuNativeWindowKind::Win32;
 	native.handle=(uintptr_t)window.GetHWND();

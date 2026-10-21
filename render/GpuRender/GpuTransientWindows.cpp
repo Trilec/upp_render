@@ -1,4 +1,5 @@
 #include "GpuTransientWindows.h"
+#include "Win32GpuIme.h"
 #include "GpuTopWindow.h"
 #include "RenderCtrlBridge.h"
 
@@ -145,6 +146,9 @@ public:
 		GpuTransientWindowHost *host = FindTransientHost(hwnd);
 		if(!host)
 			return DefWindowProc(hwnd, message, wParam, lParam);
+
+		LRESULT ime_result=0;
+		if(host->ctrl && host->IsActive() && HandleWin32GpuIme(*host->ctrl,hwnd,message,wParam,lParam,ime_result)) return ime_result;
 
 		if(message == WM_NCDESTROY)
 			return host->DetachForDestroy(message, wParam, lParam);

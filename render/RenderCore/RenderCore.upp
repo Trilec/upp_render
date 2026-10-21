@@ -6,5 +6,7 @@ file
 	RenderCore.h,
 	GpuDrawTarget.h,
 	GpuTextLayout.h,
+	GpuImeClient.h,
+	GpuImeClient.cpp,
 	GpuTextLayout.cpp,
 	RenderCore.cpp;

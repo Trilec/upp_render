@@ -1,4 +1,5 @@
 #include "GpuTopWindow.h"
+#include "Win32GpuIme.h"
 #include "GpuTransientWindows.h"
 #include "RenderCtrlBridge.h"
 #include <atomic>
@@ -353,6 +354,8 @@ void GpuTopWindow::NcCreate(HWND hwnd) { TopWindow::NcCreate(hwnd); if(impl) imp
 void GpuTopWindow::PreDestroy() { if(impl) impl->StopGpuSession(); TopWindow::PreDestroy(); }
 LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
+	LRESULT ime_result=0;
+	if(impl && impl->IsGpuReady() && HandleWin32GpuIme(*this,GetHWND(),message,wParam,lParam,ime_result)) return ime_result;
 	if(message == Win32GpuFrameClock::Message()) {
 		if(impl && impl->frame_clock.Consume(wParam)) {
 			Ptr<GpuTopWindow> alive(this);

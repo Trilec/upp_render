@@ -2,10 +2,11 @@
 
 #include <CtrlLib/CtrlLib.h>
 #include "RenderPresentation.h"
+#include <RenderCore/GpuImeClient.h>
 
 namespace Upp {
 
-class GpuTopWindow : public TopWindow {
+class GpuTopWindow : public TopWindow, public GpuImeOverlayHost {
 public:
 	GpuTopWindow();
 	~GpuTopWindow() override;
@@ -26,6 +27,7 @@ public:
 	// callbacks may close/destroy this window. Does not alter Core timer time.
 	Event<double> WhenGpuFrame;
 	bool IsGpuReady() const;
+	bool IsGpuImeOverlayReady() const override { return IsGpuReady(); }
 	String GetGpuError() const;
 	GpuBackendKind GetBackend() const;
 	bool IsValidationRequested() const;
