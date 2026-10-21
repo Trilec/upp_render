@@ -9,9 +9,9 @@ namespace {
 static RGBA ToRgba(const Rgba8& c)
 {
 	RGBA rgba;
-	rgba.r = c.r;
-	rgba.g = c.g;
-	rgba.b = c.b;
+	rgba.r = ((int)c.r * c.a + 127) / 255;
+	rgba.g = ((int)c.g * c.a + 127) / 255;
+	rgba.b = ((int)c.b * c.a + 127) / 255;
 	rgba.a = c.a;
 	return rgba;
 }
@@ -133,13 +133,19 @@ static bool FillPaint(Painter& painter, const UiPaint& paint, double scale, Poin
 	AddIntermediateStops(painter, paint);
 	const UiGradientStop& first = paint.stops[0];
 	const UiGradientStop& last = paint.stops.Top();
+	Xform2D matrix;
+	if(paint.kind == UiPaintKind::LinearGradient) {
+		Pointf d = paint.p1 - paint.p0;
+		matrix.x = Pointf(d.x, -d.y); matrix.y = Pointf(d.y, d.x); matrix.t = paint.p0;
+	}
+	else { matrix = Xform2D::Scale(paint.radius); matrix.t = paint.p1; }
+	Xform2D local; local.x = paint.transform.x; local.y = paint.transform.y; local.t = paint.transform.t;
+	matrix = matrix * local * Xform2D::Scale(scale) * Xform2D::Translation(offset.x, offset.y);
 	if(paint.kind == UiPaintKind::LinearGradient)
-		painter.Fill(MapPoint(paint.p0, scale, offset), ToRgba(first.color),
-		             MapPoint(paint.p1, scale, offset), ToRgba(last.color), PainterSpread(paint.spread));
+		painter.Fill(ToRgba(first.color), ToRgba(last.color), matrix, PainterSpread(paint.spread));
 	else
-		painter.Fill(MapPoint(paint.p0, scale, offset), ToRgba(first.color),
-		             MapPoint(paint.p1, scale, offset), paint.radius * scale,
-		             ToRgba(last.color), PainterSpread(paint.spread));
+		painter.Fill((paint.p0 - paint.p1) / paint.radius, ToRgba(first.color),
+		             ToRgba(last.color), matrix, PainterSpread(paint.spread));
 	painter.ClearStops();
 	return true;
 }
@@ -159,15 +165,19 @@ static bool StrokePaint(Painter& painter, const UiPaint& paint, double width,
 	AddIntermediateStops(painter, paint);
 	const UiGradientStop& first = paint.stops[0];
 	const UiGradientStop& last = paint.stops.Top();
+	Xform2D matrix;
+	if(paint.kind == UiPaintKind::LinearGradient) {
+		Pointf d = paint.p1 - paint.p0;
+		matrix.x = Pointf(d.x, -d.y); matrix.y = Pointf(d.y, d.x); matrix.t = paint.p0;
+	}
+	else { matrix = Xform2D::Scale(paint.radius); matrix.t = paint.p1; }
+	Xform2D local; local.x = paint.transform.x; local.y = paint.transform.y; local.t = paint.transform.t;
+	matrix = matrix * local * Xform2D::Scale(scale) * Xform2D::Translation(offset.x, offset.y);
 	if(paint.kind == UiPaintKind::LinearGradient)
-		painter.Stroke(width * scale,
-		               MapPoint(paint.p0, scale, offset), ToRgba(first.color),
-		               MapPoint(paint.p1, scale, offset), ToRgba(last.color), PainterSpread(paint.spread));
+		painter.Stroke(width * scale, ToRgba(first.color), ToRgba(last.color), matrix, PainterSpread(paint.spread));
 	else
-		painter.Stroke(width * scale,
-		               MapPoint(paint.p0, scale, offset), ToRgba(first.color),
-		               MapPoint(paint.p1, scale, offset), paint.radius * scale,
-		               ToRgba(last.color), PainterSpread(paint.spread));
+		painter.Stroke(width * scale, (paint.p0 - paint.p1) / paint.radius, ToRgba(first.color),
+		             ToRgba(last.color), matrix, PainterSpread(paint.spread));
 	painter.ClearStops();
 	return true;
 }
@@ -185,6 +195,47 @@ static bool SafeRasterSize(const Rectf& rect, double scale, Size& out)
 	return true;
 }
 
+}
+
+static bool ReplayAngularPaint(Painter& painter, const UiDisplayOp& op, double scale,
+                               Pointf offset, String& error)
+{
+	const UiPaint& paint=op.paint;
+	Rectf bounds=op.path.GetControlBounds();
+	double pad=2/scale;
+	if(op.type==UiDisplayOpType::StrokePath) pad+=op.stroke.width*max(1.0,op.stroke.miter_limit);
+	bounds.Inflate(pad,pad);
+	Size size;
+	if(!paint.IsValid() || !SafeRasterSize(bounds,scale,size)) { error="invalid angular paint bounds"; return false; }
+	ImageBuffer image(size); const auto& m=paint.transform;
+	double det=m.x.x*m.y.y-m.x.y*m.y.x, tau=2*M_PI, sweep=min(fabs(paint.p1.y),tau);
+	for(int y=0;y<size.cy;++y) for(int x=0;x<size.cx;++x) {
+		Pointf d(bounds.left+(x+.5)/scale-m.t.x,bounds.top+(y+.5)/scale-m.t.y);
+		Pointf q((m.y.y*d.x-m.x.y*d.y)/det,(-m.y.x*d.x+m.x.x*d.y)/det); q-=paint.p0;
+		double phase=fmod((paint.p1.y<0?-1:1)*(atan2(q.y,q.x)-paint.p1.x),tau);
+		if(phase<0) phase+=tau;
+		double t=phase/sweep;
+		if(sweep<tau-1e-6 && phase>sweep) {
+			double delta=fabs(phase-sweep);
+			t=min(phase,tau-phase)<=min(delta,tau-delta)?0:1;
+		}
+		t=minmax(t,0.0,1.0);
+		int stop=1; while(stop+1<paint.stops.GetCount() && t>paint.stops[stop].position) ++stop;
+		const auto& a=paint.stops[stop-1]; const auto& b=paint.stops[stop];
+		double u=b.position>a.position?(t-a.position)/(b.position-a.position):1;
+		auto mix=[&](int aa,int bb)->byte { return (byte)minmax((int)round(aa*(1-u)+bb*u),0,255); };
+		image[y][x]=ToRgba(Rgba8(mix(a.color.r,b.color.r),mix(a.color.g,b.color.g),
+		                         mix(a.color.b,b.color.b),mix(a.color.a,b.color.a)));
+	}
+	Xform2D placement=Xform2D::Translation(bounds.left*scale+offset.x,bounds.top*scale+offset.y);
+	if(op.type==UiDisplayOpType::FillPath) painter.Fill(Image(image),placement);
+	else painter.Stroke(op.stroke.width*scale,Image(image),placement);
+	return true;
+}
+
+bool ReplayUiPath(Painter& painter, const UiPath& path, String& error)
+{
+	return ReplayPath(painter,path,1.0,Pointf(0,0),error);
 }
 
 bool ReplayUiVectorOp(Painter& painter, const UiDisplayOp& op, String& error,
@@ -232,7 +283,8 @@ bool ReplayUiVectorOp(Painter& painter, const UiDisplayOp& op, String& error,
 		painter.EvenOdd(op.fill_rule == UiFillRule::EvenOdd);
 		ok = ReplayPath(painter, op.path, scale, offset, error);
 		if(ok)
-			ok = FillPaint(painter, op.paint, scale, offset, error);
+			ok = op.paint.kind==UiPaintKind::AngularGradient ? ReplayAngularPaint(painter,op,scale,offset,error) :
+			     FillPaint(painter, op.paint, scale, offset, error);
 	}
 	else {
 		String reason;
@@ -254,7 +306,8 @@ bool ReplayUiVectorOp(Painter& painter, const UiDisplayOp& op, String& error,
 			ok = ReplayPath(painter, op.path, scale, offset, error);
 		}
 		if(ok)
-			ok = StrokePaint(painter, op.paint, op.stroke.width, scale, offset, error);
+			ok = op.paint.kind==UiPaintKind::AngularGradient ? ReplayAngularPaint(painter,op,scale,offset,error) :
+			     StrokePaint(painter, op.paint, op.stroke.width, scale, offset, error);
 	}
 	painter.End();
 	return ok;

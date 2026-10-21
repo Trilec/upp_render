@@ -7,4 +7,5 @@ uses
 
 file
 	RenderVector.h,
-	RenderVector.cpp;
+	RenderVector.cpp,
+	SemanticPainter.cpp;

@@ -1,6 +1,6 @@
 # GPU vector and glyph coverage
 
-Updated 2026-10-15. The Windows/Vulkan renderer generates general path and glyph
+Updated 2026-10-22. The Windows/Vulkan renderer generates general path and glyph
 pixels on the GPU. CPU work prepares bounded edge geometry. The optional engine
 uses the existing RHI compute/copy API and embedded SPIR-V; deployed applications
 need the graphics driver, without a shader compiler or Vulkan SDK.
@@ -10,8 +10,9 @@ need the graphics driver, without a shader compiler or Vulkan SDK.
 The convex/straight-stroke fast path is unchanged. General FillPath/StrokePath
 supports quadratic/cubic curves, compound nonzero/even-odd fills, open/closed
 strokes, all existing caps/joins, dash offset/pattern, linear gradients and focal
-radial gradients with Pad/Repeat/Reflect. Rectangular clip and painter order are
-preserved by the existing replay geometry.
+radial gradients with Pad/Repeat/Reflect, plus angular gradients. Rectangular
+clips and painter order are preserved. Bounded GPU composition supports path
+clips and 3x3 box blur without CPU masks.
 
 Fill subdivision has a 0.175 device-pixel bound. Stroke subdivision, dash and cap
 geometry use Painter's existing geometry consumers, without its rasterizer.
@@ -53,7 +54,7 @@ descriptor pools retain their existing bounded reuse policy.
 
 ## Qualification
 
-RenderVulkanGeneralVectorTest passes in Release and Debug: 120 declared cases
+RenderVulkanGeneralVectorTest passes in Release and Debug: 152 declared cases
 over RGBA/BGRA UNORM/sRGB, plus transformed gradient numerics, clipped transparency,
 exact integer-translation reuse and explicit oversized/dash/stop/cache failures.
 Concave and compound fills and curved strokes compare independent software
@@ -69,29 +70,45 @@ them within 0.005124. The legacy comparison has a separately declared maximum
 0.25 and mean 0.001 bound for this extended fixture.
 
 RenderGpuVectorTest preserves the compute-unsupported Null reference.
-RenderVulkanVectorTest explicitly counts the remaining CPU SVG and the required
-sRGB gradient variant. Existing direct-path regressions remain applicable.
+RenderVulkanVectorTest verifies semantic SVG replay with zero CPU vector rasters
+and the required sRGB gradient variant (seven ordered batches). Existing direct-path regressions remain applicable.
 Native validation and complete ownership cleanup are required by these tests.
 
-Current application: build/GpuUiGalleryVector.exe. Exact artifact/job identities,
+Current application: build/GpuUiGalleryFinish.exe. Exact artifact/job identities,
 source hashes, dependency state and raw reports are preserved in
-build/vulkan-vector-glyph-qualification-2026-10-15.json.
+VULKAN_UI_FINISH_QUALIFICATION.json. Earlier evidence remains in the2026-10-15 manifest.
 See VULKAN_UI_FINISHING.md for the application measurements.
+
+## Semantic Painter and composition
+
+SVG and retained Painting now record existing Painter path intent instead of
+allocating CPU vector images on the Vulkan branch. Ui helper migration covers
+faces, focus, rings, ranges, dropdown content, tags, graph grids and shadows.
+56 catalogue controls pass224 drawing cases; eight shadow cases independently
+check coloured coverage, cutouts and repeat resource reuse. GPU scalar glyph
+coverage remains unchanged and passes the current DirectWrite Unicode tests.
+
+Clip/filter composition has4nested-scope,64operations/frame,32retained-entry,
+64MiB pixel-payload and4096axis bounds. Path clips crop targets conservatively;
+idle variants reuse textures. Depth/budget failures recover on the next valid
+frame. Mask/colour targets preserve the destination colour space. Simple angular,
+blur and repeated-image pixel oracles pass on all four formats.
+
+Painter BeginMask, text-on-path and image-pattern strokes fail explicitly.
+Image fills bound repetition to64cells/axis and256total. Layer-mask AA is not
+a promise of exact legacy per-primitive composition. Software BlurLayer reports
+GPU required; native software Ui drawing retains its own fallback routes.
 
 ## Remaining work
 
-This closes gate 4's stated general-path/gradient/clip/bounds criterion.
-The whole-UI checklist remains 6/10. SVG still uses the explicitly counted CPU
-Painter path; remaining Ui shared shapes, shadows and layer helpers need semantic
-GPU routes. Full shaped glyph runs/bidi and current visual/input/monitor-DPI
-acceptance remain open. Core and Animation were read only.
+General GPU drawing and shared-helper gates4/6 pass. The full Windows checklist
+is7/10 (70%). The user authorized full shaped text and cluster-correct editing
+now; implement that shared layout authority before closing gate5. Current
+physical input/AA/monitor-DPI acceptance remains open.
 
-The Gallery currently observes about 64 callback/record/present updates per
-second at its 120 FPS Animation target. GPU coverage does not resolve that
-scheduler seam. Process-cold first-frame timing includes driver pipeline/cache
-effects and is CPU elapsed time, not a GPU timestamp.
+Steady-clock stepping of the existing Animation::State removed the observed64Hz
+cadence in this Gallery. Current heavy runs deliver about120distinct updates/s;
+the full300second soak passed. See WINDOWS_FRAME_PACING.md and the qualification
+manifest. CPU elapsed timings are not GPU timestamps.
 
-Compute shader authoring and the embedded UINT16/dither demo are separately
-qualified. OCIO LUT bindings, asynchronous source-image streaming and video
-qualification remain future imaging work; this coverage engine does not certify
-them. WebGPU and Metal follow the Windows milestone.
+WebGPU/Metal and OCIO/asynchronous video remain separate work.

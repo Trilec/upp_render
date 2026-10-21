@@ -91,6 +91,7 @@ enum class GpuBlendMode {
 	DestinationInvert,
 	// Source RGB is already multiplied by source alpha in the working colour space.
 	PremultipliedSourceOver,
+	DestinationIn, // Multiply destination colour and alpha by source alpha.
 };
 
 enum class GpuSamplerFilter {

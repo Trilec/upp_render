@@ -1,0 +1,32 @@
+#pragma once
+#include <GpuRender/GpuRender.h>
+#include <Ui/Ui.h>
+#include <Ui/UiFileBrowser/UiFileBrowser.h>
+
+namespace Upp {
+// Ordinary Ui controls hosted by a Vulkan root, including the optional browser.
+class GpuControlsDialog : public GpuTopWindow {
+public:
+	explicit GpuControlsDialog(bool validation);
+	~GpuControlsDialog() override;
+	void Layout() override;
+	void StartQualification(String& report);
+	bool QualificationPassed() const { return passed; }
+private:
+	void Tick();
+	void Finish(bool ok,const String& detail);
+	UiFileBrowser browser;
+	UiColorPicker picker;
+	UiColorPickerMicro micro;
+	UiPanel micro_page;
+	UiTab tabs;
+	UiLabel heading,status;
+	UiButton close;
+	UiThemeContext original_theme;
+	String *report=nullptr;
+	int step=0, picker_cases=0, actions=0, accepts=0, cancels=0;
+	bool passed=false, theme_changed=false;
+	double started=0;
+	uint64 frame=0;
+};
+}

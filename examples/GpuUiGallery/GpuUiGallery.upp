@@ -3,8 +3,13 @@ uses
 	Animation,
 	CtrlLib,
 	Ui,
+	Ui/UiFileBrowser,
 	Utilities/PropertyEditor,
-	GpuRender;
+	GpuRender,
+	RenderVulkan,
+	RenderGpu2D,
+	RenderCtrlBridge,
+	plugin/png;
 
 uses(CFONTS)
 	RenderFontWin32;
@@ -12,7 +17,11 @@ uses(CFONTS)
 file
 	main.cpp,
 	GpuComputeScene.h,
-	GpuComputeScene.cpp;
+	GpuComputeScene.cpp,
+	GpuCapture.h,
+	GpuCapture.cpp,
+	GpuControls.h,
+	GpuControls.cpp;
 
 mainconfig
 	"" = "GUI GPUUI CFONTS";

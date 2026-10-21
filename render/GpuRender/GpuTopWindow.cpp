@@ -143,7 +143,7 @@ struct GpuTopWindow::Impl {
 		if(!BuildWin32GpuNativeWindowDesc(hwnd, native_window, native_error)) { SetSessionError(native_error); return; }
 		String open_error;
 		if(!presenter.Open(backend_kind, validation_requested, native_window, open_error)) { SetSessionError(open_error.IsEmpty() ? presenter.GetError() : open_error); return; }
-		if(frame_clock_requested && !frame_clock.Start(hwnd)) {
+		if(frame_clock_requested && !frame_clock.Start(hwnd, 240)) {
 			presenter.Close();
 			SetSessionError("precise Windows frame clock could not start");
 			return;
@@ -354,8 +354,17 @@ void GpuTopWindow::PreDestroy() { if(impl) impl->StopGpuSession(); TopWindow::Pr
 LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if(message == Win32GpuFrameClock::Message()) {
-		if(impl && impl->frame_clock.Consume(wParam))
-			TimerProc(msecs()); // existing scheduler, on the UI thread; callbacks may close this root
+		if(impl && impl->frame_clock.Consume(wParam)) {
+			Ptr<GpuTopWindow> alive(this);
+			if(IsShown() && !IsIconic(GetHWND())) {
+				auto callback = WhenGpuFrame;
+				const double now = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now().time_since_epoch()).count();
+				callback(now);
+			}
+			if(alive && alive->IsOpen())
+				TimerProc(msecs()); // Preserve ordinary U++ timers in their original clock domain.
+		}
 		return 0;
 	}
 	if(impl && impl->require_gpu) {

@@ -334,7 +334,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		return GpuResult::InvalidArgument;
 	}
 	if(desc.blend_mode != GpuBlendMode::Opaque && desc.blend_mode != GpuBlendMode::SourceOver &&
-	   desc.blend_mode != GpuBlendMode::PremultipliedSourceOver) {
+	   desc.blend_mode != GpuBlendMode::PremultipliedSourceOver && desc.blend_mode != GpuBlendMode::DestinationIn) {
 		impl->error = "sampled Vulkan pipeline received an unsupported blend mode";
 		return GpuResult::InvalidArgument;
 	}
@@ -441,6 +441,15 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
 		blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 		blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	}
+	if(desc.blend_mode == GpuBlendMode::DestinationIn) {
+		blend_attachment.blendEnable = VK_TRUE;
+		blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+		blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+		blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 		blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
 	}
 	VkPipelineColorBlendStateCreateInfo blend {};

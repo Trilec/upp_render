@@ -186,11 +186,14 @@ bool PrepareGpuVectorGeometry(const UiDisplayOp& op, const Transform2D& t, GpuVe
 	auto& p=out.parameters; p.width=size.cx; p.height=size.cy;
 	p.evenodd=op.type==UiDisplayOpType::FillPath && op.fill_rule==UiFillRule::EvenOdd;
 	p.kind=(uint32)paint.kind; p.stop_count=out.stops.GetCount(); p.spread=(uint32)paint.spread;
-	double xx=t.y.y/determinant, xy=-t.x.y/determinant, yx=-t.y.x/determinant, yy=t.x.x/determinant;
-	Pointf origin=Pointf(out.bounds.TopLeft())-t.t;
+	const Transform2D gradient = paint.transform * t;
+	const double gd = gradient.x.x * gradient.y.y - gradient.x.y * gradient.y.x;
+	double xx=gradient.y.y/gd, xy=-gradient.x.y/gd, yx=-gradient.y.x/gd, yy=gradient.x.x/gd;
+	Pointf origin=Pointf(out.bounds.TopLeft())-gradient.t;
 	p.inverse_x[0]=(float)xx; p.inverse_x[1]=(float)xy; p.inverse_x[2]=(float)(xx*origin.x+xy*origin.y-paint.p0.x); p.inverse_x[3]=(float)paint.radius;
 	p.inverse_y[0]=(float)yx; p.inverse_y[1]=(float)yy; p.inverse_y[2]=(float)(yx*origin.x+yy*origin.y-paint.p0.y);
 	p.points[2]=(float)(paint.p1.x-paint.p0.x); p.points[3]=(float)(paint.p1.y-paint.p0.y);
+	if(paint.kind==UiPaintKind::AngularGradient) { p.points[2]=(float)paint.p1.x; p.points[3]=(float)paint.p1.y; }
 	error.Clear(); return true;
 }
 GpuVectorRasterizer::~GpuVectorRasterizer()

@@ -1,0 +1,637 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-22",
+  "scope": "Windows/Vulkan semantic Ui drawing and steady-clock pacing baseline; full shaped text and final physical input/DPI acceptance remain in progress",
+  "acceptance": {
+    "passed_gates": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      8,
+      9
+    ],
+    "total_gates": 10,
+    "percent": 70,
+    "inventory_catalogue": 57,
+    "drawable_inventory": 56,
+    "drawing_cases": 224,
+    "shadow_cases": 8
+  },
+  "renderer_head_before_commit": "bb32884df1d8ea8693f498a7adec230c7edd456c",
+  "ui_commit": "228a1b968e0b13ef21b4cbb4baf1115c3c7a8686",
+  "animation_commit": "4a01b6f4e2a9f122ea1a93457b62a4054d01f970",
+  "dependency_note": "Existing unrelated UiTitleCard and UiThemeOlive working changes were included in the build and preserved, not staged by this task. Hashes are recorded. Other concurrent documentation/demo changes remain untouched. Core and Animation were read-only.",
+  "artifact": {
+    "path": "build/GpuUiGalleryFinish.exe",
+    "sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+    "size": 8296960,
+    "build_job": "exec-0190110EFF0D8AB1FD2D14593C616B88"
+  },
+  "source_files": [
+    {
+      "path": "examples/GpuUiGallery/GpuUiGallery.upp",
+      "sha256": "008d92d11a1a788b49401f416a750fc3bbf70be6e6280a0c8d72e85c164674f6",
+      "size": 380
+    },
+    {
+      "path": "examples/GpuUiGallery/main.cpp",
+      "sha256": "b86173ebda3611de3c3433342c3a68be29a30999d8fffa9113b1bc9d13c51353",
+      "size": 48833
+    },
+    {
+      "path": "render/GpuRender/GpuTopWindow.cpp",
+      "sha256": "b71d56e8ff5e53c6b08fe56f9577fb7ff0088160246bad47529cc99e8d886bdd",
+      "size": 13721
+    },
+    {
+      "path": "render/GpuRender/GpuTopWindow.h",
+      "sha256": "edc8670f6ceb47e700c7546d49a01acde1f8051a38f75a6a1ac10bef5d43d0d1",
+      "size": 1831
+    },
+    {
+      "path": "render/RenderCanvas/RenderCanvas.cpp",
+      "sha256": "e378f7dfc186dc7145a2acd99d98024606d497524480e723673974fa9dcc02e8",
+      "size": 20316
+    },
+    {
+      "path": "render/RenderCanvas/RenderCanvas.h",
+      "sha256": "78df8d73f61b94d40db65e2416aa7bf9a12eb010489a04432be8e08e27782d4b",
+      "size": 10254
+    },
+    {
+      "path": "render/RenderCore/GpuDrawTarget.h",
+      "sha256": "8dbdb4dff240840d21ca1a28872c56f36569910a0c44742ca793e771b935160a",
+      "size": 1142
+    },
+    {
+      "path": "render/RenderCtrlBridge/RenderCtrlBridge.cpp",
+      "sha256": "cc541efd45fdfd31bf6166b517380eeb8641ffeea7605544a3c28a0fc5a4e498",
+      "size": 21231
+    },
+    {
+      "path": "render/RenderCtrlBridge/RenderCtrlBridge.upp",
+      "sha256": "be606e8c630db44751c54bcebe22e3acbce9d9cf1463f58797b3063707b6135b",
+      "size": 123
+    },
+    {
+      "path": "render/RenderCtrlBridge/RenderCtrlBridgeRegion.h",
+      "sha256": "6a100f5e39cf72f1922c256d1c8e786a6aa75488ab5f7a785b1e038faf2142a0",
+      "size": 5376
+    },
+    {
+      "path": "render/RenderGpu2D/GpuVectorRasterizer.cpp",
+      "sha256": "aedc50d97f9ec41306bb5742ade4d5ddd3a99bd093353955e812c27c85d5c6f7",
+      "size": 18120
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.cpp",
+      "sha256": "d7ead5f685a2d79b0e3c88daf2f3bca898fcab8d5e0f4f9ce5bced1f1b078079",
+      "size": 38090
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.h",
+      "sha256": "27b272e8a6731e377400e89e98b08d925e76dfeff1e083546a08effb14df45e1",
+      "size": 12560
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.upp",
+      "sha256": "ad26f46e79ddb6e0c809f328e2b7388bad5ead113e2f7ebc6a38b5c3d4576274",
+      "size": 321
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DBase.inc",
+      "sha256": "038c115966279923668ef042e00e58ec99e71cc7777ad45b2ea55dbaa6de1bbb",
+      "size": 42252
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DImage.cpp",
+      "sha256": "e4292920878e2edc2d1182c72658211615fb302c9bd278fda803ad62b8779196",
+      "size": 3939
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DVector.cpp",
+      "sha256": "fed87e1661609cbab49daff90abb6bcdbaac25877fccad7745cdfa717b32248c",
+      "size": 11734
+    },
+    {
+      "path": "render/RenderRhi/RenderRhi.h",
+      "sha256": "4d076244c8e52f46e358e7696a69de29a27ae4f0698d1cac36e9b1d98ebae72f",
+      "size": 14446
+    },
+    {
+      "path": "render/RenderSoftware/RenderSoftware.cpp",
+      "sha256": "9eb147fa65161479d0ea4c7858e2f7efa8592132a4c9409c8fdecbe6e6d40fce",
+      "size": 4657
+    },
+    {
+      "path": "render/RenderVector/RenderVector.cpp",
+      "sha256": "52fab308713de1ce1436e4937071d2f623fadbba2db3e759639175875fbce197",
+      "size": 13724
+    },
+    {
+      "path": "render/RenderVector/RenderVector.h",
+      "sha256": "c058ded4a5bf4addd0fbdb2ca9ed7665c60810b843f0edea1c41411eb9857175",
+      "size": 1449
+    },
+    {
+      "path": "render/RenderVector/RenderVector.upp",
+      "sha256": "f9ed4ed9fb2725fe26cd53f75022df36fa1c28281665a88412d5340e0d22fe6d",
+      "size": 132
+    },
+    {
+      "path": "render/RenderVulkan/RenderVulkanRhi.cpp",
+      "sha256": "be060dd986f1bc88dd4b4f5bd61f4e08c2de72973efafee53b600111c1c5c0d4",
+      "size": 28253
+    },
+    {
+      "path": "shaders/VectorCoverageSpirv.h",
+      "sha256": "574c35c6741fec9c9a1384a3d17b0511744533e683b1a19df84fcd5b2e8c33d4",
+      "size": 87842
+    },
+    {
+      "path": "shaders/vector_coverage.comp",
+      "sha256": "1713f91f38e2af8f1c6f03fb614d7c1d17732f6f8a8359a0eb84fb13bb7babe3",
+      "size": 5531
+    },
+    {
+      "path": "tests/GpuTopWindowPresentationTest/GpuTopWindowPresentationTest.upp",
+      "sha256": "21adce3733f9ae775bb6a056f545300fb2e5068d7ab5fd274f6b784c9e28f818",
+      "size": 137
+    },
+    {
+      "path": "tests/GpuTopWindowPresentationTest/main.cpp",
+      "sha256": "71602e603c9c49d43c10dd365d3e50f35ecec15c8409ae61497cf7201f016668",
+      "size": 17868
+    },
+    {
+      "path": "tests/RenderVulkanGeneralVectorTest/main.cpp",
+      "sha256": "d2260c95e94c8a79fefc5928d696d010caf89c112b1c9f6b2e33c593fd77a7cc",
+      "size": 19074
+    },
+    {
+      "path": "tests/RenderVulkanVectorTest/main.cpp",
+      "sha256": "dfaf11b32688533c463d511bb7ffcef4df1a28741bbc0e1c5f1dc5f8bb91a787",
+      "size": 11290
+    },
+    {
+      "path": "tests/UiGpuDrawingTest/UiGpuDrawingTest.upp",
+      "sha256": "f4384e520d7606023a6ff2a6d9c8e1442a27dc0cca4b9ab3f2827a87d0d3b508",
+      "size": 170
+    },
+    {
+      "path": "tests/UiGpuDrawingTest/main.cpp",
+      "sha256": "3ebb01b6250efeb2a7c2954a4b50b03d55b76ad80e68dcc693e42d56625e5f10",
+      "size": 17353
+    },
+    {
+      "path": "examples/GpuUiGallery/GpuCapture.cpp",
+      "sha256": "7f7b90ce49f9574b7116b387439ee112306c0e3f957d307c897fcb79c19584b3",
+      "size": 2222
+    },
+    {
+      "path": "examples/GpuUiGallery/GpuCapture.h",
+      "sha256": "2c84701cde5c9fbf8a3de13869d08deff098f95bf3950257c5e414f347cc9baa",
+      "size": 147
+    },
+    {
+      "path": "examples/GpuUiGallery/GpuControls.cpp",
+      "sha256": "7e187137a9d72ffa5b1ac588e2ae556dbbdf54e3c3b60f40c65fa41c8dd06e29",
+      "size": 8423
+    },
+    {
+      "path": "examples/GpuUiGallery/GpuControls.h",
+      "sha256": "f7159cef001b2d1fe06633bb05c0e1df9c26143d60f05c577f3ec7dc6328eb0b",
+      "size": 879
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2DLayer.cpp",
+      "sha256": "e7cc0da453b3894ed9e15126bcbb5c4b300be35512169c5832a86d67e6596ae9",
+      "size": 10262
+    },
+    {
+      "path": "render/RenderVector/SemanticPainter.cpp",
+      "sha256": "13f9ec73f043f7582fa22363a16280ab40a9e0ce71af08b50ebeaba78bfb500e",
+      "size": 16309
+    },
+    {
+      "path": "shaders/BoxBlurSpirv.h",
+      "sha256": "d242cc3abb9e418df741aed3e366c43e3d6a640698af02f6a6df26669b47a6b7",
+      "size": 4351
+    },
+    {
+      "path": "shaders/box_blur.frag",
+      "sha256": "41446eeda0ee34ec5fc6809fbb1793a0d5d9e625aaabc17a9d43c5cc797ea95a",
+      "size": 436
+    },
+    {
+      "path": "tests/RenderSemanticPainterTest/RenderSemanticPainterTest.upp",
+      "sha256": "c81d6a65991db36b645454c0d1ee4bd6b1cbd683b271b6031169499e89f0fb78",
+      "size": 115
+    },
+    {
+      "path": "tests/RenderSemanticPainterTest/main.cpp",
+      "sha256": "0dd0d52f4b6157514ade296c2426f8ddfb80929c5177d5d3504b74ba3fd91b6b",
+      "size": 3880
+    }
+  ],
+  "ui_dependency_files": [
+    {
+      "path": "Ui/UiDrawBase.h",
+      "sha256": "0b601cc2d5b2ef54145a35b4a46cb3e8bea51279d5f3a6fe5a86f4ff03767a57",
+      "size": 88404
+    },
+    {
+      "path": "Ui/UiDraw.h",
+      "sha256": "e615ed3c21ca0647047c3bb106fa2653e890f9085e61556a7151794bbb5f7fec",
+      "size": 10657
+    },
+    {
+      "path": "Ui/UiDraw.cpp",
+      "sha256": "4934430ce712809c8b3e1beb7ac49f929cba2371ea2829cf3e2b491c2737f2a9",
+      "size": 21991
+    },
+    {
+      "path": "Ui/UiRenderLayer.h",
+      "sha256": "4e6dcc66f03b9c3239ed2cd62210743fc720872d82366253dd91dafa611c30e5",
+      "size": 3761
+    },
+    {
+      "path": "Ui/UiSlider.cpp",
+      "sha256": "7e08eecc1c6b3097060c0fbf79249361e5e48353674cc40daa33235c1261a8c9",
+      "size": 21546
+    },
+    {
+      "path": "Ui/UiRangeSlider.cpp",
+      "sha256": "5d15e743f63f65051684e21d5f11a6b44d3ddbc92f165ffe144bf1fc9dea9d77",
+      "size": 32604
+    },
+    {
+      "path": "Ui/UiSplitter.cpp",
+      "sha256": "5d331d57511fa799fef23757a2be374d95662cbbf795ee6f764b0691b873aa2f",
+      "size": 20413
+    },
+    {
+      "path": "Ui/UiDropdown.cpp",
+      "sha256": "4bfa5175d012935ebe7c0e12444fd517bdcc5d10d6809f737abbac5b47b7660e",
+      "size": 37469
+    },
+    {
+      "path": "Ui/UiDropdownPopup.cpp",
+      "sha256": "2b19da9e74084797093a63e9eddb13dcf544a55ee3b9d6079a39e673181493cd",
+      "size": 26273
+    },
+    {
+      "path": "Ui/UiDoc/UiDocPaintOverlay.cpp",
+      "sha256": "d33340b78828ab1aefd90d8945919f438e18f8bcc3c7aed6617493d15652f757",
+      "size": 14666
+    },
+    {
+      "path": "Ui/UiProgressRing.cpp",
+      "sha256": "8699e638b257a9dfa379ff09ad6f2dab2f523a66690c5b44e09603389a97055d",
+      "size": 21612
+    },
+    {
+      "path": "Ui/UiChartRing.cpp",
+      "sha256": "47e0355eb7783dd550dcbed6bc4b6de40b83d3c281e60aba68f50136d9c897cf",
+      "size": 17671
+    },
+    {
+      "path": "Ui/UiRangeSegmentsPaint.cpp",
+      "sha256": "da14f3808ecdd043cf1633bd559a440bf94d1883c621c131e831a3bbf9b268ce",
+      "size": 18905
+    },
+    {
+      "path": "Ui/UiTag.h",
+      "sha256": "6ddbf580559a28a06d9978b6861d71ca42e92db7c94b95cb8a5f0a0d5b2311b4",
+      "size": 3679
+    },
+    {
+      "path": "Ui/UiTag.cpp",
+      "sha256": "a4d31832c7b0872acb127ac306157c54fd5b893759deeaa8d9d624d6c419e0dd",
+      "size": 16904
+    },
+    {
+      "path": "Ui/UiGraph/UiNodeGraph.h",
+      "sha256": "711daaf9c45de9ee51b9e752f7ac27b0ecd07110c0aafacccfc1d964b1ae86c2",
+      "size": 50730
+    },
+    {
+      "path": "Ui/UiGraph/UiNodeGraphPaint.inc",
+      "sha256": "a7d2123861542e19b2d320d7c7361088c7043cb6b50a74cb1789b49431b8d7d0",
+      "size": 4505
+    },
+    {
+      "path": "Ui/UiTitleCard.cpp",
+      "sha256": "ee75885245615c3b3f5683064004e591a4be6813ecad8257cb36306b2f85de2a",
+      "size": 42110
+    },
+    {
+      "path": "Ui/UiTitleCard.h",
+      "sha256": "48c651387f9eef8d42f1fc22c7ff13b2c8fb94245aa80536f7dba383d4490cf5",
+      "size": 8897
+    },
+    {
+      "path": "Ui/UiThemeOlive.h",
+      "sha256": "f05d5013fc800212067cc981614e1e88118d042e4749dfd9d63b0f7a55819adb",
+      "size": 19886
+    },
+    {
+      "path": "Ui/Ui.upp",
+      "sha256": "e98c838e1cc7d84582b69796c82d602e62c90ccc365e9a704f1885a13b9fdaa4",
+      "size": 4849
+    }
+  ],
+  "regressions": [
+    {
+      "job_id": "exec-8B5997CF0E3F2A2B530B2A6AF72A013F",
+      "command": "RenderSemanticPainterTest.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 47,
+      "executable_sha256": "d13b0eb966d8004c951542444fe2c0b870ac0dd473fe21aad09a0f7cf000c779",
+      "executable_size": 2397696,
+      "stdout": "case=0 max=0 mean=0\r\ncase=1 max=0 mean=0\r\ncase=2 max=0 mean=0\r\ncase=3 max=0 mean=0\r\ncase=4 max=0 mean=0\r\ncase=5 max=2 mean=0.226616753472188\r\ncase=6 max=2 mean=0.147922092013878\r\ncase=7 max=0 mean=0\r\ncase=8 max=0 mean=0\r\ncase=9 max=0 mean=0\r\nsemantic_cases=10\r\nRenderSemanticPainterTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-CE4E049533FB30AD2973D0724745BBFF",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 703,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": ")\r\n----- Draw ( CONSOLE CFONTS CLANG WIN32 ) (9 / 14)\r\n----- Core ( CONSOLE CFONTS CLANG WIN32 ) (10 / 14)\r\n----- plugin/png ( CONSOLE CFONTS CLANG WIN32 ) (11 / 14)\r\n----- plugin/z ( CONSOLE CFONTS CLANG WIN32 ) (12 / 14)\r\n----- RenderCore ( CONSOLE CFONTS CLANG WIN32 ) (13 / 14)\r\n----- RenderVulkanGeneralVectorTest ( CONSOLE CFONTS MAIN CLANG WIN32 ) (14 / 14)\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderVulkanGeneralVectorTestFinish.exe (3096064 B) linked in (0:00.18)\r\n\r\nOK. (0:00.57)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-204A6CE065D2E5E3B11EB02933CB8EF9",
+      "command": "RenderVulkanGeneralVectorTestFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 1796,
+      "executable_sha256": "941f17267db46b096561d9a27313abf77adea26c4c81f67199daa05122eab96d",
+      "executable_size": 3096064,
+      "stdout": "stroke cap=1 join=0 dash=1 mean=0.278103298611111 max=117\r\nstroke cap=1 join=1 dash=1 mean=0.277669270833334 max=117\r\nstroke cap=1 join=2 dash=1 mean=0.277994791666667 max=117\r\nsquare_dash_union_max_error=0\r\nformat=1 cases=38 reference_mean_max=0.278103298611111 reference_pixel_max=117\r\nstroke cap=1 join=0 dash=1 mean=0.278103298611111 max=117\r\nstroke cap=1 join=1 dash=1 mean=0.277669270833334 max=117\r\nstroke cap=1 join=2 dash=1 mean=0.277994791666667 max=117\r\nsquare_dash_union_max_error=0\r\nformat=2 cases=38 reference_mean_max=0.278103298611111 reference_pixel_max=117\r\nsquare_dash_union_max_error=0\r\nformat=3 cases=38 reference_mean_max=0.210937500000001 reference_pixel_max=77\r\nsquare_dash_union_max_error=0\r\nformat=4 cases=38 reference_mean_max=0.210937500000001 reference_pixel_max=77\r\nRenderVulkanGeneralVectorTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-AC672E84E6DD2D8FE99DBC5B04F38353",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 3921,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "CONSOLE CFONTS CLANG WIN32 ) (9 / 13)\r\n----- plugin/png ( CONSOLE CFONTS CLANG WIN32 ) (10 / 13)\r\n----- plugin/z ( CONSOLE CFONTS CLANG WIN32 ) (11 / 13)\r\n----- RenderCore ( CONSOLE CFONTS CLANG WIN32 ) (12 / 13)\r\n----- RenderVulkanVectorTest ( CONSOLE CFONTS MAIN CLANG WIN32 ) (13 / 13)\r\nmain.cpp\r\nRenderVulkanVectorTest: 1 file(s) built in (0:03.25), 3250 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderVulkanVectorTestFinish.exe (3066368 B) linked in (0:00.18)\r\n\r\nOK. (0:03.81)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-946DC9B4F913CF51A1A31D78FD27C1AC",
+      "command": "RenderVulkanVectorTestFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 875,
+      "executable_sha256": "9c111bff919cda32c0d201efc073f3e74d312601bda795db4532fac85df5f500",
+      "executable_size": 3066368,
+      "stdout": "SVG first_batches=7 draws=7\r\nRenderVulkanVectorTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-B02DAA5E82353EA208D269E6255AF6AD",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 4093,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "9 / 13)\r\n----- RenderRhi ( CONSOLE CFONTS CLANG WIN32 ) (10 / 13)\r\n----- RenderVector ( CONSOLE CFONTS CLANG WIN32 ) (11 / 13)\r\n----- RenderCore ( CONSOLE CFONTS CLANG WIN32 ) (12 / 13)\r\n----- RenderVulkanTextDirectWriteTest ( CONSOLE CFONTS MAIN CLANG WIN32 ) (13 / 13)\r\nmain.cpp\r\nRenderVulkanTextDirectWriteTest: 1 file(s) built in (0:03.35), 3359 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderVulkanTextDirectWriteTestFinish.exe (3081728 B) linked in (0:00.23)\r\n\r\nOK. (0:03.96)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-BC0E512C0C55129C08B3D3425D4BC856",
+      "command": "RenderVulkanTextDirectWriteTestFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 1016,
+      "executable_sha256": "c9040b51b3c79ab2b6343b8ec4788e0168104b9a87bda32edbef0e06f5beab26",
+      "executable_size": 3081728,
+      "stdout": "Unicode pixel format=1 max_error=0.015686274509804 mean_error=0.000110294117647059 aa_pixels=881\r\nUnicode pixel format=2 max_error=0.015686274509804 mean_error=0.000110294117647059 aa_pixels=881\r\nUnicode pixel format=3 max_error=0.0188319091732524 mean_error=0.00013115788801991 aa_pixels=881\r\nUnicode pixel format=4 max_error=0.0188319091732524 mean_error=0.00013115788801991 aa_pixels=881\r\nglyph_batch_gpu_rasters=222 compute_submissions=3\r\nglyph_batch_max_error=0.227450980392157 mean_error=0.000320416791504342 worst=[231, 181] actual=190 reference=248\r\nglyph_legacy_crossing_pixels=6 independent_max_error=0.00512336282169112\r\nfont_backend=DirectWrite legacy_gdi_font_requests=0\r\nRenderVulkanTextTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-14AC88BFE6A6A9EDC995F940E25648A0",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 16891,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "Canvas.a\r\nE:/apps/github/upp_render/build/cache-directwrite-debug/RenderCanvas/CLANGx64_Vulkan.Cfonts.Console.Debug.Debug_Full.Noblitz\\RenderCanvas.a (626244 B) created in (0:00.09)\r\n----- RenderSemanticPainterTest ( CONSOLE CFONTS MAIN CLANG DEBUG DEBUG_FULL WIN32 ) (11 / 11)\r\nmain.cpp\r\nRenderSemanticPainterTest: 1 file(s) built in (0:03.01), 3016 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderSemanticPainterTestDebugFinish.exe (3784704 B) linked in (0:00.67)\r\n\r\nOK. (0:16.76)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-72EFC7556E2083651D2619C92D95BF0E",
+      "command": "RenderSemanticPainterTestDebugFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 78,
+      "executable_sha256": "f6893433fb2ece37e567ba126931f7472ed93c6be5f3d5a6ec1618adf0d0c45c",
+      "executable_size": 3784704,
+      "stdout": "case=0 max=0 mean=0\r\ncase=1 max=0 mean=0\r\ncase=2 max=0 mean=0\r\ncase=3 max=0 mean=0\r\ncase=4 max=0 mean=0\r\ncase=5 max=2 mean=0.226616753472188\r\ncase=6 max=2 mean=0.147922092013878\r\ncase=7 max=0 mean=0\r\ncase=8 max=0 mean=0\r\ncase=9 max=0 mean=0\r\nsemantic_cases=10\r\nRenderSemanticPainterTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-34DC50C4A3AF19B3D6446DAF2D137889",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 15734,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "L WIN32 ) (11 / 14)\r\n----- plugin/z ( CONSOLE CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (12 / 14)\r\n----- RenderCore ( CONSOLE CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (13 / 14)\r\n----- RenderVulkanGeneralVectorTest ( CONSOLE CFONTS MAIN CLANG DEBUG DEBUG_FULL WIN32 ) (14 / 14)\r\nmain.cpp\r\nRenderVulkanGeneralVectorTest: 1 file(s) built in (0:03.15), 3157 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderVulkanGeneralVectorTestDebugFinish.exe (4652544 B) linked in (0:00.48)\r\n\r\nOK. (0:15.60)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-B4FCC97F15F56A6AB812018FA1DB0BB3",
+      "command": "RenderVulkanGeneralVectorTestDebugFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 2125,
+      "executable_sha256": "dc3d717ecf76ff65a9f7a8080c29ae9c037f04f30950a55c410c95f001ec9296",
+      "executable_size": 4652544,
+      "stdout": "stroke cap=1 join=0 dash=1 mean=0.278103298611111 max=117\r\nstroke cap=1 join=1 dash=1 mean=0.277669270833334 max=117\r\nstroke cap=1 join=2 dash=1 mean=0.277994791666667 max=117\r\nsquare_dash_union_max_error=0\r\nformat=1 cases=38 reference_mean_max=0.278103298611111 reference_pixel_max=117\r\nstroke cap=1 join=0 dash=1 mean=0.278103298611111 max=117\r\nstroke cap=1 join=1 dash=1 mean=0.277669270833334 max=117\r\nstroke cap=1 join=2 dash=1 mean=0.277994791666667 max=117\r\nsquare_dash_union_max_error=0\r\nformat=2 cases=38 reference_mean_max=0.278103298611111 reference_pixel_max=117\r\nsquare_dash_union_max_error=0\r\nformat=3 cases=38 reference_mean_max=0.210937500000001 reference_pixel_max=77\r\nsquare_dash_union_max_error=0\r\nformat=4 cases=38 reference_mean_max=0.210937500000001 reference_pixel_max=77\r\nRenderVulkanGeneralVectorTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-0A7988215F9E9C29B410FC3FB63424D4",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 91734,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "render/build/cache-reference-release/RenderVector/CLANGx64_Vulkan.Console\\RenderVector.a\r\nE:/apps/github/upp_render/build/cache-reference-release/RenderVector/CLANGx64_Vulkan.Console\\RenderVector.a (91104 B) created in (0:00.04)\r\n----- RenderCanvasTest ( CONSOLE MAIN CLANG WIN32 ) (10 / 10)\r\nmain.cpp\r\nRenderCanvasTest: 1 file(s) built in (0:03.06), 3062 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderCanvasTestReferenceFinish.exe (2384896 B) linked in (0:00.20)\r\n\r\nOK. (1:31.62)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-E19C1C520D6389619C0D6AEB4910BE34",
+      "command": "RenderCanvasTestReferenceFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 79,
+      "executable_sha256": "61bd31a609263fc2c58c73ea87f992688917b0cce444bd78cbc0f008cd536fc5",
+      "executable_size": 2384896,
+      "stdout": "RenderCanvasTest passed\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-40A265CC9A8F1EFE065F428BEE64CD2E",
+      "command": "umk.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 3562,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "stdout": "( CONSOLE CLANG WIN32 ) (5 / 10)\r\n----- Draw ( CONSOLE CLANG WIN32 ) (6 / 10)\r\n----- RenderCore ( CONSOLE CLANG WIN32 ) (7 / 10)\r\n----- plugin/z ( CONSOLE CLANG WIN32 ) (8 / 10)\r\n----- plugin/png ( CONSOLE CLANG WIN32 ) (9 / 10)\r\n----- RenderVectorTest ( CONSOLE MAIN CLANG WIN32 ) (10 / 10)\r\nmain.cpp\r\nRenderVectorTest: 1 file(s) built in (0:02.87), 2875 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\RenderVectorTestReferenceFinish.exe (2376704 B) linked in (0:00.18)\r\n\r\nOK. (0:03.42)\r\n",
+      "stderr": ""
+    },
+    {
+      "job_id": "exec-7B473CA62F5CD881069CD15218C593B2",
+      "command": "RenderVectorTestReferenceFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 94,
+      "executable_sha256": "f6d9a70b608a92978865702c6be5f6c8be11ca1517bdb9a52f25099f97f5c983",
+      "executable_size": 2376704,
+      "stdout": "RenderVectorTest passed\r\n",
+      "stderr": ""
+    }
+  ],
+  "inventory": {
+    "job_id": "exec-F89A965602E366E96390483600400253",
+    "command": "UiGpuDrawingFinish.exe",
+    "status": "succeeded",
+    "exit_code": 0,
+    "duration_ms": 2281,
+    "executable_sha256": "974059f2fd34813e03b83888c381dfa28b0f4d8e4340e875b0f8e2ec9aea690b",
+    "executable_size": 9522176,
+    "stdout": "UI_GPU_STYLED_FACE max_channel_error=32 mean_max_channel_error=0.2078 semantic_paths=1 images=0 frame_gdi_probes=0 result=PASS\r\nUI_GPU_TABLE_EDIT commit_cancel_and_inline_drawing=PASS\r\nUI_GPU_SHADOW inset=false hard=false radius=0 coloured_pixels=4154 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=false hard=false radius=9 coloured_pixels=4030 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=false hard=true radius=0 coloured_pixels=4136 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=false hard=true radius=9 coloured_pixels=3980 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=true hard=false radius=0 coloured_pixels=3106 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=true hard=false radius=9 coloured_pixels=3080 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=true hard=true radius=0 coloured_pixels=12282 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW inset=true hard=true radius=9 coloured_pixels=12234 layer_bytes=232064 result=PASS error= \r\nUI_GPU_SHADOW cases=8\r\nUI_GPU_DRAW type=UiTag size=128x32 enabled=1 ops=21 raster_misses=2 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTag size=128x32 enabled=0 ops=21 raster_misses=2 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTag size=320x180 enabled=1 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTag size=320x180 enabled=0 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMediaCard size=128x32 enabled=1 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMediaCard size=128x32 enabled=0 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMediaCard size=320x180 enabled=1 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMediaCard size=320x180 enabled=0 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLabel size=128x32 enabled=1 ops=11 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLabel size=128x32 enabled=0 ops=11 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLabel size=320x180 enabled=1 ops=11 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLabel size=320x180 enabled=0 ops=11 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiButton size=128x32 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiButton size=128x32 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiButton size=320x180 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiButton size=320x180 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToolButton size=128x32 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToolButton size=128x32 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToolButton size=320x180 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToolButton size=320x180 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitButton size=128x32 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitButton size=128x32 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitButton size=320x180 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitButton size=320x180 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiCheckBox size=128x32 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiCheckBox size=128x32 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiCheckBox size=320x180 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiCheckBox size=320x180 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRadioButton size=128x32 enabled=1 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRadioButton size=128x32 enabled=0 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRadioButton size=320x180 enabled=1 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRadioButton size=320x180 enabled=0 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToggle size=128x32 enabled=1 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToggle size=128x32 enabled=0 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToggle size=320x180 enabled=1 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiToggle size=320x180 enabled=0 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBreadcrumbs size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBreadcrumbs size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBreadcrumbs size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBreadcrumbs size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLineEdit size=128x32 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLineEdit size=128x32 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLineEdit size=320x180 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiLineEdit size=320x180 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiIntEdit size=128x32 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiIntEdit size=128x32 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiIntEdit size=320x180 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiIntEdit size=320x180 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFloatEdit size=128x32 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFloatEdit size=128x32 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFloatEdit size=320x180 enabled=1 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFloatEdit size=320x180 enabled=0 ops=14 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPasswordEdit size=128x32 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPasswordEdit size=128x32 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPasswordEdit size=320x180 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPasswordEdit size=320x180 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMultiEdit size=128x32 enabled=1 ops=68 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMultiEdit size=128x32 enabled=0 ops=68 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMultiEdit size=320x180 enabled=1 ops=56 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMultiEdit size=320x180 enabled=0 ops=56 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMaskEdit size=128x32 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMaskEdit size=128x32 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMaskEdit size=320x180 enabled=1 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMaskEdit size=320x180 enabled=0 ops=32 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSlider size=128x32 enabled=1 ops=37 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSlider size=128x32 enabled=0 ops=37 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSlider size=320x180 enabled=1 ops=37 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSlider size=320x180 enabled=0 ops=37 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSlider size=128x32 enabled=1 ops=83 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSlider size=128x32 enabled=0 ops=83 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSlider size=320x180 enabled=1 ops=83 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSlider size=320x180 enabled=0 ops=83 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSliderEdit size=128x32 enabled=1 ops=73 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSliderEdit size=128x32 enabled=0 ops=73 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSliderEdit size=320x180 enabled=1 ops=73 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSliderEdit size=320x180 enabled=0 ops=73 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSliderEdit size=128x32 enabled=1 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSliderEdit size=128x32 enabled=0 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSliderEdit size=320x180 enabled=1 ops=125 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSliderEdit size=320x180 enabled=0 ops=125 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSegments size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSegments size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSegments size=320x180 enabled=1 ops=157 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiRangeSegments size=320x180 enabled=0 ops=157 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollBar size=128x32 enabled=1 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollBar size=128x32 enabled=0 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollBar size=320x180 enabled=1 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollBar size=320x180 enabled=0 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressBar size=128x32 enabled=1 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressBar size=128x32 enabled=0 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressBar size=320x180 enabled=1 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressBar size=320x180 enabled=0 ops=21 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressRing size=128x32 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressRing size=128x32 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressRing size=320x180 enabled=1 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiProgressRing size=320x180 enabled=0 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiChartRing size=128x32 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiChartRing size=128x32 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiChartRing size=320x180 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiChartRing size=320x180 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMatrixSelector size=128x32 enabled=1 ops=22 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMatrixSelector size=128x32 enabled=0 ops=22 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMatrixSelector size=320x180 enabled=1 ops=58 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMatrixSelector size=320x180 enabled=0 ops=58 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorMatrix size=128x32 enabled=1 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorMatrix size=128x32 enabled=0 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorMatrix size=320x180 enabled=1 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorMatrix size=320x180 enabled=0 ops=16 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDateTime size=128x32 enabled=1 ops=62 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDateTime size=128x32 enabled=0 ops=62 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDateTime size=320x180 enabled=1 ops=62 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDateTime size=320x180 enabled=0 ops=62 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPicker size=128x32 enabled=1 ops=52 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPicker size=128x32 enabled=0 ops=52 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPicker size=320x180 enabled=1 ops=657 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPicker size=320x180 enabled=0 ops=657 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPickerMicro size=128x32 enabled=1 ops=99 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPickerMicro size=128x32 enabled=0 ops=99 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPickerMicro size=320x180 enabled=1 ops=1003 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorPickerMicro size=320x180 enabled=0 ops=1003 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFileBrowser size=128x32 enabled=1 ops=93 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFileBrowser size=128x32 enabled=0 ops=93 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFileBrowser size=320x180 enabled=1 ops=375 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiFileBrowser size=320x180 enabled=0 ops=375 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDropdown size=128x32 enabled=1 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDropdown size=128x32 enabled=0 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDropdown size=320x180 enabled=1 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDropdown size=320x180 enabled=0 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMenu size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMenu size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMenu size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiMenu size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPanel size=128x32 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPanel size=128x32 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPanel size=320x180 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPanel size=320x180 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDirectContentHost size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDirectContentHost size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDirectContentHost size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDirectContentHost size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGroupPanel size=128x32 enabled=1 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGroupPanel size=128x32 enabled=0 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGroupPanel size=320x180 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGroupPanel size=320x180 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTitleCard size=128x32 enabled=1 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTitleCard size=128x32 enabled=0 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTitleCard size=320x180 enabled=1 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTitleCard size=320x180 enabled=0 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiStack size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiStack size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiStack size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiStack size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAccordion size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAccordion size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAccordion size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAccordion size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollPanel size=128x32 enabled=1 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollPanel size=128x32 enabled=0 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollPanel size=320x180 enabled=1 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiScrollPanel size=320x180 enabled=0 ops=27 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTab size=128x32 enabled=1 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTab size=128x32 enabled=0 ops=10 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTab size=320x180 enabled=1 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTab size=320x180 enabled=0 ops=17 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitter size=128x32 enabled=1 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitter size=128x32 enabled=0 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitter size=320x180 enabled=1 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiSplitter size=320x180 enabled=0 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiQuadSplitter size=128x32 enabled=1 ops=69 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiQuadSplitter size=128x32 enabled=0 ops=69 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiQuadSplitter size=320x180 enabled=1 ops=69 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiQuadSplitter size=320x180 enabled=0 ops=69 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAbsoluteLayout size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAbsoluteLayout size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAbsoluteLayout size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiAbsoluteLayout size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGridLayout size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGridLayout size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGridLayout size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGridLayout size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBoxLayout size=128x32 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBoxLayout size=128x32 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBoxLayout size=320x180 enabled=1 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBoxLayout size=320x180 enabled=0 ops=7 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiList size=128x32 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiList size=128x32 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiList size=320x180 enabled=1 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiList size=320x180 enabled=0 ops=15 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTree size=128x32 enabled=1 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTree size=128x32 enabled=0 ops=20 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTree size=320x180 enabled=1 ops=44 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTree size=320x180 enabled=0 ops=44 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTable size=128x32 enabled=1 ops=54 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTable size=128x32 enabled=0 ops=54 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTable size=320x180 enabled=1 ops=180 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiTable size=320x180 enabled=0 ops=180 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGallery size=128x32 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGallery size=128x32 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGallery size=320x180 enabled=1 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiGallery size=320x180 enabled=0 ops=12 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDoc size=128x32 enabled=1 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDoc size=128x32 enabled=0 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDoc size=320x180 enabled=1 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiDoc size=320x180 enabled=0 ops=23 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveEditor size=128x32 enabled=1 ops=8 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveEditor size=128x32 enabled=0 ops=8 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveEditor size=320x180 enabled=1 ops=8 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveEditor size=320x180 enabled=0 ops=8 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveField size=128x32 enabled=1 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveField size=128x32 enabled=0 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveField size=320x180 enabled=1 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiBezierCurveField size=320x180 enabled=0 ops=42 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiNodeGraph size=128x32 enabled=1 ops=26 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiNodeGraph size=128x32 enabled=0 ops=26 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiNodeGraph size=320x180 enabled=1 ops=156 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiNodeGraph size=320x180 enabled=0 ops=156 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorProbe size=128x32 enabled=1 ops=58 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorProbe size=128x32 enabled=0 ops=58 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorProbe size=320x180 enabled=1 ops=102 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiColorProbe size=320x180 enabled=0 ops=102 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPlaybackBar size=128x32 enabled=1 ops=160 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPlaybackBar size=128x32 enabled=0 ops=160 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPlaybackBar size=320x180 enabled=1 ops=197 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nUI_GPU_DRAW type=UiPlaybackBar size=320x180 enabled=0 ops=197 raster_misses=3 software_layers=0 result=PASS error= gpu_error=\r\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=43/64\r\nUI_RASTER_TAG vector/tag/decoration bytes=644\r\nUI_GPU_DRAW_SUMMARY painted_inventory_entries=56 cases=224 failures=0 os_file_dialog=HOST_SERVICE validation_warnings=0 validation_errors=0 result=PASS\r\n",
+    "stderr": ""
+  },
+  "native_ordinary_ui_build": {
+    "job_id": "exec-9B86323521B6E5AB659F4435E2782B3C",
+    "command": "umk.exe",
+    "status": "succeeded",
+    "exit_code": 0,
+    "duration_ms": 68937,
+    "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+    "executable_size": 8792576,
+    "stdout": "Utilities/PropertyEditorCore: 1 file(s) built in (0:00.54), 540 msecs / file\r\nPainter: 27 file(s) built in (0:03.81), 141 msecs / file\r\nBLITZ: UiLabelDemo.cpp UiLabelOverrideLayout.cpp main.cpp\r\nmain.rc\r\nRichText: 26 file(s) built in (0:02.31), 88 msecs / file\r\nexamples/UiLabelDemo: 4 file(s) built in (0:02.82), 705 msecs / file\r\nUi: 112 file(s) built in (0:28.74), 256 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_Ui\\build\\klick\\UiLabelFinish.exe (9657344 B) linked in (0:00.21)\r\n\r\nOK. (1:08.82)\r\n",
+    "stderr": ""
+  },
+  "root_lifecycle": null,
+  "gallery_runs": {
+    "qualification": {
+      "job_id": "exec-AD79CCEF8F33A634734D04D05D85FBA0",
+      "command": "GpuUiGalleryFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 12937,
+      "executable_sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+      "executable_size": 8296960,
+      "stdout": "",
+      "stderr": ""
+    },
+    "capture": {
+      "job_id": "exec-F134BF914894FC8EF27FF965E91519C7",
+      "command": "GpuUiGalleryFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 3844,
+      "executable_sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+      "executable_size": 8296960,
+      "stdout": "",
+      "stderr": ""
+    },
+    "normal": {
+      "job_id": "exec-4E6934A58FD73064158D81A8944AE830",
+      "command": "GpuUiGalleryFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 24406,
+      "executable_sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+      "executable_size": 8296960,
+      "stdout": "",
+      "stderr": ""
+    },
+    "heavy": {
+      "job_id": "exec-21FD22729F358FD640A5B06B2C054386",
+      "command": "GpuUiGalleryFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 24406,
+      "executable_sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+      "executable_size": 8296960,
+      "stdout": "",
+      "stderr": ""
+    },
+    "soak": {
+      "job_id": "exec-A5DF4ECEC35AAFA198CD9F13DC560641",
+      "command": "GpuUiGalleryFinish.exe",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 304422,
+      "executable_sha256": "9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57",
+      "executable_size": 8296960,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "interrupted_soak": {
+    "job_id": "exec-61B43E5A80B252B211D41DED10A6EF73",
+    "duration_ms": 193937,
+    "status": "INCOMPLETE",
+    "reason": "User confirmed closing the window before completion; not a crash or a passed soak.",
+    "evidence": "build/vulkan-ui-soak-interrupted-2026-10-21.json"
+  },
+  "reports": {
+    "normal": {
+      "path": "build/GpuUiGallery-required-normal.txt",
+      "sha256": "ca55096d576df69c95159dedf074c8a48ed6ebc011d5bd6a9c9dbd3d4ff21984",
+      "text": "GpuUiGallery Windows/Vulkan 96 particles\nwarmup_ms=4000 measured_ms=20030.03\npresented_frames=2821 dropped_frames=12 pending_frames=0\nmeasured_presented_frames=2406 throughput_elapsed_ms=19999.83 presented_fps=120.30\nanimation_callback_hz=120.00 distinct_animation_hz=120.00 scene_record_hz=120.30\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=84.04\ncold_texture_uploads=4 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=7\ncadence=PASS distinct_hz=120.00\nframe_clock_active=1\ntimer_delay_ms p50=13.18 p95=17.68 p99=17.81 max=18.70\nacquire_replay_present_cpu_ms p50=5.04 p95=6.95 p99=8.31 max=12.03\nroot_record_ms last=0.37 lifetime_max=1.13\nroot_enqueue_ms last=0.01 lifetime_max=0.12\nprocess_private_peak_bytes=199028736\nsampled_descriptor_pools_created=1 reused=2820 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=261\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=233\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=177048\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4237312\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=262144\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "load": {
+      "path": "build/GpuUiGallery-required-load.txt",
+      "sha256": "f4e1b959fff8c01dffa0a57377519178da233954e8d08a3ceafee26f5b9b6345",
+      "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=20000.98\npresented_frames=2866 dropped_frames=45 pending_frames=1\nmeasured_presented_frames=2444 throughput_elapsed_ms=19997.06 presented_fps=122.22\nanimation_callback_hz=120.02 distinct_animation_hz=120.02 scene_record_hz=123.87\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=82.19\ncold_texture_uploads=4 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=7\ncadence=PASS distinct_hz=120.02\nframe_clock_active=1\ntimer_delay_ms p50=13.28 p95=17.63 p99=17.98 max=19.53\nacquire_replay_present_cpu_ms p50=6.26 p95=9.14 p99=10.65 max=13.24\nroot_record_ms last=0.94 lifetime_max=2.76\nroot_enqueue_ms last=0.00 lifetime_max=0.29\nprocess_private_peak_bytes=198844416\nsampled_descriptor_pools_created=1 reused=2865 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=177048\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4237312\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "soak": {
+      "path": "build/GpuUiGallery-required-soak.txt",
+      "sha256": "930cf744a54eb5035da6ae47e99f460aff070a132a8a7af62f3e0aa3e394c080",
+      "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300018.79\npresented_frames=36354 dropped_frames=992 pending_frames=0\nmeasured_presented_frames=35962 throughput_elapsed_ms=300000.63 presented_fps=119.87\nanimation_callback_hz=119.92 distinct_animation_hz=119.92 scene_record_hz=123.10\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=92.59\ncold_texture_uploads=4 cold_glyph_misses=153 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=148 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=7\ncadence=PASS distinct_hz=119.92\nframe_clock_active=1\ntimer_delay_ms p50=13.12 p95=17.62 p99=17.98 max=79.40\nacquire_replay_present_cpu_ms p50=6.15 p95=10.43 p99=14.27 max=60.20\nroot_record_ms last=0.90 lifetime_max=3.84\nroot_enqueue_ms last=0.01 lifetime_max=0.68\nprocess_private_peak_bytes=198815744\nsampled_descriptor_pools_created=1 reused=36353 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=177048\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4237312\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=198714368 late_mean_bytes=197966848 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=198815744\nprivate_sample_bytes=198713344\nprivate_sample_bytes=198713344\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198615040\nprivate_sample_bytes=198582272\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=198483968\nprivate_sample_bytes=197795840\nprivate_sample_bytes=197795840\nprivate_sample_bytes=197959680\nprivate_sample_bytes=198316032\nupp_heap_sample_bytes=2461696\nupp_heap_sample_bytes=4452352\nupp_heap_sample_bytes=2527232\nupp_heap_sample_bytes=4415488\nupp_heap_sample_bytes=4513792\nupp_heap_sample_bytes=2527232\nupp_heap_sample_bytes=2527232\nupp_heap_sample_bytes=2592768\nupp_heap_sample_bytes=2592768\nupp_heap_sample_bytes=4579328\nupp_heap_sample_bytes=2600960\nupp_heap_sample_bytes=2596864\nupp_heap_sample_bytes=4165632\nupp_heap_sample_bytes=4579328\nupp_heap_sample_bytes=4161536\nupp_heap_sample_bytes=4169728\nupp_heap_sample_bytes=2592768\nupp_heap_sample_bytes=4288512\nupp_heap_sample_bytes=4284416\nupp_heap_sample_bytes=4288512\nupp_heap_sample_bytes=4288512\nupp_heap_sample_bytes=4702208\nupp_heap_sample_bytes=2723840\nupp_heap_sample_bytes=4288512\nupp_heap_sample_bytes=4702208\nupp_heap_sample_bytes=4284416\nupp_heap_sample_bytes=4284416\nupp_heap_sample_bytes=4472832\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    },
+    "qualification": {
+      "path": "build/GpuUiGallery-qualification.txt",
+      "sha256": "6eccc1cb2c08e632ac7a493d193a054c3b106fb2fe8a3d0857e4a6348ed118ee",
+      "text": "workspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=40 dispatches=40 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=41 dispatches=41 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=38 dispatches=38 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nGpuUi-micro-light=PASS size=(1240, 800) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nextended_controls=PASS scan/preview/selection/accept/cancel/nested micro popup/16 picker states/hex/themes/resize picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=53/64 font_error=\n"
+    },
+    "capture": {
+      "path": "build/GpuUiGallery-capture.txt",
+      "sha256": "1c110b815b18dc523868fa79ad89146a027f96f8213d42a4a65d8a3de88ce39b",
+      "text": "GpuUi-root-light=PASS size=(1220, 760) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-dialog-light=PASS size=(900, 620) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-dialog-dark=PASS size=(900, 620) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-root-dark=PASS size=(1220, 760) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ncapture=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n"
+    }
+  },
+  "limitations": [
+    "Legacy scalar text contract remains; user explicitly authorized full shaping/editing next.",
+    "Current physical monitor DPI/input acceptance still open.",
+    "GPU timestamps unavailable; acquire/replay/present measurements are CPU elapsed.",
+    "Procedural palette data, bitmap assets and preview decoding can be prepared on CPU; zero helper vector/glyph raster counts are not a claim of zero CPU processing.",
+    "OS file dialog and desktop eyedropper are host services.",
+    "Layered mask antialiasing is not a blanket promise of pixel identity with legacy per-primitive Painter composition.",
+    "Software BlurLayer explicitly reports GPU required; native Ui software helper paths remain available.",
+    "Current artifact has not been requalified on Karo clean machine; older qualification is historical."
+  ]
+}

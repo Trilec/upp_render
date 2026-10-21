@@ -1,5 +1,12 @@
 # Active Work
 
+## Restart handoff — 2026-10-21
+
+Read [WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md) before continuing.
+The latest finishing changes are saved but uncommitted. Native lifecycle test
+passed; final regressions, rebuilt captures, whole-UI qualification and current
+memory/load/soak measurements remain. The older percentage below is historical.
+
 ## Current priority — Windows/Vulkan whole UI
 
 The user's confirmed order (2026-10-13) is:
@@ -14,25 +21,18 @@ WebGPU/browser and Metal follow this Windows milestone. wgpu-native is an option
 experiment; its successful native proof is not authorization to replace the
 current renderer or postpone Vulkan UI completion.
 
-## Current implementation checkpoint — 2026-10-15
+## Current checkpoint —2026-10-22
 
-**6/10 completion gates passed (60%)**: gates 1, 2, 3, 4, 8 and 9.
-The denominator and gate criteria are unchanged. This is acceptance coverage,
-not a percentage of engineering effort or a completion date.
+**7/10 completion gates passed (70%)**:1,2,3,4,6,8,9. The same ten gates below remain in force; this counts acceptance coverage, not engineering effort.
 
-General filled/stroked curves, compound winding/even-odd paths, gradients,
-rectangular clipping and explicit bounds now have direct GPU coverage. Release
-and Debug pixel tests pass. Glyph masks also generate on the GPU, with bounded
-batching, Unicode/fallback/decorations and cold/warm whitespace tests. Full shaped
-text remains open under gate 5. SVG's CPU fallback and remaining Ui shared
-shape/shadow/layer helpers are explicitly outstanding, as are current manual
-input/AA and monitor-DPI acceptance. See GPU_VECTOR_COVERAGE.md.
+Semantic SVG/Painter, shared Ui helpers, shadows, clips and layers now preserve GPU drawing intent. All56 drawable catalogue entries pass224 inventory cases; eight extra shadow cases and populated main/compute/browser/colour-picker/micro-picker qualification pass. Ordinary non-GPU UiLabelDemo Release BLITZ also builds.
 
-The rebuilt whole-UI Gallery has passed three populated workspace cycles and
-three compute dialog cycles, with no software presentation fallback and final
-native ownership ZERO. Current load/soak results and artifact identities are
-recorded in the qualification document/manifest; historical measurements below
-remain historical.
+Current Gallery9a4d8f6f... measures120distinct updates/s. The300second heavy soak passes at119.87presentedFPS, CPUmedian/p99=6.15/14.27ms and private early/late decrease747,520B. No CPU vector/glyph raster, shared helper raster misses, software layers, fallback or GDI font requests; final native ownership ZERO.
+Exact source hashes/jobs/reports: VULKAN_UI_FINISH_QUALIFICATION.json and VULKAN_UI_FINISHING.md.
+
+The user explicitly authorized full complex-script shaping/editing now, after discussing font loading versus text layout. Implement a shared layout authority for glyph runs, measurement, hit-testing, caret/selection and cluster-safe editing; reuse DirectWrite and existing GPU glyph coverage. Keep Core/Animation read-only. Full text integration and final physical input/AA/DPI acceptance remain open. Read WINDOWS_VULKAN_RESTART.md for detailed recovery context.
+
+Ui drawing baseline committed locally as228a1b968e0b13ef21b4cbb4baf1115c3c7a8686. Preserve concurrent unrelated Ui changes. No push/publish.
 
 ## Starting checkpoint
 

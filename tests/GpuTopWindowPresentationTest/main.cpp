@@ -412,6 +412,21 @@ GUI_APP_MAIN
 		PumpEvents(20);
 	}
 
+	{
+		One<RootPresentationWindow> window; window.Create();
+		window->SetRequireGpu().SetFrameClock();
+		int callbacks=0; double previous=0; bool monotonic=true;
+		window->WhenGpuFrame=[&](double now) {
+			monotonic &= now>previous; previous=now;
+			if(++callbacks==8) window.Clear();
+		};
+		window->Open();
+		for(int i=0;i<500 && window;++i) PumpEvents(1);
+		ok &= Check(!window && callbacks==8 && monotonic,
+		            "precise callbacks have monotonic time and may destroy their window safely");
+		window.Clear(); PumpEvents(20);
+	}
+
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 	ok &= Check(final_diag.runtime_live_count == 0 && final_diag.instance_live_count == 0 &&
 	            final_diag.debug_messenger_live_count == 0 && final_diag.surface_live_count == 0 &&

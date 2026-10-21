@@ -5,7 +5,11 @@
 namespace Upp {
 
 
-bool UiRenderer2D::RenderTexture(GpuTextureId image, const UiRenderer2DTarget& target)
+bool UiRenderer2D::RenderTexture(GpuTextureId image, const UiRenderer2DTarget& target, GpuBlendMode blend)
+{
+	return RenderTexturePass(image,target,blend,false);
+}
+bool UiRenderer2D::RenderTexturePass(GpuTextureId image, const UiRenderer2DTarget& target, GpuBlendMode blend, bool blur, const Rect *destination)
 {
 	error.Clear();
 	if(!ready || !device || !image.IsValid() || !target.color_target.IsValid() ||
@@ -16,10 +20,15 @@ bool UiRenderer2D::RenderTexture(GpuTextureId image, const UiRenderer2DTarget& t
 	vertices.Clear(); textured_vertices.Clear(); batches.Clear(); stats = UiRenderer2DStats();
 	if(!GeometryFits(6 * sizeof(TexturedVertex))) return false;
 	GpuPipelineId pipeline;
-	if(!EnsurePipeline(target.color_format, true, pipeline, GpuBlendMode::PremultipliedSourceOver) ||
+	if(!(blur ? EnsureBlurPipeline(target.color_format,pipeline) : EnsurePipeline(target.color_format, true, pipeline, blend)) ||
 	   !EnsureVertexBuffer(true, 6 * sizeof(TexturedVertex))) return false;
 	const int corner[] = {0, 1, 2, 0, 2, 3};
-	const float x[] = {-1, 1, 1, -1}, y[] = {1, 1, -1, -1};
+	const Rect dst=destination ? *destination : Rect(target.origin,target.size);
+	const float left=(float)(2.0*(dst.left-target.origin.x)/target.size.cx-1);
+	const float right=(float)(2.0*(dst.right-target.origin.x)/target.size.cx-1);
+	const float top=(float)(1-2.0*(dst.top-target.origin.y)/target.size.cy);
+	const float bottom=(float)(1-2.0*(dst.bottom-target.origin.y)/target.size.cy);
+	const float x[] = {left, right, right, left}, y[] = {top, top, bottom, bottom};
 	const float u[] = {0, 1, 1, 0}, v[] = {0, 0, 1, 1};
 	for(int c : corner) {
 		auto& vertex = textured_vertices.Add();

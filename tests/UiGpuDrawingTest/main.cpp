@@ -1,4 +1,5 @@
 #include <Ui/Ui.h>
+#include <Ui/UiFileBrowser/UiFileBrowser.h>
 #include <GpuRender/RenderCtrlBridge.h>
 #ifdef flagCFONTS
 #include <RenderFontWin32/RenderFontWin32.h>
@@ -6,6 +7,8 @@
 #include <RenderGpu2D/RenderGpu2D.h>
 #include <RenderVulkan/RenderVulkanRhi.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
+#include <plugin/png/png.h>
+#include <cstring>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -17,6 +20,9 @@ using namespace Upp;
 // DPI, IME or accessibility.
 static int cases = 0;
 static int failures = 0;
+static bool capture = false;
+static int captures = 0;
+static One<ImageBuffer> contact;
 
 static void Configure(Ctrl&) {}
 static void Configure(UiLabel& c) { c.SetText("GPU label"); }
@@ -52,7 +58,7 @@ class TagProbe : public Ctrl {
 };
 
 template <class Control>
-static void Probe(const char *name, UiRenderer2D& renderer, const UiRenderer2DTarget& target)
+static void Probe(const char *name, UiRenderer2D& renderer, const UiRenderer2DTarget& target, VulkanGpuDevice& device)
 {
 	Control control;
 	Configure(control);
@@ -65,10 +71,28 @@ static void Probe(const char *name, UiRenderer2D& renderer, const UiRenderer2DTa
 			CtrlDisplayListRecordReport report;
 			bool pass = RecordCtrlDisplayList(control, list, error, &report) &&
 			            !report.HasUnsupportedOperation() && renderer.Render(list, target);
+			if(pass && capture && enabled && size == Size(320,180)) {
+				Vector<byte> pixels;
+				pass &= device.ReadTexturePixels(target.color_target,pixels) && pixels.GetCount()==320*180*4;
+				if(pass) {
+					ImageBuffer image(320,180);
+					for(int y=0;y<image.GetHeight();++y) for(int x=0;x<image.GetWidth();++x) {
+						const byte *p=pixels.Begin()+4*(y*image.GetWidth()+x);
+						RGBA& c=image[y][x]; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
+					}
+					image.SetKind(IMAGE_OPAQUE);
+					int col=captures%6,row=captures/6;
+					for(int y=0;y<180;++y) std::memcpy((*contact)[row*180+y]+col*320,image[y],320*4);
+					pass &= PNGEncoder().SaveFile(GetExeDirFile(String("UiGpu-")+name+".png"),Image(image));
+					++captures;
+				}
+			}
 			cases++;
 			if(!pass) failures++;
 			Cout() << "UI_GPU_DRAW type=" << name << " size=" << size.cx << "x" << size.cy
 			       << " enabled=" << (enabled ? 1 : 0) << " ops=" << list.GetCount()
+			       << " raster_misses=" << AsString(UiRasterCache::GetStats().misses)
+			       << " software_layers=" << AsString(UiGetRenderLayerStats().allocations)
 			       << " result=" << (pass ? "PASS" : "FAIL")
 			       << " error=" << error << " gpu_error=" << (pass ? String() : renderer.GetError()) << EOL;
 		}
@@ -141,6 +165,57 @@ static void CheckStyledFace(UiRenderer2D& renderer, const UiRenderer2DTarget& pa
 	if(!ok) failures++;
 }
 
+class ShadowProbe : public Ctrl {
+public:
+	StyledMetrics metrics;
+	void Paint(Draw& draw) override {
+		StyledPalette palette; StyledSkin skin;
+		UiPaintStyledBackground(draw,Rect(40,35,180,125),palette,metrics,skin,ST_NORMAL,false);
+	}
+};
+
+static void CheckShadows(UiRenderer2D& renderer,const UiRenderer2DTarget& target,
+                         VulkanGpuDevice& device)
+{
+	CtrlDisplayListPaintScope host;
+	int count=0;
+	for(bool inset:{false,true}) for(bool hard:{false,true}) for(int radius:{0,9}) {
+		ShadowProbe control; control.SetRect(0,0,320,180);
+		auto& m=control.metrics; m.face_enabled=m.frame_enabled=false; m.radius=radius;
+		m.shadow.enabled=true; m.shadow.inset=inset; m.shadow.distance=8;
+		m.shadow.offset_x=2; m.shadow.offset_y=1; m.shadow.alpha=160;
+		m.shadow.color=Color(180,80,20); m.shadow.mode=hard?SHADOW_HARD:SHADOW_CURVE;
+		UiDisplayList list; String error; CtrlDisplayListRecordReport report;
+		const auto before=UiRasterCache::GetStats();
+		bool ok=RecordCtrlDisplayList(control,list,error,&report) &&
+		        !report.HasUnsupportedOperation() && report.paint_probe_count==0 &&
+		        renderer.Render(list,target);
+		const int64 bytes=renderer.GetStats().gpu_clip_layer_bytes;
+		ok &= renderer.GetStats().vector_raster_count==0 &&
+		      UiRasterCache::GetStats().misses==before.misses;
+		// Independent invariants: coloured coverage, empty exterior and no shadow
+		// at the centre of an outset cutout. Do not use the old CPU shadow as oracle.
+		Vector<byte> pixels; ok &= device.ReadTexturePixels(target.color_target,pixels);
+		int coloured=0;
+		if(pixels.GetCount()==320*180*4) {
+			for(int y=0;y<180;++y) for(int x=0;x<320;++x) {
+				const byte *p=pixels.Begin()+4*(y*320+x);
+				if(p[0]>p[1] && p[1]>p[2]) ++coloured;
+			}
+			const byte *centre=pixels.Begin()+4*(80*320+110);
+			ok &= pixels[0]==0 && pixels[1]==0 && pixels[2]==0 && coloured>20;
+			if(!inset) ok &= centre[0]==0 && centre[1]==0 && centre[2]==0;
+		} else ok=false;
+		// A repeated same-size effect must reuse retained composition textures.
+		ok &= renderer.Render(list,target) && renderer.GetStats().gpu_clip_layer_bytes==bytes;
+		Cout()<<"UI_GPU_SHADOW inset="<<inset<<" hard="<<hard<<" radius="<<radius
+		      <<" coloured_pixels="<<coloured<<" layer_bytes="<<bytes
+		      <<" result="<<(ok?"PASS":"FAIL")<<" error="<<error<<" "<<renderer.GetError()<<EOL;
+		if(!ok) ++failures; ++count;
+	}
+	Cout()<<"UI_GPU_SHADOW cases="<<count<<EOL;
+}
+
 static void CheckTableEditing(UiRenderer2D& renderer, const UiRenderer2DTarget& target)
 {
 	UiTable table; Configure(table); table.SetRect(0, 0, 320, 180);
@@ -162,6 +237,8 @@ static void CheckTableEditing(UiRenderer2D& renderer, const UiRenderer2DTarget& 
 
 GUI_APP_MAIN
 {
+	capture = FindIndex(CommandLine(),String("--capture")) >= 0;
+	if(capture) { contact.Create(1920,1800); Fill(~*contact,RGBAZero(),contact->GetLength()); }
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	HWND hwnd = CreateWindowExW(0, L"STATIC", L"UiGpuDrawingTest", WS_POPUP,
 	                            0, 0, 320, 180, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -175,7 +252,7 @@ GUI_APP_MAIN
 		GpuTextureDesc desc;
 		desc.size = Size(320, 180);
 		desc.format = GpuFormat::RGBA8Srgb;
-		desc.usage = GpuTextureUsage_ColorAttachment;
+		desc.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_TransferSrc;
 		GpuTextureId texture;
 		ok = device.IsReady() && device.CreateTexture(desc, texture) == GpuResult::Ok;
 		if(ok) {
@@ -186,60 +263,66 @@ GUI_APP_MAIN
 			target.clear_color.alpha = 1;
 			CheckStyledFace(renderer, target, device);
 			CheckTableEditing(renderer, target);
-			Probe<TagProbe>("UiTag", renderer, target);
-			Probe<UiMediaCard>("UiMediaCard", renderer, target);
-			Probe<UiLabel>("UiLabel", renderer, target);
-			Probe<UiButton>("UiButton", renderer, target);
-			Probe<UiToolButton>("UiToolButton", renderer, target);
-			Probe<UiSplitButton>("UiSplitButton", renderer, target);
-			Probe<UiCheckBox>("UiCheckBox", renderer, target);
-			Probe<UiRadioButton>("UiRadioButton", renderer, target);
-			Probe<UiToggle>("UiToggle", renderer, target);
-			Probe<UiBreadcrumbs>("UiBreadcrumbs", renderer, target);
-			Probe<UiLineEdit>("UiLineEdit", renderer, target);
-			Probe<UiIntEdit>("UiIntEdit", renderer, target);
-			Probe<UiFloatEdit>("UiFloatEdit", renderer, target);
-			Probe<UiPasswordEdit>("UiPasswordEdit", renderer, target);
-			Probe<UiMultiEdit>("UiMultiEdit", renderer, target);
-			Probe<UiMaskEdit>("UiMaskEdit", renderer, target);
-			Probe<UiSlider>("UiSlider", renderer, target);
-			Probe<UiRangeSlider>("UiRangeSlider", renderer, target);
-			Probe<UiSliderEdit>("UiSliderEdit", renderer, target);
-			Probe<UiRangeSliderEdit>("UiRangeSliderEdit", renderer, target);
-			Probe<UiRangeSegments>("UiRangeSegments", renderer, target);
-			Probe<UiScrollBar>("UiScrollBar", renderer, target);
-			Probe<UiProgressBar>("UiProgressBar", renderer, target);
-			Probe<UiProgressRing>("UiProgressRing", renderer, target);
-			Probe<UiChartRing>("UiChartRing", renderer, target);
-			Probe<UiMatrixSelector>("UiMatrixSelector", renderer, target);
-			Probe<UiColorMatrix>("UiColorMatrix", renderer, target);
-			Probe<UiDateTime>("UiDateTime", renderer, target);
-			Probe<UiColorPicker>("UiColorPicker", renderer, target);
-			Probe<UiDropdown>("UiDropdown", renderer, target);
-			Probe<UiMenu>("UiMenu", renderer, target);
-			Probe<UiPanel>("UiPanel", renderer, target);
-			Probe<UiDirectContentHost>("UiDirectContentHost", renderer, target);
-			Probe<UiGroupPanel>("UiGroupPanel", renderer, target);
-			Probe<UiTitleCard>("UiTitleCard", renderer, target);
-			Probe<UiStack>("UiStack", renderer, target);
-			Probe<UiAccordion>("UiAccordion", renderer, target);
-			Probe<UiScrollPanel>("UiScrollPanel", renderer, target);
-			Probe<UiTab>("UiTab", renderer, target);
-			Probe<UiSplitter>("UiSplitter", renderer, target);
-			Probe<UiQuadSplitter>("UiQuadSplitter", renderer, target);
-			Probe<UiAbsoluteLayout>("UiAbsoluteLayout", renderer, target);
-			Probe<UiGridLayout>("UiGridLayout", renderer, target);
-			Probe<UiBoxLayout>("UiBoxLayout", renderer, target);
-			Probe<UiList>("UiList", renderer, target);
-			Probe<UiTree>("UiTree", renderer, target);
-			Probe<UiTable>("UiTable", renderer, target);
-			Probe<UiGallery>("UiGallery", renderer, target);
-			Probe<UiDoc>("UiDoc", renderer, target);
-			Probe<UiBezierCurveEditor>("UiBezierCurveEditor", renderer, target);
-			Probe<UiBezierCurveField>("UiBezierCurveField", renderer, target);
-			Probe<UiNodeGraph>("UiNodeGraph", renderer, target);
-			Probe<UiColorProbe>("UiColorProbe", renderer, target);
-			Probe<UiPlaybackBar>("UiPlaybackBar", renderer, target);
+			CheckShadows(renderer, target, device);
+			// The independent CPU reference above is excluded from production helper evidence.
+			UiRasterCache::Clear();
+			target.clear_color.red=target.clear_color.green=target.clear_color.blue=1;
+			Probe<TagProbe>("UiTag", renderer, target, device);
+			Probe<UiMediaCard>("UiMediaCard", renderer, target, device);
+			Probe<UiLabel>("UiLabel", renderer, target, device);
+			Probe<UiButton>("UiButton", renderer, target, device);
+			Probe<UiToolButton>("UiToolButton", renderer, target, device);
+			Probe<UiSplitButton>("UiSplitButton", renderer, target, device);
+			Probe<UiCheckBox>("UiCheckBox", renderer, target, device);
+			Probe<UiRadioButton>("UiRadioButton", renderer, target, device);
+			Probe<UiToggle>("UiToggle", renderer, target, device);
+			Probe<UiBreadcrumbs>("UiBreadcrumbs", renderer, target, device);
+			Probe<UiLineEdit>("UiLineEdit", renderer, target, device);
+			Probe<UiIntEdit>("UiIntEdit", renderer, target, device);
+			Probe<UiFloatEdit>("UiFloatEdit", renderer, target, device);
+			Probe<UiPasswordEdit>("UiPasswordEdit", renderer, target, device);
+			Probe<UiMultiEdit>("UiMultiEdit", renderer, target, device);
+			Probe<UiMaskEdit>("UiMaskEdit", renderer, target, device);
+			Probe<UiSlider>("UiSlider", renderer, target, device);
+			Probe<UiRangeSlider>("UiRangeSlider", renderer, target, device);
+			Probe<UiSliderEdit>("UiSliderEdit", renderer, target, device);
+			Probe<UiRangeSliderEdit>("UiRangeSliderEdit", renderer, target, device);
+			Probe<UiRangeSegments>("UiRangeSegments", renderer, target, device);
+			Probe<UiScrollBar>("UiScrollBar", renderer, target, device);
+			Probe<UiProgressBar>("UiProgressBar", renderer, target, device);
+			Probe<UiProgressRing>("UiProgressRing", renderer, target, device);
+			Probe<UiChartRing>("UiChartRing", renderer, target, device);
+			Probe<UiMatrixSelector>("UiMatrixSelector", renderer, target, device);
+			Probe<UiColorMatrix>("UiColorMatrix", renderer, target, device);
+			Probe<UiDateTime>("UiDateTime", renderer, target, device);
+			Probe<UiColorPicker>("UiColorPicker", renderer, target, device);
+			Probe<UiColorPickerMicro>("UiColorPickerMicro", renderer, target, device);
+			Probe<UiFileBrowser>("UiFileBrowser", renderer, target, device);
+			Probe<UiDropdown>("UiDropdown", renderer, target, device);
+			Probe<UiMenu>("UiMenu", renderer, target, device);
+			Probe<UiPanel>("UiPanel", renderer, target, device);
+			Probe<UiDirectContentHost>("UiDirectContentHost", renderer, target, device);
+			Probe<UiGroupPanel>("UiGroupPanel", renderer, target, device);
+			Probe<UiTitleCard>("UiTitleCard", renderer, target, device);
+			Probe<UiStack>("UiStack", renderer, target, device);
+			Probe<UiAccordion>("UiAccordion", renderer, target, device);
+			Probe<UiScrollPanel>("UiScrollPanel", renderer, target, device);
+			Probe<UiTab>("UiTab", renderer, target, device);
+			Probe<UiSplitter>("UiSplitter", renderer, target, device);
+			Probe<UiQuadSplitter>("UiQuadSplitter", renderer, target, device);
+			Probe<UiAbsoluteLayout>("UiAbsoluteLayout", renderer, target, device);
+			Probe<UiGridLayout>("UiGridLayout", renderer, target, device);
+			Probe<UiBoxLayout>("UiBoxLayout", renderer, target, device);
+			Probe<UiList>("UiList", renderer, target, device);
+			Probe<UiTree>("UiTree", renderer, target, device);
+			Probe<UiTable>("UiTable", renderer, target, device);
+			Probe<UiGallery>("UiGallery", renderer, target, device);
+			Probe<UiDoc>("UiDoc", renderer, target, device);
+			Probe<UiBezierCurveEditor>("UiBezierCurveEditor", renderer, target, device);
+			Probe<UiBezierCurveField>("UiBezierCurveField", renderer, target, device);
+			Probe<UiNodeGraph>("UiNodeGraph", renderer, target, device);
+			Probe<UiColorProbe>("UiColorProbe", renderer, target, device);
+			Probe<UiPlaybackBar>("UiPlaybackBar", renderer, target, device);
 			renderer.Close();
 			ok &= device.DestroyTexture(texture) == GpuResult::Ok;
 		}
@@ -257,14 +340,20 @@ GUI_APP_MAIN
 	      native.runtime_live_count == 0 && native.device_live_count == 0 &&
 	      native.instance_live_count == 0 && native.surface_live_count == 0 &&
 	      VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
-	ok &= cases == 216 && failures == 0;
+	ok &= cases == 224 && failures == 0;
 #ifdef flagCFONTS
 	const auto fonts = GetRenderFontWin32Stats();
 	ok &= fonts.legacy_gdi_font_requests == 0 && fonts.error.IsEmpty();
 	Cout() << "font_backend=DirectWrite legacy_gdi_font_requests=" << fonts.legacy_gdi_font_requests
 	       << " face_cache_entries=" << fonts.face_cache_entries << "/" << fonts.face_cache_limit << EOL;
 #endif
-	Cout() << "UI_GPU_DRAW_SUMMARY painted_inventory_entries=54 cases=" << cases
+	if(capture) ok &= captures==56 && PNGEncoder().SaveFile(GetExeDirFile("UiGpu-contact.png"),Image(*contact));
+	const auto tags=UiRasterCache::GetTagBytes();
+	for(int i=0;i<tags.GetCount();++i) {
+		ok &= tags.GetKey(i).StartsWith("vector/") || tags.GetKey(i).StartsWith("icon/");
+		Cout()<<"UI_RASTER_TAG "<<tags.GetKey(i)<<" bytes="<<tags[i]<<EOL;
+	}
+	Cout() << "UI_GPU_DRAW_SUMMARY painted_inventory_entries=56 cases=" << cases
 	       << " failures=" << failures << " os_file_dialog=HOST_SERVICE"
 	       << " validation_warnings=" << report.validation_warning_count
 	       << " validation_errors=" << report.validation_error_count

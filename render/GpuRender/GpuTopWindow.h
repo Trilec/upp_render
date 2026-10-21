@@ -22,6 +22,9 @@ public:
 	// Select before opening; one coalesced message, joined before window teardown.
 	GpuTopWindow& SetFrameClock(bool enabled = true);
 	bool IsFrameClockActive() const;
+	// UI-thread steady-clock milliseconds. Coalesced and skipped while hidden/iconic;
+	// callbacks may close/destroy this window. Does not alter Core timer time.
+	Event<double> WhenGpuFrame;
 	bool IsGpuReady() const;
 	String GetGpuError() const;
 	GpuBackendKind GetBackend() const;

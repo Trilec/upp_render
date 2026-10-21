@@ -1,5 +1,7 @@
 #include <GpuRender/GpuRender.h>
 #include "GpuComputeScene.h"
+#include "GpuCapture.h"
+#include "GpuControls.h"
 #ifdef flagCFONTS
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
@@ -45,7 +47,7 @@ String SceneModeName(int mode)
 
 class ParticleSceneCtrl : public Ctrl {
 public:
-	ParticleSceneCtrl() : motion_(*this)
+	ParticleSceneCtrl()
 	{
 		NoWantFocus();
 
@@ -56,8 +58,13 @@ public:
 		d.Ellipse(20.5, 17.5, 4.5, 4.5).Fill(Color(255, 216, 112));
 		badge_ = badge;
 
-		motion_.Duration(60000).Loop().Ease([](double progress) { return progress; })
-			.OnUpdate([=](double progress) {
+		motion_.owner = this;
+		motion_.spec.duration_ms = 60000;
+		motion_.spec.loop_count = -1;
+		motion_.cycles = -1;
+		motion_.spec.easing = [](double progress) { return progress; };
+		motion_.start_ms = (int64)NowMs();
+		motion_.spec.on_update = [=](double progress) {
 				++animation_updates_;
 				if(progress != motion_progress_) ++distinct_updates_;
 				double elapsed = progress - motion_progress_;
@@ -65,8 +72,12 @@ public:
 				motion_progress_ = progress;
 				phase_ += elapsed * 60.0 * speed_;
 				Refresh();
-			}).Play();
+			};
 	}
+
+	// Use the installed Animation state machine with an explicit monotonic time.
+	// The dependency's global timer and Core clock remain untouched.
+	void Advance(double now) { if(!paused_) motion_.Step((int64)now); }
 
 	void SetMode(int mode)              { mode_ = clamp(mode, 0, SCENE_MODE_COUNT - 1); Refresh(); }
 	void SetSpeed(double speed)         { speed_ = clamp(speed, 0.10, 4.00); }
@@ -80,7 +91,10 @@ public:
 	void SetPaused(bool on) {
 		if(paused_ == on) return;
 		paused_ = on;
-		if(on) motion_.Pause(); else motion_.Resume();
+		const int64 now = (int64)NowMs();
+		if(on) motion_.elapsed_ms += now - motion_.start_ms;
+		else motion_.start_ms = now;
+		motion_.paused = on;
 		Refresh();
 	}
 	void TogglePaused()                 { SetPaused(!paused_); }
@@ -113,7 +127,9 @@ public:
 		paused_ = false;
 		phase_ = 0.0;
 		motion_progress_ = 0.0;
-		motion_.Replay();
+		motion_.start_ms = (int64)NowMs();
+		motion_.elapsed_ms = 0;
+		motion_.paused = false;
 		Refresh();
 	}
 
@@ -202,7 +218,11 @@ public:
 	}
 
 private:
-	Animation motion_;
+	static double NowMs() {
+		return std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+	Animation::State motion_;
 	uint64 animation_updates_ = 0, distinct_updates_ = 0, paints_ = 0;
 	double motion_progress_ = 0.0;
 	Image badge_;
@@ -361,6 +381,14 @@ public:
 	{
 		SetAsyncPresentation();
 		SetFrameClock();
+		WhenGpuFrame = [=](double now) {
+			const double period = 1000.0 / Animation::GetFPS();
+			if(now + 0.25 < next_animation_frame_) return;
+			if(next_animation_frame_ == 0 || now - next_animation_frame_ >= period)
+				next_animation_frame_ = now;
+			next_animation_frame_ += period;
+			scene_.Advance(now);
+		};
 		Title("GpuRender - upp_Ui GPU Scene Inspector")
 		    .Sizeable().Zoomable().SetRect(0, 0, 1220, 760);
 
@@ -514,6 +542,7 @@ private:
 		model.AddChild(scene, UiMenuItem("Pause / Resume"));
 		model.AddChild(scene, UiMenuItem("Open GPU dialog"));
 		model.AddChild(scene, UiMenuItem("Image and compute"));
+		model.AddChild(scene, UiMenuItem("Browser and colour pickers"));
 
 		UiMenuNodeRef animation = model.AddChild(root, UiMenuItem("Animation"));
 		model.AddChild(animation, UiMenuItem("Orbit"));
@@ -537,6 +566,9 @@ private:
 				OpenDialog();
 			else if(action == "Image and compute")
 				OpenComputeDialog();
+			else if(action == "Browser and colour pickers") {
+				GpuControlsDialog dialog(IsValidationRequested()); dialog.Run();
+			}
 			else if(action == "Light / Dark") {
 				UiThemeContext context = UiTheme::GetContext();
 				context.mode = context.mode == UiThemeMode::Dark ? UiThemeMode::Light : UiThemeMode::Dark;
@@ -719,6 +751,39 @@ private:
 		SetStatus("Scene reset to defaults.");
 	}
 
+public:
+	void StartCapture()
+	{
+		capture_clock_.Set(600,[=] {
+			String evidence;
+			bool pass=CaptureGpuUiClient(*this,"GpuUi-root-light",evidence);
+			UiThemeContext original=UiTheme::GetContext();
+			GalleryDialog dialog;
+			dialog.SetRequireGpu().SetValidation().SetAsyncPresentation();
+			TimeCallback timer;
+			timer.Set(400,[&] {
+				pass &= CaptureGpuUiClient(dialog,"GpuUi-dialog-light",evidence);
+				UiThemeContext dark=original; dark.mode=UiThemeMode::Dark;
+				UiTheme::Set(dark); Ctrl::SwapDarkLight(); dialog.Refresh();
+				timer.Set(400,[&] {
+					pass &= CaptureGpuUiClient(dialog,"GpuUi-dialog-dark",evidence);
+					dialog.Close();
+				});
+			});
+			dialog.Run();
+			Refresh();
+			capture_clock_.Set(400,[=]() mutable {
+				pass &= CaptureGpuUiClient(*this,"GpuUi-root-dark",evidence);
+				UiTheme::Set(original); Ctrl::SwapDarkLight();
+				evidence<<"capture="<<(pass?"PASS":"FAIL")<<"\n";
+				SaveFile(GetExeDirFile("GpuUiGallery-capture.txt"),evidence);
+				if(!pass) SetExitCode(1);
+				Close();
+			});
+		});
+	}
+
+private:
 	void OpenComputeDialog()
 	{
 		ComputeSceneDialog dlg(IsValidationRequested()); dlg.Run();
@@ -769,6 +834,11 @@ private:
 				if(!dlg.QualificationPassed()) { FinishQualification(false, "compute dialog"); return; }
 			}
 			qualification_report_ << "compute_open_edit_close_cycles=3\n";
+			{
+				GpuControlsDialog dialog(IsValidationRequested());
+				dialog.StartQualification(qualification_report_); dialog.Run();
+				if(!dialog.QualificationPassed()) { FinishQualification(false,"extended controls"); return; }
+			}
 			qualification_frame_ = GetGpuStats().presented_frames;
 			SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
 			RequestGpuRefresh();
@@ -850,13 +920,15 @@ private:
 			benchmark_vector_peak_ = max(benchmark_vector_peak_, stats.renderer.vector_cache_bytes);
 		}
 		benchmark_due_ = now + 16;
-		RequestGpuRefresh();
 		if(duration < (benchmark_soak_ ? benchmark_seconds_ * 1000 + 4000 : 24000)) return;
 		KillTimeCallback(987);
 		const GpuPresentationStats stats = GetGpuStats();
 		const double p99 = Percentile(benchmark_delays_, 0.99);
 		const double worst = Percentile(benchmark_delays_, 1.0);
-		const bool pass = IsGpuReady() && GetGpuError().IsEmpty() &&
+		const double elapsed=max(1.0,now-benchmark_measure_started_);
+		const double distinct_hz=(scene_.GetDistinctUpdates()-benchmark_start_distinct_)*1000.0/elapsed;
+		const bool cadence=distinct_hz>=Animation::GetFPS()*.90;
+		const bool pass = cadence && IsGpuReady() && GetGpuError().IsEmpty() &&
 		                  stats.presented_frames >= 50 && (!IsGpuRequired() || GetSoftwareFallbackCount() == 0) && p99 >= 0 && p99 <= 50 && worst <= 100;
 		uint64 early = 0, late = 0;
 		if(benchmark_soak_ && benchmark_memory_.GetCount() >= 8) {
@@ -890,6 +962,7 @@ private:
 		       << " cold_gpu_glyph_rasters=" << stats.first_renderer.gpu_glyph_raster_count
 		       << " cold_cpu_glyph_rasters=" << stats.first_renderer.cpu_glyph_raster_count
 		       << " cold_gpu_vector_submits=" << stats.first_renderer.gpu_vector_submit_count << "\n"
+		       << "cadence=" << (cadence ? "PASS" : "FAIL") << " distinct_hz=" << Format("%.2f",distinct_hz) << "\n"
 		       << "frame_clock_active=" << (IsFrameClockActive() ? 1 : 0) << "\n"
 		       << "timer_delay_ms p50=" << Format("%.2f", Percentile(benchmark_delays_, 0.50))
 		       << " p95=" << Format("%.2f", Percentile(benchmark_delays_, 0.95))
@@ -925,17 +998,22 @@ private:
 		       << "gpu_vector_scratch_bytes=" << AsString(stats.renderer.gpu_vector_scratch_bytes) << "\n"
 		       << "ui_shared_raster_cache_bytes=" << AsString(UiRasterCache::GetStats().bytes) << "\n"
 		       << "ui_shared_raster_cache_misses_total=" << AsString(UiRasterCache::GetStats().misses) << "\n"
+		       << "gpu_composition_layers_last=" << stats.renderer.gpu_clip_layer_count
+		       << " retained_layer_pixel_bytes=" << AsString(stats.renderer.gpu_clip_layer_bytes) << "\n"
 		       << "ui_software_layer_allocations_total=" << AsString(UiGetRenderLayerStats().allocations) << "\n"
 		       << "vertex_buffer_capacity_bytes_last=" << AsString(stats.renderer.vertex_buffer_capacity) << "\n"
 		       << "textured_vertex_buffer_capacity_bytes_last=" << AsString(stats.renderer.textured_vertex_buffer_capacity) << "\n"
 		       << "grid=" << (scene_.IsGridVisible() ? 1 : 0) << "\n"
-		       << "animation_driver=upp_animation scheduler_fps=" << Animation::GetFPS() << "\n"
+		       << "animation_driver=upp_animation_state_steady_clock target_fps=" << Animation::GetFPS() << "\n"
 		       << "gpu_required=" << (IsGpuRequired() ? 1 : 0) << "\n"
 		       << "software_fallback_count=" << AsString(GetSoftwareFallbackCount()) << "\n"
 		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
 		       << "gpu_timestamp_ms=unavailable\n"
 		       << "gpu_error=" << GetGpuError() << "\n"
 		       << "responsiveness=" << (pass ? "PASS" : "FAIL") << "\n";
+		const auto tags = UiRasterCache::GetTagBytes();
+		for(int i=0; i<tags.GetCount(); ++i)
+			report << "ui_raster_tag=" << tags.GetKey(i) << " bytes=" << AsString(tags[i]) << "\n";
 		report << "soak=" << (benchmark_soak_ ? 1 : 0) << "\n";
 		if(benchmark_soak_) {
 			report << "memory_sample_interval_ms=10000 early_mean_bytes=" << AsString(early)
@@ -956,6 +1034,8 @@ private:
 	Vector<uint64> benchmark_heap_;
 	double benchmark_next_memory_ = 30000;
 	Vector<uint64> benchmark_memory_;
+	TimeCallback capture_clock_;
+	double next_animation_frame_ = 0;
 	double live_fps_epoch_ = 0, live_fps_ = 0;
 	uint64 live_fps_frames_ = 0;
 	double benchmark_started_ = 0;
@@ -998,6 +1078,7 @@ private:
 
 GUI_APP_MAIN
 {
+	bool capture_scenes = false;
 	bool benchmark = false;
 	bool qualification = false;
 	bool compute_demo = false;
@@ -1037,6 +1118,7 @@ GUI_APP_MAIN
 			   (int64)w * h * 8 > 64 * 1024 * 1024) { SetExitCode(2); return; }
 			compute_size = Size(w,h);
 		}
+		if(arg == "--capture-scenes") { capture_scenes=true; require_gpu=true; }
 		if(arg == "--compute") compute_demo = true;
 		if(arg == "--benchmark-compute") { compute_benchmark = true; require_gpu = true; }
 		if(arg == "--qualify-ui") { qualification = true; require_gpu = true; }
@@ -1046,6 +1128,7 @@ GUI_APP_MAIN
 	}
 	if((qualification && benchmark) || (compute_benchmark && (qualification || benchmark))) { SetExitCode(2); return; }
 	if(compute_size.cx && !compute_benchmark) { SetExitCode(2); return; }
+	if(capture_scenes && (qualification || benchmark || compute_benchmark || compute_demo)) { SetExitCode(2); return; }
 	Animation::SetFPS(animation_fps);
 	if(compute_benchmark) {
 		ComputeSceneDialog app(validation, compute_size); String report; app.StartBenchmark(seconds, report); app.Run();
@@ -1057,16 +1140,17 @@ GUI_APP_MAIN
 		if(require_gpu) app.SetRequireGpu();
 		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
 		if(qualification) app.StartQualification();
+		if(capture_scenes) app.StartCapture();
 		if(compute_demo && !qualification && !benchmark) app.OpenComputeOnStart();
 		app.Run();
 	}
 	Animation::Finalize();
-	if(benchmark || qualification || compute_benchmark) {
+	if(benchmark || qualification || compute_benchmark || capture_scenes) {
 		const auto d = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		bool zero = d.runtime_live_count == 0 && d.instance_live_count == 0 &&
 		            d.device_live_count == 0 && d.surface_live_count == 0 && d.swapchain_live_count == 0 &&
 		            VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
-		String path = compute_benchmark ? GetExeDirFile("GpuUiGallery-compute.txt") :
+		String path = capture_scenes ? GetExeDirFile("GpuUiGallery-capture.txt") : compute_benchmark ? GetExeDirFile("GpuUiGallery-compute.txt") :
 		              qualification ? GetExeDirFile("GpuUiGallery-qualification.txt") : BenchmarkReportPath(heavy, soak, require_gpu);
 		String report = LoadFile(path);
 		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
@@ -1078,7 +1162,7 @@ GUI_APP_MAIN
 		if(fonts.legacy_gdi_font_requests || !fonts.error.IsEmpty()) SetExitCode(1);
 #endif
 		SaveFile(path, report);
-		if(!zero || (qualification ? report.Find("qualification=PASS") < 0 : report.Find("responsiveness=PASS") < 0) ||
+		if(!zero || (capture_scenes ? report.Find("capture=PASS") < 0 : qualification ? report.Find("qualification=PASS") < 0 : report.Find("responsiveness=PASS") < 0) ||
 		   (soak && report.Find("memory_plateau=PASS") < 0) ||
 		   (compute_benchmark && report.Find("benchmark_status=PASS") < 0)) SetExitCode(1);
 	}

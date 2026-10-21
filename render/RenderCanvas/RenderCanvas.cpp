@@ -294,6 +294,12 @@ UiPaint UiPaint::Radial(Pointf focal, Pointf centre, double r,
 	return paint;
 }
 
+UiPaint UiPaint::Angular(Pointf centre, double start, double sweep, Rgba8 first, Rgba8 last)
+{
+	UiPaint paint; paint.kind=UiPaintKind::AngularGradient; paint.p0=centre; paint.p1=Pointf(start,sweep);
+	paint.stops.Add(UiGradientStop(0,first)); paint.stops.Add(UiGradientStop(1,last)); return paint;
+}
+
 UiPaint& UiPaint::AddStop(double position, Rgba8 stop_color)
 {
 	UiGradientStop stop(position, stop_color);
@@ -316,12 +322,18 @@ bool UiPaint::IsValid(String *reason) const
 	};
 	if(kind == UiPaintKind::Solid)
 		return true;
+	const double determinant = transform.x.x * transform.y.y - transform.x.y * transform.y.x;
+	if(!IsFinitePoint(transform.x) || !IsFinitePoint(transform.y) || !IsFinitePoint(transform.t) ||
+	   !std::isfinite(determinant) || fabs(determinant) < 1e-12)
+		return fail("gradient transform must be finite and invertible");
 	if(!IsFinitePoint(p0) || !IsFinitePoint(p1))
 		return fail("gradient points must be finite");
 	if(kind == UiPaintKind::LinearGradient && p0 == p1)
 		return fail("linear gradient endpoints must differ");
 	if(kind == UiPaintKind::RadialGradient && (!std::isfinite(radius) || radius <= 0.0))
 		return fail("radial gradient radius must be positive");
+	if(kind == UiPaintKind::AngularGradient && fabs(p1.y) < 1e-9)
+		return fail("angular gradient sweep must be nonzero");
 	if(stops.GetCount() < 2)
 		return fail("gradient requires at least two stops");
 	for(int i = 0; i < stops.GetCount(); ++i) {
@@ -340,10 +352,12 @@ String UiPaint::Dump() const
 	if(kind == UiPaintKind::Solid)
 		return String("Solid ") + DumpColor(color);
 	String out;
-	out << (kind == UiPaintKind::LinearGradient ? "Linear " : "Radial ")
+	out << (kind == UiPaintKind::LinearGradient ? "Linear " : kind == UiPaintKind::RadialGradient ? "Radial " : "Angular ")
 	    << DumpPoint(p0) << ' ' << DumpPoint(p1);
 	if(kind == UiPaintKind::RadialGradient)
 		out << " r=" << StableDouble(radius);
+	if(transform != Transform2D::Identity())
+		out << " matrix=" << DumpPoint(transform.x) << ' ' << DumpPoint(transform.y) << ' ' << DumpPoint(transform.t);
 	out << " spread=" << DumpSpread(spread) << " stops=";
 	for(int i = 0; i < stops.GetCount(); ++i) {
 		if(i)
@@ -356,7 +370,7 @@ String UiPaint::Dump() const
 bool UiPaint::operator==(const UiPaint& other) const
 {
 	return kind == other.kind && color == other.color && p0 == other.p0 && p1 == other.p1 &&
-	       radius == other.radius && spread == other.spread && stops == other.stops;
+	       radius == other.radius && transform == other.transform && spread == other.spread && stops == other.stops;
 }
 
 bool UiStrokeStyle::IsValid(String *reason) const
@@ -445,6 +459,9 @@ String UiDisplayList::Dump() const
 		case UiDisplayOpType::Restore:
 			sb << "Restore";
 			break;
+		case UiDisplayOpType::BlurLayer: sb << "BlurLayer " << StableDouble(op.width); break;
+		case UiDisplayOpType::ClipPath:
+			sb << "ClipPath " << DumpFillRule(op.fill_rule) << ' ' << op.path.Dump(); break;
 		case UiDisplayOpType::ClipRect:
 			sb << "ClipRect " << DumpRect(op.rect);
 			break;
@@ -560,6 +577,19 @@ void UiDisplayListBuilder::ClipRect(const Rectf& rect)
 	op.type = UiDisplayOpType::ClipRect;
 	op.rect = rect;
 	Append(op);
+}
+
+void UiDisplayListBuilder::BlurLayer(int radius)
+{
+	if(!CanRecord()) return;
+	if(radius != 1 || save_depth < 1) { Fail("BlurLayer requires radius 1 inside Save/Restore"); return; }
+	UiDisplayOp op; op.type=UiDisplayOpType::BlurLayer; op.width=radius; Append(op);
+}
+
+void UiDisplayListBuilder::ClipPath(const UiPath& path, UiFillRule rule)
+{
+	if(!CanRecord()) return;
+	UiDisplayOp op; op.type=UiDisplayOpType::ClipPath; op.path=path; op.fill_rule=rule; Append(op);
 }
 
 void UiDisplayListBuilder::ConcatTransform(const Transform2D& transform)

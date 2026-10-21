@@ -164,8 +164,7 @@ bool UiRenderer2D::EnsureVectorRaster(const UiDisplayOp& op, const Transform2D& 
 			}
 		}
 		if(key.paint.kind != UiPaintKind::Solid) {
-			key.paint.p0 -= placement;
-			key.paint.p1 -= placement;
+			key.paint.transform = key.paint.transform * Transform2D::Translation(-placement.x, -placement.y);
 		}
 	}
 	auto placed = [&](const Rectf& rect) {
@@ -235,6 +234,8 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 			builder.Restore();
 			state = stack.Pop();
 			break;
+		case UiDisplayOpType::BlurLayer: builder.BlurLayer((int)op.width); break;
+		case UiDisplayOpType::ClipPath: builder.ClipPath(op.path,op.fill_rule); break;
 		case UiDisplayOpType::ClipRect:
 			builder.ClipRect(op.rect);
 			break;
@@ -272,6 +273,13 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 				vector_stats.vector_path_count++;
 				if(op.paint.kind != UiPaintKind::Solid)
 					vector_stats.gradient_count++;
+			}
+			if(op.type == UiDisplayOpType::DrawSvg && CanGpuVector()) {
+				UiDisplayList vector;
+				String detail;
+				if(!RecordUiSvg(op, vector, detail)) return Fail("GPU SVG recording failed: " + detail);
+				ReplayUiDisplayList(vector, builder);
+				break;
 			}
 			if(PreparePath(op, state.transform) ||
 			   (op.type != UiDisplayOpType::DrawSvg && CanGpuVector())) {

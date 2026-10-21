@@ -2,6 +2,7 @@
 #include <RenderVulkan/RenderVulkanRhi.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include <RenderSoftware/RenderSoftware.h>
+#include <RenderVector/RenderVector.h>
 #include <cmath>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -164,6 +165,102 @@ static bool Run(VulkanGpuDevice& device) {
 				for(int y=21;y<71;++y) for(int x=19;x<70;++x) for(int c=0;c<4;++c)
 					equal &= values[4*(y*96+x)+c]==shifted_values[4*((y-3)*96+x+4)+c];
 				ok &= Check(equal,"cached translated GPU coverage preserves exact pixel phase");
+				++cases;
+			}
+			for(double sweep : {1.7, -2.3, 2*M_PI}) {
+				UiPath rectangle; rectangle.MoveTo(Pointf(4,4)).LineTo(Pointf(92,4)).LineTo(Pointf(92,92)).LineTo(Pointf(4,92)).Close();
+				UiPaint paint=UiPaint::Angular(Pointf(44,46),.4,sweep,Rgba8(20,60,220),Rgba8(230,170,30));
+				paint.transform.x=Pointf(.9,.14); paint.transform.y=Pointf(-.12,1.05); paint.transform.t=Pointf(2,1);
+				UiDisplayListBuilder b; b.FillPath(rectangle,paint); UiDisplayList list; b.Finish(list);
+				ok &= pixels(list,true); Vector<byte> values; device.ReadTexturePixels(target,values);
+				int maximum=0;
+				for(int y=12;y<85;y+=5) for(int x=12;x<85;x+=5) {
+					const auto& m=paint.transform; double det=m.x.x*m.y.y-m.x.y*m.y.x;
+					double dx=x+.5-m.t.x,dy=y+.5-m.t.y;
+					Pointf q((m.y.y*dx-m.x.y*dy)/det,(-m.y.x*dx+m.x.x*dy)/det); q-=paint.p0;
+					double tau=2*M_PI, span=min(fabs(sweep),tau), phase=fmod((sweep<0?-1:1)*(atan2(q.y,q.x)-.4),tau);
+					if(phase<0) phase+=tau; double t=phase/span;
+					if(span<tau-1e-6 && phase>span) { double d=fabs(phase-span); t=min(phase,tau-phase)<=min(d,tau-d)?0:1; }
+					t=minmax(t,0.0,1.0);
+					for(int c=0;c<3;++c) {
+						double v=(c==0?20:c==1?60:220)*(1-t)+(c==0?230:c==1?170:30)*t;
+						int actual=values[4*(y*96+x)+(c==0&&bgra?2:c==2&&bgra?0:c)];
+						maximum=max(maximum,abs(actual-(int)round(v)));
+					}
+				}
+				ok &= Check(maximum<=2,"angular gradient agrees with independent transformed numeric oracle");
+				ok &= pixels(list,false); ok &= Check(renderer.GetStats().gpu_vector_raster_count==0,"angular GPU coverage cache reused");
+				++cases;
+			}
+			{
+				UiPath circle; const double k=.5522847498307936*24;
+				circle.MoveTo(Pointf(72,48)).CubicTo(Pointf(72,48+k),Pointf(48+k,72),Pointf(48,72))
+				.CubicTo(Pointf(48-k,72),Pointf(24,48+k),Pointf(24,48))
+				.CubicTo(Pointf(24,48-k),Pointf(48-k,24),Pointf(48,24))
+				.CubicTo(Pointf(48+k,24),Pointf(72,48-k),Pointf(72,48)).Close();
+				UiDisplayListBuilder b;
+				for(int i=0;i<6;++i) {
+					b.Save(); b.ClipPath(circle); b.FillRect(Rectf(0,0,96,96),Rgba8(50,160,220)); b.Restore();
+				}
+				b.FillRect(Rectf(2,2,8,8),Rgba8(230,30,20));
+				UiDisplayList list; b.Finish(list);
+				ok &= Check(renderer.Render(list,output),"sibling path clips render with reusable GPU layers");
+				ok &= Check(renderer.GetStats().gpu_clip_layer_count==6 && renderer.GetStats().vector_raster_count==0,
+				            "path clips generate no CPU coverage and sibling clips do not consume nesting depth");
+				Vector<byte> values; ok &= Check(device.ReadTexturePixels(target,values),"clipped pixels read back");
+				ok &= Check(values[4*(48*96+48)+3]==255 && values[4*(12*96+12)+3]==0 &&
+				            values[4*(4*96+4)+3]==255,"clip interior, exterior and restored suffix are correct");
+				++cases;
+				UiDisplayListBuilder nested;
+				for(int i=0;i<4;++i) { nested.Save(); nested.ClipPath(circle); }
+				nested.FillRect(Rectf(0,0,96,96),Rgba8(80,150,210));
+				for(int i=0;i<4;++i) nested.Restore();
+				nested.Finish(list);
+				ok &= Check(renderer.Render(list,output) && renderer.GetStats().gpu_clip_layer_count==4,
+				            "four nested GPU path clips render");
+				Vector<byte> nested_values; device.ReadTexturePixels(target,nested_values);
+				ok &= Check(nested_values[4*(48*96+48)+3]==255 && nested_values[4*(12*96+12)+3]==0,
+				            "nested clip state remains bounded and correct");
+				++cases;
+				UiDisplayListBuilder too_deep;
+				for(int i=0;i<5;++i) { too_deep.Save(); too_deep.ClipPath(circle); }
+				too_deep.FillRect(Rectf(0,0,96,96),Rgba8(255,255,255));
+				for(int i=0;i<5;++i) too_deep.Restore();
+				too_deep.Finish(list);
+				ok &= Check(!renderer.Render(list,output) && !renderer.GetError().IsEmpty(),
+				            "excessive clip nesting fails explicitly before unbounded allocation");
+				UiDisplayListBuilder recovered; recovered.FillPath(circle,UiPaint::Solid(Rgba8(255,255,255)));
+				recovered.Finish(list); ok &= Check(renderer.Render(list,output),"clip failure leaves a reusable renderer");
+				++cases;
+			}
+			{
+				UiDisplayListBuilder b; b.Save(); b.BlurLayer(1);
+				b.FillRect(Rectf(24,24,72,72),Rgba8(255,255,255)); b.Restore();
+				UiDisplayList list; b.Finish(list);
+				ok &= Check(renderer.Render(list,output),"GPU blur layer renders");
+				Vector<byte> values; device.ReadTexturePixels(target,values); int maximum=0;
+				for(int y=20;y<76;++y) for(int x=20;x<76;++x) {
+					int count=0;
+					for(int yy=-1;yy<=1;++yy) for(int xx=-1;xx<=1;++xx)
+						if(x+xx>=24 && x+xx<72 && y+yy>=24 && y+yy<72) ++count;
+					int expected=(int)round(count*255.0/9);
+					maximum=max(maximum,abs((int)values[4*(y*96+x)+3]-expected));
+				}
+				ok &= Check(maximum<=1 && renderer.GetStats().vector_raster_count==0 &&
+				            renderer.GetStats().texture_upload_count==0,"blur alpha matches independent 3x3 convolution without CPU pixels");
+				++cases;
+				ImageBuffer asset(4,4); Fill(~asset,RGBAZero(),asset.GetLength());
+				for(auto& c:asset) { c.r=32;c.g=100;c.b=60;c.a=128; }
+				Image image(asset); String detail;
+				ok &= Check(RecordUiPainter(Size(96,96),[&](Painter& p) {
+					p.Begin(); p.RoundedRectangle(16,16,64,64,12);
+					p.Opacity(.5).Fill(image,Xform2D::Scale(4),FILL_REPEAT|FILL_FAST); p.End();
+				},list,detail),"rounded repeated image intent records");
+				ok &= Check(renderer.Render(list,output),"rounded repeated image is GPU clipped");
+				device.ReadTexturePixels(target,values);
+				ok &= Check(abs((int)values[4*(48*96+48)+3]-64)<=1 && values[4*(4*96+4)+3]==0 &&
+				            renderer.GetStats().gpu_clip_layer_count>0 && renderer.GetStats().vector_raster_count==0,
+				            "image opacity and rounded masks use the GPU with original bitmap assets only");
 				++cases;
 			}
 			Cout()<<"format="<<(int)format<<" cases="<<cases<<" reference_mean_max="<<worst_mean<<" reference_pixel_max="<<worst_max<<EOL;

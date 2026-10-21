@@ -144,19 +144,20 @@ CONSOLE_APP_MAIN
 				ok &= Check(renderer.Render(scene, offscreen),
 				            "real Vulkan offscreen vector/text frame should render");
 				const UiRenderer2DStats first = renderer.GetStats();
+				Cout() << "SVG first_batches=" << first.batch_count << " draws=" << first.draw_count << EOL;
 				ok &= Check(first.vector_op_count == 3 && first.vector_path_count == 2 &&
 				            first.svg_count == 1 && first.gradient_count == 1,
 				            "first Vulkan vector frame should account for path/gradient/SVG intent");
-				ok &= Check(first.vector_cache_miss_count == 3 && first.vector_raster_count == 1 &&
-				            first.gpu_vector_raster_count == 2 &&
+				ok &= Check(first.vector_cache_miss_count == 3 && first.vector_raster_count == 0 &&
+				            first.gpu_vector_raster_count == 3 &&
 				            first.vector_cache_entry_count == 3,
-				            "first Vulkan vector frame uses GPU paths and explicitly counts the remaining CPU SVG");
-				ok &= Check(first.texture_upload_count == 1,
-				            "only the remaining SVG image is uploaded");
+				            "first Vulkan vector frame uses GPU path and SVG coverage without CPU rasterization");
+				ok &= Check(first.texture_upload_count == 0,
+				            "SVG generates no CPU image upload");
 				ok &= Check(first.text_run_count == 1 && first.glyph_count == 2 &&
 				            first.glyph_cache_miss_count == 2 && first.glyph_atlas_upload_count == 2,
 				            "vector materialization should preserve and populate the accepted text path");
-				ok &= Check(first.batch_count == 6 && first.draw_count == 6,
+				ok &= Check(first.batch_count == 7 && first.draw_count == 7,
 				            "real Vulkan should preserve solid/vector/vector/SVG/text/solid ordering");
 				ok &= Check(scene.Dump() == scene_dump,
 				            "real Vulkan vector replay must not mutate the display list");
@@ -171,7 +172,7 @@ CONSOLE_APP_MAIN
 				            "second Vulkan vector frame should reuse GPU image textures");
 				ok &= Check(second.glyph_cache_miss_count == 0 && second.glyph_atlas_upload_count == 0,
 				            "second Vulkan vector frame should also reuse the glyph atlas");
-				ok &= Check(second.batch_count == 6 && second.draw_count == 6,
+				ok &= Check(second.batch_count == 7 && second.draw_count == 7,
 				            "cached Vulkan Stage-5 order should remain deterministic");
 
 				GpuSurfaceDesc surface_desc;
@@ -200,7 +201,7 @@ CONSOLE_APP_MAIN
 				ok &= Check(renderer.GetStats().vector_cache_miss_count == (srgb_frame ? 1 : 0) &&
 				            renderer.GetStats().gpu_vector_raster_count == (srgb_frame ? 1 : 0) &&
 				            renderer.GetStats().vector_raster_count == 0 &&
-				            renderer.GetStats().texture_upload_count == (srgb_frame ? 1 : 0) &&
+				            renderer.GetStats().texture_upload_count == 0 &&
 				            renderer.GetStats().glyph_cache_miss_count == 0 &&
 				            renderer.GetStats().glyph_atlas_upload_count == 0,
 				            "swapchain reuses glyph/coverage/SVG caches and prepares only the required sRGB gradient/image variants");

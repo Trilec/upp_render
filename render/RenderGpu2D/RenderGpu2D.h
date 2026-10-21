@@ -10,6 +10,7 @@ namespace Upp {
 struct UiRenderer2DTarget : Moveable<UiRenderer2DTarget> {
 	GpuTextureId color_target;
 	Size size = Size(0, 0);
+	Point origin = Point(0, 0); // Global pixel origin represented by this target.
 	GpuFormat color_format = GpuFormat::Unknown;
 	GpuLoadOp load_op = GpuLoadOp::Clear;
 	GpuStoreOp store_op = GpuStoreOp::Store;
@@ -34,6 +35,8 @@ struct UiRenderer2DCacheLimits {
 
 struct UiRenderer2DStats : Moveable<UiRenderer2DStats> {
 	int display_op_count = 0;
+	int gpu_clip_layer_count = 0;
+	int64 gpu_clip_layer_bytes = 0;
 	int primitive_count = 0;
 	int emitted_primitive_count = 0;
 	int clipped_primitive_count = 0;
@@ -106,7 +109,8 @@ public:
 	                 const GpuClearColor& clear_color = GpuClearColor());
 	// Display an already GPU-resident premultiplied image. Caller retains its lifetime;
 	// no CPU Image, texture upload or readback occurs. Texture colour encoding is explicit.
-	bool RenderTexture(GpuTextureId image, const UiRenderer2DTarget& target);
+	bool RenderTexture(GpuTextureId image, const UiRenderer2DTarget& target,
+	                   GpuBlendMode blend = GpuBlendMode::PremultipliedSourceOver);
 	bool RenderTextureFrame(GpuTextureId image, const GpuFrameInfo& frame);
 	void Close();
 	// Configure between frames. Zero rejects new cached content.
@@ -299,6 +303,24 @@ private:
 	int frame_image_evictions = 0;
 	int frame_vector_evictions = 0;
 	int64 frame_image_upload_bytes = 0;
+	struct ClipLayer {
+		Size size = Size(0,0);
+		GpuFormat format = GpuFormat::Unknown;
+		GpuTextureId colour, mask;
+		bool busy = false;
+		uint64 last_use = 0;
+	};
+	GpuShaderId blur_fragment_shader;
+	Vector<PipelineEntry> blur_pipelines;
+	bool EnsureBlurPipeline(GpuFormat format, GpuPipelineId& out);
+	bool RenderTexturePass(GpuTextureId image, const UiRenderer2DTarget& target, GpuBlendMode blend, bool blur, const Rect *destination = nullptr);
+	Array<ClipLayer> clip_layers;
+	int clip_depth = 0, frame_clip_layers = 0;
+	int64 clip_layer_bytes = 0;
+	uint64 clip_use_clock = 0;
+	bool EnsureClipLayer(int depth, const UiRenderer2DTarget& target, int& slot);
+	void CloseClipLayers();
+	bool RenderClippedList(const UiDisplayList& list, const UiRenderer2DTarget& target, int clip);
 	bool RenderInternal(const UiDisplayList& list, const UiRenderer2DTarget& target);
 	int64 ImageCacheBytes() const;
 	int64 VectorCacheBytes() const;
@@ -325,7 +347,7 @@ private:
 	                        UiRenderer2DStats& vector_stats);
 	bool MaterializeVectorList(const UiDisplayList& source, UiDisplayList& out,
 	                           UiRenderer2DStats& vector_stats);
-	bool BuildGeometry(const UiDisplayList& list, Size target_size);
+	bool BuildGeometry(const UiDisplayList& list, Size target_size, Point origin);
 	bool Submit(const UiRenderer2DTarget& target, GpuPipelineId solid_pipeline,
 	            GpuPipelineId invert_pipeline, GpuPipelineId textured_pipeline, GpuPipelineId mask_pipeline);
 	bool Fail(const String& message);

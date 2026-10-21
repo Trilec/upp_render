@@ -738,6 +738,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 				return Fail("UiRenderer2D restore without matching save");
 			state = stack.Pop();
 			break;
+		case UiDisplayOpType::BlurLayer: return Fail("blur requires GPU composition");
+		case UiDisplayOpType::ClipPath: return Fail("path clips require the GPU composition path");
 		case UiDisplayOpType::ClipRect:
 			if(!IsFiniteRect(op.rect))
 				return Fail("UiRenderer2D received a non-finite clip rectangle");

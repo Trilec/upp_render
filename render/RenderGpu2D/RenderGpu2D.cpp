@@ -33,7 +33,7 @@ float UiRenderer2D::ColorChannel(byte channel) const
 	return value <= 0.04045f ? value / 12.92f : (float)std::pow((value + 0.055f) / 1.055f, 2.4f);
 }
 
-bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
+bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size, Point origin)
 {
 
 	vertices.Clear();
@@ -48,7 +48,7 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 	if(target_size.cx <= 0 || target_size.cy <= 0)
 		return Fail("UiRenderer2D target size must be positive");
 
-	const Rectf target_clip(0, 0, target_size.cx, target_size.cy);
+	const Rectf target_clip(origin.x, origin.y, (double)origin.x + target_size.cx, (double)origin.y + target_size.cy);
 	ReplayState state;
 	Vector<ReplayState> stack;
 
@@ -94,8 +94,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const int first = vertices.GetCount();
 		auto add_vertex = [&](const Pointf& p) {
 			Vertex& v = vertices.Add();
-			v.x = (float)(2.0 * p.x / target_size.cx - 1.0);
-			v.y = (float)(1.0 - 2.0 * p.y / target_size.cy);
+			v.x = (float)(2.0 * (p.x - origin.x) / target_size.cx - 1.0);
+			v.y = (float)(1.0 - 2.0 * (p.y - origin.y) / target_size.cy);
 			v.r = r; v.g = g; v.b = b; v.a = a;
 			if(a > 0.0f && a < 1.0f)
 				stats.translucent_vertex_count++;
@@ -164,8 +164,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const int first = textured_vertices.GetCount();
 		auto add_vertex = [&](const TexturedPoint& p) {
 			TexturedVertex& v = textured_vertices.Add();
-			v.x = (float)(2.0 * p.position.x / target_size.cx - 1.0);
-			v.y = (float)(1.0 - 2.0 * p.position.y / target_size.cy);
+			v.x = (float)(2.0 * (p.position.x - origin.x) / target_size.cx - 1.0);
+			v.y = (float)(1.0 - 2.0 * (p.position.y - origin.y) / target_size.cy);
 			v.u = (float)p.uv.x;
 			v.v = (float)p.uv.y;
 			v.r = r; v.g = g; v.b = b; v.a = a;
@@ -258,8 +258,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 		const float b = ColorChannel(op.paint.color.b), alpha = op.paint.color.a / 255.0f;
 		auto vertex = [&](Pointf p, double coverage) {
 			Vertex& v = vertices.Add();
-			v.x = (float)(2 * p.x / target_size.cx - 1);
-			v.y = (float)(1 - 2 * p.y / target_size.cy);
+			v.x = (float)(2 * (p.x - origin.x) / target_size.cx - 1);
+			v.y = (float)(1 - 2 * (p.y - origin.y) / target_size.cy);
 			v.r = r; v.g = g; v.b = b; v.a = (float)(alpha * coverage);
 			if(v.a > 0 && v.a < 1) stats.translucent_vertex_count++;
 		};
@@ -317,6 +317,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 				return Fail("UiRenderer2D restore without matching save");
 			state = stack.Pop();
 			break;
+		case UiDisplayOpType::BlurLayer: return Fail("unmaterialized blur layer");
+		case UiDisplayOpType::ClipPath: return Fail("unmaterialized path clip");
 		case UiDisplayOpType::ClipRect:
 			if(!IsFiniteRect(op.rect))
 				return Fail("UiRenderer2D received a non-finite clip rectangle");
@@ -449,6 +451,8 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size)
 bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DTarget& target)
 {
 	working_color_format = target.color_format;
+	for(int i=0;i<list.GetCount();++i)
+		if(list[i].type==UiDisplayOpType::ClipPath || list[i].type==UiDisplayOpType::BlurLayer) return RenderClippedList(list,target,i);
 	bool has_vector = false;
 	Transform2D transform;
 	Vector<Transform2D> transforms;
@@ -503,7 +507,7 @@ bool UiRenderer2D::RenderInternal(const UiDisplayList& list, const UiRenderer2DT
 	if(!target.color_target.IsValid() || target.size.cx <= 0 || target.size.cy <= 0 ||
 	   !IsSupportedColorFormat(target.color_format))
 		return Fail("UiRenderer2D target is invalid or unsupported");
-	if(!BuildGeometry(list, target.size)) {
+	if(!BuildGeometry(list, target.size, target.origin)) {
 		DestroyTextExtension(); // Discard queued glyph writes and their unpublished cache entries.
 		return false;
 	}
@@ -809,6 +813,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 {
 	const int64 submits_before = gpu_vector_rasterizer ? gpu_vector_rasterizer->GetSubmitCount() : 0;
 	++cache_frame;
+	frame_clip_layers = 0;
 	frame_image_hits = frame_image_evictions = frame_vector_evictions = 0;
 	frame_image_upload_bytes = 0;
 	frame_path_misses = 0;
@@ -827,6 +832,7 @@ bool UiRenderer2D::Render(const UiDisplayList& list, const UiRenderer2DTarget& t
 	stats.gpu_path_cache_bytes = path_cache_bytes;
 	stats.gpu_path_coverage_bytes = (int64)path_coverage_side * path_coverage_side * 4;
 	UpdateCacheStats();
+	stats.gpu_clip_layer_count=frame_clip_layers; stats.gpu_clip_layer_bytes=clip_layer_bytes;
 	return result;
 }
 
@@ -845,6 +851,7 @@ bool UiRenderer2D::RenderFrame(const UiDisplayList& list, const GpuFrameInfo& fr
 
 void UiRenderer2D::Close()
 {
+	CloseClipLayers();
 	ClosePathCoverage();
 	path_cache.Clear(); scratch_path.triangles.Clear(); path_cache_bytes = 0;
 	DestroyVectorExtension();

@@ -38,6 +38,18 @@ vec4 colour(vec2 q) {
         float t=0;
         if(p.kind==1) {
             vec2 axis=end-f; t=dot(d,axis)/max(dot(axis,axis),1e-20);
+        } else if(p.kind==3) {
+            const float tau=6.283185307179586;
+            float sweep=min(abs(end.y),tau);
+            float angle=atan(local.y,local.x);
+            float phase=mod((end.y<0 ? -1 : 1)*(angle-end.x),tau);
+            if(sweep>=tau-0.000001 || phase<=sweep) t=phase/sweep;
+            else {
+                float from_start=min(phase,tau-phase);
+                float end_delta=abs(phase-sweep);
+                float from_end=min(end_delta,tau-end_delta);
+                t=from_start<=from_end ? 0 : 1;
+            }
         } else {
             vec2 oc=f-end; float a=dot(d,d), b=dot(oc,d);
             float cc=dot(oc,oc)-p.inverse_x.w*p.inverse_x.w;

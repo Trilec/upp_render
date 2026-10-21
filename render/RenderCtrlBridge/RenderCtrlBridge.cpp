@@ -1,5 +1,6 @@
 #include "RenderCtrlBridge.h"
 #include "RenderCtrlBridgeRegion.h"
+#include <RenderVector/RenderVector.h>
 
 namespace Upp {
 
@@ -207,6 +208,31 @@ public:
 		state.clip = Rect(size);
 	}
 
+
+	bool DrawVectorArtwork(const Rect& bounds, const Function<void(Painter&)>& paint) override
+	{
+		if(bounds.IsEmpty()) return true;
+		UiDisplayList list; String detail;
+		if(!RecordUiPainter(bounds.GetSize(), paint, list, detail)) return false;
+		builder.Save();
+		builder.ClipRect(ToRectf(bounds));
+		builder.ConcatTransform(Translation(bounds.TopLeft()));
+		ReplayUiDisplayList(list, builder);
+		builder.Restore();
+		++report.path_count;
+		return true;
+	}
+
+	void DrawPaintingOp(const Rect& bounds, const Painting& painting) override
+	{
+		if(IsNull(painting) || bounds.IsEmpty()) return;
+		Sizef size=painting.GetSize();
+		if(size.cx<=0 || size.cy<=0) { Fail("invalid retained Painting size"); return; }
+		if(!DrawVectorArtwork(bounds,[&](Painter& p) {
+			p.Scale(bounds.GetWidth()/size.cx,bounds.GetHeight()/size.cy);
+			p.Paint(painting);
+		})) Fail("retained Painting contains unsupported GPU vector operations");
+	}
 
 	bool DrawRoundedFaceFrame(const Rect& bounds, int radius,
 	                          int frame_width, Color face, Color frame) override

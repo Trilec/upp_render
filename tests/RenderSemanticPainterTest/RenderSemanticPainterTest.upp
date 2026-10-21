@@ -1,0 +1,12 @@
+uses(CFONTS)
+	RenderFontWin32;
+
+uses
+	RenderVector,
+	RenderSoftware;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";

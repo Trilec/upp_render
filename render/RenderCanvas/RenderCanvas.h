@@ -72,6 +72,7 @@ enum class UiPaintKind {
 	Solid,
 	LinearGradient,
 	RadialGradient,
+	AngularGradient,
 };
 
 struct UiGradientStop : Moveable<UiGradientStop> {
@@ -91,13 +92,15 @@ struct UiPaint : Moveable<UiPaint> {
 	Pointf p0 = Pointf(0, 0); // linear start / radial focal point
 	Pointf p1 = Pointf(0, 0); // linear end / radial centre
 	double radius = 0;
+	// Maps gradient coordinates into path-local coordinates (identity by default).
+	Transform2D transform;
 	UiGradientSpread spread = UiGradientSpread::Pad;
 	Vector<UiGradientStop> stops;
 
 	UiPaint() = default;
 	UiPaint(const UiPaint& other)
 		: kind(other.kind), color(other.color), p0(other.p0), p1(other.p1),
-		  radius(other.radius), spread(other.spread), stops(other.stops, 1) {}
+		  radius(other.radius), transform(other.transform), spread(other.spread), stops(other.stops, 1) {}
 	UiPaint(UiPaint&& other) = default;
 	UiPaint& operator=(const UiPaint& other) {
 		if(this != &other) {
@@ -106,6 +109,7 @@ struct UiPaint : Moveable<UiPaint> {
 			p0 = other.p0;
 			p1 = other.p1;
 			radius = other.radius;
+			transform = other.transform;
 			spread = other.spread;
 			stops = Vector<UiGradientStop>(other.stops, 1);
 		}
@@ -119,6 +123,8 @@ struct UiPaint : Moveable<UiPaint> {
 	static UiPaint Radial(Pointf focal, Pointf centre, double radius,
 	                      Rgba8 inner_color, Rgba8 outer_color,
 	                      UiGradientSpread spread = UiGradientSpread::Pad);
+	// Angular start/sweep in radians; out-of-sweep pixels use the nearest end.
+	static UiPaint Angular(Pointf centre, double start, double sweep, Rgba8 first, Rgba8 last);
 	UiPaint& AddStop(double position, Rgba8 color);
 
 	bool IsValid(String *reason = nullptr) const;
@@ -182,6 +188,9 @@ public:
 	// The rectangle is in the current local coordinate system. The current transform
 	// is applied when the clip is established; later transforms do not move it.
 	virtual void ClipRect(const Rectf& rect) = 0;
+	// GPU composition scope: filter following content until the matching Restore.
+	virtual void BlurLayer(int radius = 1) = 0;
+	virtual void ClipPath(const UiPath& path, UiFillRule rule = UiFillRule::NonZero) = 0;
 	virtual void ConcatTransform(const Transform2D& transform) = 0;
 
 	virtual void FillRect(const Rectf& rect, Rgba8 color) = 0;
@@ -207,6 +216,8 @@ enum class UiDisplayOpType {
 	Save,
 	Restore,
 	ClipRect,
+	ClipPath,
+	BlurLayer,
 	ConcatTransform,
 	FillRect,
 	InvertRect,
@@ -274,6 +285,8 @@ public:
 	void Save() override;
 	void Restore() override;
 	void ClipRect(const Rectf& rect) override;
+	void BlurLayer(int radius = 1) override;
+	void ClipPath(const UiPath& path, UiFillRule rule = UiFillRule::NonZero) override;
 	void ConcatTransform(const Transform2D& transform) override;
 	void FillRect(const Rectf& rect, Rgba8 color) override;
 	void InvertRect(const Rectf& rect) override;

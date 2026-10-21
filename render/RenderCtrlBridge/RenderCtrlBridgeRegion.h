@@ -14,6 +14,8 @@ public:
         if(!stack.IsEmpty()) { state = stack.Top(); stack.Drop(); }
     }
     void ClipRect(const Rectf& r) override { target.ClipRect(r); }
+    void BlurLayer(int radius) override { target.BlurLayer(radius); }
+    void ClipPath(const UiPath& p, UiFillRule rule) override { target.ClipPath(p, rule); }
     void ConcatTransform(const Transform2D& t) override { state.transform = state.transform * t; target.ConcatTransform(t); }
     bool Exclude(const Rectf& local) {
         const auto& t = state.transform;

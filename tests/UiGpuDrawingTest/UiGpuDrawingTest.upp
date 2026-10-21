@@ -1,8 +1,10 @@
 uses
 	Ui,
+	Ui/UiFileBrowser,
 	GpuRender,
 	RenderGpu2D,
-	RenderVulkan;
+	RenderVulkan,
+	plugin/png;
 
 uses(CFONTS)
 	RenderFontWin32;

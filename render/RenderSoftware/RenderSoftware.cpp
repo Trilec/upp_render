@@ -81,6 +81,12 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 				--depth;
 			}
 			break;
+		case UiDisplayOpType::BlurLayer:
+			error="neutral blur layers require GPU composition; native software Ui uses its existing helper"; return false;
+		case UiDisplayOpType::ClipPath:
+			painter.EvenOdd(op.fill_rule == UiFillRule::EvenOdd);
+			if(!ReplayUiPath(painter,op.path,error)) return false;
+			painter.Clip(); break;
 		case UiDisplayOpType::ClipRect:
 			// Neutral ClipRect mutates this state; Draw::Clip would push an extra state.
 			painter.Rectangle(op.rect).Clip();
