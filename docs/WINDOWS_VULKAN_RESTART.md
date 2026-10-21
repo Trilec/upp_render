@@ -1,153 +1,49 @@
-# Windows/Vulkan restart checkpoint
+# Windows / Vulkan continuation — 2026-10-22
 
-Updated 2026-10-22. Resume the existing request in this chat. Overall Windows completion remains in progress (7 of 10 acceptance gates; 70%). The user has authorized full complex-script text support now. No further scope or permission decision is pending.
+## Scope and boundaries
 
-## Authorization and boundaries
+Finish the Windows whole-Ui Vulkan application, efficient drawing and scheduling, all controls and dialogs, and the full native text/editing integration selected by the user. External E:/upp-18468/uppsrc and E:/apps/github/upp_animation are READ ONLY. Work on main only; local commits authorized; no push/publish. Use KlickCurt Patch for writes and Execute for builds/runs/Git mutations. Preserve foreign Ui edits.
 
-Work on main. Local commits are authorized; the user reserved publishing, so do not push or publish. No subagents. Core E:/upp-18468/uppsrc and Animation E:/apps/github/upp_animation are READ ONLY. Ui implementation changes are authorized.
+## Current source and verified checkpoints
 
-Use KlickCurt Patch for mutations, Execute for builds/runs/Git mutations, Dash for the existing dashboard. Local shell is for read-only observation. Read klick-project-workflow and upp-ui-development skills. Preserve unrelated/concurrent Ui work.
+- Renderer base 5e63bb70482a1e42495206f77fcb23d2b114b7d0; Ui f88aab5150ca7f375b8c4a61a01da57832c82e03. Latest bitmap payload accounting fix is being committed with this checkpoint.
+- Shared DirectWrite/ICU shaping, rich paragraphs, grapheme/bidi editing, Vulkan glyph coverage, native IME bridge and overlay are implemented. COLRv0 palette fonts and embedded PNG/JPEG/TIFF/BGRA assets supported. SVG glyphs and COLRv1 paint trees are not implemented.
+- Bitmap payload regression reproduced a false 4 MiB rejection for 64 repeats of one native bitmap glyph. Fixed by counting each shared immutable Image serial once per snapshot. Distinct 600x600 images still exceed and are rejected at the unchanged 4 MiB limit. Snapshot run/glyph limits unchanged.
+- Release exec-AAC985BBBDE997C20E5ACC2C109FC831 and Debug exec-08C2979A41667D114DAED4EFDAAD77B8 pass: 64 GPU pixel,37 editor,36 styled,27 document,38 IME and80 font-layer checks. Exact binaries/jobs/output in WINDOWS_VULKAN_FINAL_QUALIFICATION.json.
+- Legacy IME CS_INSERTCHAR/CS_NOMOVECARET and native surrogate checks are committed in 5e63bb7. Both Release/Debug pass.
+- Standard and doubled application-scale catalogue:224/224 each, GDI-font0, validation0. Jobs exec-C8BB19367D08982CC696D3076BEF06B5 and exec-1A9792B4941756CB209D9D311D662BCB. This does not certify physical Windows monitor DPI.
+- Seven committed-main regression suites passed. Existing GalleryQualified.exe baseline and all exact evidence are preserved in WINDOWS_VULKAN_FINAL_QUALIFICATION.json.
 
-Render project project-028DDA9C9C89, workspace folder-D804EA49C6B4, E:/apps/github/upp_render.
-Ui project project-B3BB7BB32A38, workspace folder-B2DAFD8124F1, E:/apps/github/upp_Ui.
-Host DESKTOP-GFX1; Klick 1.0.35 source ca53cec1917ea91498d2feb3f1760431053bb09d; executable SHA 9bb30d69d67e0cd0a1a01816143d40f7ee23ab7b3c28a3cfc81eac7134bd803f.
-After restart use klick_resume_context; recover retained jobs before replaying anything. Strip BOM before Patch rewrite; preserve newline style; preview/apply with exact complete-file hashes and digest.
+## Final candidate work — resume here
 
-## Qualified and committed drawing/pacing baseline
+1. Freeze implementation after bitmap payload fix; rebuild build/GpuUiGalleryFinal.exe from committed Ui export. Earlier preliminary Final.exe predates this fix and must not be used as final.
+2. Hash executable, run --qualify-ui --validation. This covers browser/full colour/micro picker,3 workspace and3 compute dialog cycles and composition scene preservation.
+3. Refresh final-binary normal/heavy20s and full300s soak. Include validation-off production measurement to resolve driver/layer footprint. No edits during timed runs. Reports are overwritten; preserve each immediately with binary hash.
+4. Clean-machine qualification on KlickCaro through current build/run runtime grant. No compiler or SDK installation. Deliver CURRENT candidate folder via approved F:/networkshare / UNC share, verify hash before execution; never reference the obsolete2026-10-04 ZIP as current.
+5. Reconcile manual controls/real IME questions and physical DPI; never infer human acceptance from a timeout. Update evidence, finishing status and dashboard, then local commits only.
 
-Ui drawing commit 228a1b968e0b13ef21b4cbb4baf1115c3c7a8686.
-Render baseline commit 2ebf036506f612e20d24e3786a498a61a5d655a7.
-Current renderer foundation is committed at 3598226; rich-text renderer integration is pending its local commit.
-Ui HEAD observed cf237c78e4ef0155b18fa077adc5ca45b7e86604 after concurrent work. Re-read current state.
+## Preserved performance baseline
 
-Exact baseline sources, jobs and raw results: docs/VULKAN_UI_FINISH_QUALIFICATION.json.
-Gallery baseline build/GpuUiGalleryFinish.exe, 8296960 bytes, SHA 9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57. Preserve this qualified binary while text work is developed separately.
+GalleryQualified.exe SHA2a777e3af816248f9ab4212fd6fb7d478b7af9571fe3b0141ca8d22e760981e8 (renderer76fe04e, Ui exportf88aab5) passed normal/heavy20s/full300s with validation. Heavy soak119.00 presentedFPS,120 distinctHz, CPUmedian/p99 5.98/13.51ms, maximumtimer18.49ms. Peakprivate223375360B, early/late205137920/222807040B; step near50s then plateau; growth below unchanged32MiB gate. Warm CPU vector/glyph raster/upload0,GDI0, finalnativeZERO. These figures belong to the preserved earlier binary, not the final rebuilt candidate.
 
-Baseline passed:
-- 56 drawable catalogue entries, two sizes and enabled/disabled = 224 drawing probes; 8 explicit shadows; table edits.
-- Release/Debug semantic Painter/general vector checks, SVG/Unicode tests, non-CFONTS Canvas/Vector, root callback destruction; ordinary non-GPU/no-render-nest UiLabelDemo Release BLITZ.
-- Main/GPU-dialog workspace and compute cycles; browser scan/64x32 WIC preview/selection/accept/cancel/filter popup; 16 full-picker states; micro picker/nested colour popup; themes/resize. Corrected readback PNGs inspected.
-- Normal: 120.00 distinct Hz, CPU median/p99 5.04/8.31ms.
-- Heavy 512 + grid: 120.02 distinct Hz, CPU 6.26/10.65ms.
-- FULL repeat 300s soak PASSED, job exec-A5DF4ECEC35AAFA198CD9F13DC560641, 304422ms. 119.92 distinct Hz, CPU median/p99 6.15/14.27ms; timer p99/max 17.98/79.40ms against unchanged 50/100ms gate. Private bytes early/late 198714368/197966848 (decreased 747520), peak 198815744. U++ heap is only a subset, not process memory/VRAM.
-- Baseline production CPU vector/glyph rasters, helper raster caches, software layers, GDI fonts, fallback all zero; final native ownership zero.
-- First 193.937s soak was CLOSED BY THE USER. Incomplete, not a crash or pass. User reconfirmed this in the latest message.
+User confirmed closing the earlier interrupted soak. Classify that run INCOMPLETE/user-closed, never crash/pass. Manual text-controls exec-828E95C4F8010B8364B0F9978FC64CBA reached bounded180s timeout; human checks and optional real OS IME remain pending.
 
-## New full text foundation (uncommitted)
+## Build and connection details
 
-Ui/UiTextLayout.h/.cpp and UiTextLayoutInternal.h/.cpp provide immutable DirectWrite layout, exact U++ scalar/UTF-16 mappings, system ICU grapheme/word boundaries and full paragraph direction (including isolates). Windows 10 1903+ system icu.dll; no shipped ICU binary/SDK headers. Current OS Unicode 13.0.0.0. Cache 256 entries / 4MiB declared payload. Input <=32768 scalars, <=1024 paragraphs. These are payload bounds, not measured native COM/process memory.
+- KlickCurt host DESKTOP-GFX1, Render project-028DDA9C9C89, workspace folder-D804EA49C6B4. One Execute per project.
+- Committed Ui export build/qualified-ui-main-text from f88aab5; archive SHA4befa3631816a6c75833cc26f7bbcf8ce2c9d0e1a8802456a30fde025873a0c1,796 safe entries. Do not edit export.
+- Gallery nests: E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc. Tests replace examples with tests.
+- UMK method E:/apps/github/upp_render/CLANGx64_Vulkan.bm; Release --out-dir build/cache-qualified-main-text -r +GUI,GPUUI,CFONTS.
+- Debug focused text uses existing build/cache-directwrite-text-debug, original Ui nest, omit -r. Foreign Ui edits must be disclosed in Debug evidence.
+- Before runtime: Patch stat(hash:true), Execute tool-7A0B237BB3E4 with actual output_path/expected_sha256.
+- KlickCaro host DESKTOP-ASUSPN6, Render project-ED940563C935, C:/GitHub/upp_render. Runtime runtime-314D887CC5B0 covers build/run/*.exe, max600s. Approved Robocopy file-transfer-8B6A91A31C5F. UNC source \\\\DESKTOP-GFX1\\networkshare. No SDK/toolchain there.
+- Native ZIP/copy grants are approved programs with ordinary OS access, not Patch transactions. List trusted archives first, unique destination, then independently hash delivered files.
+- .upp accepts no // comments. Do not add uses(GPUUI)RenderCore to Ui.upp; inactive uses still break native assemblies without renderer nests.
 
-render/RenderCore/GpuTextLayout.h/.cpp holds immutable actual font face / glyph IDs and positions. Explicit DrawShapedText operations now traverse Canvas, region recorder, semantic Painter, software reference, Vulkan geometry and shared bounded glyph atlas. Legacy scalar DrawText remains separate. Text outlines/coverage are GPU-generated, no whole-text CPU image. Fractional placement uses 1/64 pixel atlas phases. Native glyph subdivision matches Painter's existing 0.3 tolerance. Fractional underline/strike-through uses GPU area coverage at the fixed 32-sample font quality.
+## Remaining acceptance and preserved work
 
-Independent foundation PASSED:
-- Build exec-26F0B69CFEE565EAA757247FA6A74500.
-- Run exec-ED7D356BF776E029747AC9CA4652584F, exit 0, 1610ms, no truncation.
-- Binary then build/UiTextLayoutTest.exe, 5361664 bytes, SHA ba2467af23e4fca270497119ffdff2f38d5bb3f8733e843f6fa9759ed941666e.
-- 7 grapheme fixtures, Arabic/Indic/mixed RTL/combining/supplementary/fallback text; caret/hit/selection/cache/visual movement/wrapping tests.
-- 14 complete DirectWrite run outline comparisons, worst coordinate discrepancy 0.00000525px.
-- 56 actual Vulkan pixel tests (7 strings x plain/styled x 4 colour formats), worst max/mean linear pixel error 0.024053/0.00016382 within 0.04/0.001 gates. Cold CPU glyph rasters 0, warm atlas misses/rasters 0, identical warm pixels; final adapter resources and Vulkan validation messages 0.
-- Preserved report/limits in docs/WINDOWS_VULKAN_TEXT_QUALIFICATION.json. Raw build/UiTextLayout-qualification.txt will be overwritten on later runs.
-- Reference corrections: skip empty whitespace outlines (Painter Fill otherwise reuses prior path); native complete-run outline geometry is the placement oracle, and per-glyph alpha compositor is the separate atlas pixel oracle. Whole-run union edge differences are diagnostic. No existing baseline tolerances were weakened.
+Dashboard ID dashboard-4ab27ccd4e88f640515329923bfc8637-A686904788EDBBDF15A5796581F90E51; read latest revision before update. Last known21: overall70% (7/10 strict gates), text75% (6/8). Close gates only with their actual evidence. Live OS IME candidate input and physical DPI/manual review remain separate from automated composition/scaling.
 
-Current integration checkpoint (still uncommitted):
-- Release build exec-75E6BF0D43A489BB34F4A1A3A768774D; run exec-B708A7E396E38101519B55111B1468BE, exit 0, 2781ms. Binary 5956608 bytes SHA c631e0dc5b628c56440877abfc00b7b8ac311c92f33b2ff6d76d85053c0f4e4c.
-- 16 native outline / 64 real Vulkan pixel cases, including Bahnschrift variable face/weight, and 37 editor interaction/lifetime checks PASS. Every pixel now uses an independent numerical non-zero winding coverage oracle; Painter has an overlap discrepancy, so its pixel output is diagnostic. Maximum/mean error gates remain .04/.001. Exact report and owned source hashes in WINDOWS_VULKAN_TEXT_QUALIFICATION.json integration_checkpoint.
-- Font identity includes canonical variable-font axes. Atlas fractional origin is quantized at 1/64px. Cold coverage remains GPU; warm misses/raster0, final GPU/validation0.
-- 29 plain-control/helper files use UiGetTextSize/UiDrawText; elision uses grapheme-safe UiFitText. BaseEdit retains unchanged whole-line layouts, uses ICU source boundaries even for passwords, visual bidi navigation, grapheme deletion/overwrite, selection clipping, caret/hit/vertical movement and Unicode whitespace word movement. Ligature caret policy evenly subdivides native advance across graphemes; half-ligature selection shares those same positions. Callback-destruction guards tested.
-- UiLabel selection/clipboard is now Unicode scalar based; uniform label selection reuses whole layout. Rich pieces still need shared styled paragraphs.
-- Current Debug build exec-04F71759CAD71B74C8C5CC1362FFD7A1 and run exec-E8A113732560D1B76A81BA723C091DE0 PASS (37 editor / 64 GPU cases). Native ordinary no-render-nest Release BLITZ build exec-800CC8D2BABB73CC4EB786EAC3871E29 PASS (9691648-byte UiLabelNativeText.exe). Catalogue run exec-26CF6FD19FB4740F5578DB99E9D2D087 PASS (224/224 probes, GDI-font and validation0). Native visual/complex-script rich-doc review not implied.
-- U++ .upp files do not accept // comments. Do not add them. Do not add uses(GPUUI)RenderCore to Ui.upp: UMK resolves inactive uses and breaks no-render-nest native assemblies. GPU hosts supply RenderCore via their assembly/dependencies.
+Preserve foreign Ui/UiThemeOlive.h, Ui/UiTitleCard.cpp/.h, Utilities/UiThemeTests/ThemeSurface.cpp, docs/01_UI_CONTROLS_GUIDE.md, docs/02_UI_THEME_GUIDE.md, docs/ACTIVE_WORK.md and Snapshot_FileBrowser.jpg. Check fresh status; stage only owned paths.
 
-## Rich text checkpoint (2026-10-22)
-
-Ui main commit 594ba7d follows 83ac3bd. Renderer foundation main commit 3598226 follows 2ebf036; current renderer rich changes will be committed next. No push/publish.
-- Native styled scalar ranges (font/ink/tracking), physical alignment/character wrap, per-line metrics and inline object placements. Immutable line snapshots reuse actual font faces, avoid replaying whole paragraphs for each line, and are included in declared cache payload. Single-line layouts alias the full snapshot.
-- Per-run and decoration ink travels through Canvas/recorders/semantic Painter/software/Vulkan; uniform-ink override recolours selection without reshaping.
-- Rich labels share one styled native line across spans/icons/bullets and map native placeholders to clipboard scalar positions. Font defaults corrected: span Font is Null and old zero Font inherits base; DirectWrite styled size never receives zero.
-- UiDoc paragraph and table cells use shared native layout for drawing, wrapping, caret, hit, selection, visual movement and grapheme deletion. Table selected-range removal is linear in runs. Metadata text uses native wrapped lines; card and marker outlines use GPU artwork instead of CPU images. UiDoc now overrides Ctrl::GetCaret for IME placement.
-- BaseEdit GPU cache no longer computes redundant per-scalar native widths. TitleCard and Olive text calls migrated; only owned text hunks were staged in those concurrently dirty files.
-- Release exec-5C1231F9493C8DB89E7D4906C9FCDAF0 PASS 2828ms, 6448640B SHA 54bfe7c2998c2899a51401d72e1fe6ce6dbc5485b48bf65a1696848e09a244b9.
-- Debug exec-9923DF11AC312BE7FF23117C27F3E573 PASS 10282ms, 8920064B SHA 4525ebd928f8716da9c6741a023850edf38923e5577ec8c5ff867d69a0897105.
-- Both: 16 native / 64 GPU pixel cases, 37 basic editor, 36 styled, 27 rich document/table/expanded metadata checks. Retained line-slice pixels equal whole paragraph pixels. GPU glyph coverage CPU0; metadata CPU vector/helper raster0; final GPU/validation0.
-- Native no-render-nest BLITZ exec-BD0AF217D367CAF33761115CD577A97F PASS. Actual 224 control probes exec-9DEDD9CAC485EED8A38AB7FB358B8F0F PASS, GDI-font/validation0.
-- Readback build/UiTextLayout-document.png inspected after named-channel capture fix. Exact hashes/evidence in WINDOWS_VULKAN_TEXT_QUALIFICATION.json rich_text_checkpoint.
-- Dashboard revision19: overall strict acceptance70% (7/10), text implementation62.5% (5/8). Do not mark final text gate complete.
-
-## IME automated checkpoint (2026-10-22)
-
-Current IME changes are ready for intended local commits. External Core and Animation remain read-only. Renderer base b235977; Ui base 594ba7d. No publishing.
-- Ui-owned lazy composition state, shaped root-child overlay and native candidate positioning share the existing GPU device. Derived numeric validation, selection replacement/undo, empty-result handling, read-only/disabled/focus/close cancellation and callback destruction are tested.
-- Release build exec-DD66DBA608BEA73E858B67734862DD74, run exec-E5CAC4DC442BEB9CF4D5FC1F1CAFA823: 16 independent native /64 Vulkan pixels,37 editor,36 style,27 document and34 IME/native-host checks PASS.
-- Debug build exec-C64916B87685C354D157F3306B87EE4F, run exec-F6F3D2A5EBD1222AA9DC3CC7929F647E: same checks PASS.
-- Ordinary Ui no-renderer-nest Release BLITZ exec-9BC2FAB307C75DEA04AD1FF49256E737 PASS.
-- Current Gallery build exec-9369DBF0D1E0D16A113C109A5B316CCA, run exec-166B5312176A4C4CA658F7CC1DCB133D PASS. Browser/full picker/micro,3 workspace cycles,3 compute dialogs and text idle/preedit/commit captures pass; CPU vector/glyph raster0, GDI fonts0, final native ownership ZERO.
-- New scene-preservation gate: unchanged document region has0 changed pixels across idle/preedit/commit and705 baseline ink pixels. A preview tool displayed the lower scene as black, but independent file pixel comparison confirms it is present. No speculative replay fix was made.
-- Exact binary hashes, reports and source manifest are in WINDOWS_VULKAN_TEXT_QUALIFICATION.json ime_checkpoint.
-- Host tests generate native messages; live OS IME conversion/candidate selection and physical input/DPI are still open. Keyboard preload currently lists English/German. Do not claim real OS conversion acceptance.
-- Dashboard revision20: overall strict acceptance70% (7/10); text implementation62.5% (5/8). IME input item remains open until live input/DPI/bidi edges are qualified.
-
-## Colour / bitmap fonts automated checkpoint (2026-10-22)
-
-IME commits: Ui6ed57ab, renderer6b7d490. Font slice is committed: Ui f88aab5150ca7f375b8c4a61a01da57832c82e03, renderer76fe04e. No push.
-- Native COLRv0 palette order/opacity and embedded PNG/JPEG/TIFF/premultiplied BGRA assets reuse GPU coverage/image paths. Private application font_file collections install nothing; native metrics and full Windows file time participate in layout identity.
-- Decoded asset cache128entries/4MiB; bitmap runs max1024pixels/axis and count their full image payload in4MiB snapshot limit. These are declared payload bounds, not total native process memory.
-- Release exec-177289E9D90F1C37D93E4C48A39A5941 PASS4141ms; Debug exec-51AD897C2ED2799EFB6F78BC871159B2 PASS11812ms. Both64 Vulkan pixels,37editor,36style,27document,34IME and78font-layer checks. Software bitmap maxerror0 and native Ui Painter/reference agreement. RGBA/BGRA UNORM/sRGB alpha equations pass, warm uploads/misses0, ownership/validation0.
-- Ordinary no-renderer-nest Ui Release BLITZ exec-E722C2F4ECD89F177B61DCB325BB099E PASS.
-- Gallery exec-1E822280A79ED2B581F646A0FBF21DF0 PASS14937ms; text idle/preedit/commit document changedpixels0 /1002baseline inkpixels. Browser/full/micro/3workspace/3compute cycles pass; CPU glyph/vector0,GDI0,finalnativeZERO.
-- GPU readback build/UiTextLayout-font-layers.png SHA7c78a576cd065587b67ca02e9412b53294e132131d09579859f9b12e6c22de5f inspected. Actual font fixture/provenance/license retained under tests/UiTextLayoutTest/fixtures.
-- Reference fixes: share ReplayImage rather than Painter opacity quantization; preserve fractional image bounds. Do not edit external Painter/Core.
-- Direct manual launch: current build/GpuUiGalleryText.exe --text-controls --validation. Hash it before Execute. No app currently open.
-- Exact binaries/reports/source manifests and supported-format limits in WINDOWS_VULKAN_TEXT_QUALIFICATION.json font_layer_checkpoint.
-- Dashboard revision21:70% overall strict acceptance;75% text implementation (6/8). Live OS IME/physical DPI, remaining edge review and final current-binary load remain open.
-- SVG colour glyphs/COLRv1 paint trees are not implemented; do not claim complete arbitrary OpenType colour-format parity.
-- Preserve foreign Ui layout/theme changes. Final qualification should build from a committed Ui main archive to keep those unrelated uncommitted edits out of the release evidence without touching their working files.
-
-## Current clean-main qualification (resume here)
-
-- Renderer main76fe04e, Ui mainf88aab5150ca7f375b8c4a61a01da57832c82e03. No owned code remains uncommitted; foreign Ui dirty files are preserved. Git branches remain main only.
-- Ui committed main was exported by Git archive job exec-44FB1726F2D76E72F1054F5FB646C782. ZIP build/klick/qualified-ui-main-text.zip in the Ui repository:7,685,886B SHA4befa3631816a6c75833cc26f7bbcf8ce2c9d0e1a8802456a30fde025873a0c1.796entries/16,113,151uncompressed bytes; full central-directory validation found0unsafe paths.
-- Native ZIP extraction job exec-5D994E810EACB2E8445BAB01BFF0094C succeeded into renderer build/qualified-ui-main-text. Key exported source hashes verified. This excludes unrelated uncommitted Ui layout/theme/docs changes without altering their working files.
-- CURRENT BUILD: exec-6CCA935B82F2ED7DAA45C1F323E865DF. Package GpuUiGallery, method CLANGx64_Vulkan.bm, release +GUI,GPUUI,CFONTS, cache build/cache-qualified-main-text, output build/GpuUiGalleryQualified.exe. Recover job result before replay.
-- Nests: E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc. For test packages replace /examples, with /tests,. Keep using this committed Ui export for final qualification.
-- After build: stat/hash actual Qualified.exe, --qualify-ui --validation. Then build/run catalogue and affected Canvas/image/semantic regressions through the same nests. Current text tests (78font/34IME etc) already passed Release/Debug, but qualification should also build against the committed Ui export.
-- Final normal/heavy20s and300s512particle+grid soak must use the same Qualified.exe and hash. Do not modify implementation during a timed run; do not replay incomplete runs without inspecting retained evidence.
-- Manual text dialog launch: Qualified.exe --text-controls --validation after automation. Ask specific checks when it is actually open. Live OS IME/native candidate selection and physical monitor DPI remain unqualified; do not invent a pass.
-- Current task has NO push/publish authorization. Preserve old GalleryFinish.exe baseline and don't reissue old2026-10-04ZIP references.
- 
-## Latest final checks and legacy IME edge (resume first)
-
-- Clean-main Gallery build exec-6CCA935B82F2ED7DAA45C1F323E865DF completed. Preserved build/GpuUiGalleryQualified.exe8884736B SHA2a777e3af816248f9ab4212fd6fb7d478b7af9571fe3b0141ca8d22e760981e8.
-- Committed-main Gallery UI run exec-809C9307EF1B0988FC0D97EE2D7484D1 passed; all7 regression suites passed. Exact binaries, producer jobs and reports in WINDOWS_VULKAN_FINAL_QUALIFICATION.json and functions qualifiedRegressionResults.
-- Current-binary normal/heavy20s and full300s passed: exec-FCEF31BFCAF7BCC99062EABBC0103B04 /exec-C33023335C3767583055624FA898C5A1 /exec-EEFD75580F63E408462E83CD73B23F97. Heavy119presentedFPS/120distinctHz,CPUmedian/p99=5.98/13.51ms,maxtimer18.49ms. Privateearly/late205137920/222807040B,peak223375360B,stepnear50s thenplateau;unchanged33554432growthgate passes. WarmCPU/vector/glyphrasters/uploads0,GDI0,finalownershipZERO.
-- Manual --text-controls run exec-828E95C4F8010B8364B0F9978FC64CBA reached180s timeout. Human questions about controls and optional realIME are pending; no human pass is established.
-- NEW UNCOMMITTED shipping change only render/GpuRender/Win32GpuIme.cpp: handle CS_INSERTCHAR/CS_NOMOVECARET without changing model/undo, prefer full native strings, reject malformed interim scalar and preserve callback guards. Source tests/UiTextLayoutTest/Ime.cpp adds4native-message checks. Release build exec-692F3EA826A430B378DBABF76FA0BB30, run exec-850BE1B26D841F1E4D23206AADEB6846 PASS:38IME plusprevious64GPU/37editor/36style/27doc/78fonts.
-- NEW test-only --uhd option in UiGpuDrawingTest doubles native defaultfont/applicationDPI units and control/targetbounds, leaving standard mode unchanged. Fixed-size face/shadow/edit fixtures remain in standard mode; UHD specifically checks224control drawing cases. This does not claim physical Windows monitor-DPI validation.
-- CURRENT UHD build exec-861EE3FC1B254DF7D714A18E47DB0D22; runtime exec-1A9792B4941756CB209D9D311D662BCB. Recover current job before replay.
-- Next: read UHD result; run standard mode after test edit; verify final legacy Debug; commit owned edge/test changes with evidence; rebuild final Gallery against same committed Ui export using a new output name (preserve prior qualified binary), then refresh UI and current-candidate performance. Include a production validation-off measurement to distinguish driver/layer footprint. No implementation edits during timed runs.
-- No external Core/Animation writes. No publish/push. Keep Ui foreign work untouched. Dashboard revision21 currently70% overall/75% text and will be reconciled after final current-candidate qualification.
-
-## Remaining implementation and qualification
-
-1. Commit the qualified IME slice and preserve foreign dirty files. Rich text commits are already complete; temporary staging patch removal was verified.
-2. Colour/bitmap font slice is implemented and tested; commit its owned code/evidence. Supported colour formats are documented, with SVG/COLRv1 exclusions.
-3. Finish live OS IME/candidate, physical input/DPI and remaining bidi edge acceptance. Native host composition implementation and34 automated checks are complete; do not reimplement the bridge or edit Core.
-4. Broaden bidi affinity/selection collapse/wrapped edge/table navigation and cache-bound/failure/concurrency/memory tests. Table image/caret pagination text_origin now shifts with cell rect.
-5. Final Debug/native BLITZ, Canvas/semantic/vector/scalar regressions; rebuild Gallery preserving GpuUiGalleryFinish.exe. Re-run all controls/browser/full picker/micro/dialog/captures/input/DPI; normal/heavy/full300s after complete text.
-6. Final evidence/docs/dashboard and local commits; no100% claim or publishing until acceptance passes.
-
-## Unrelated Ui files to preserve
-
-Ui/UiThemeOlive.h, Ui/UiTitleCard.cpp/.h, Utilities/UiThemeTests/ThemeSurface.cpp, docs/01_UI_CONTROLS_GUIDE.md, docs/02_UI_THEME_GUIDE.md, docs/ACTIVE_WORK.md, untracked Snapshot_FileBrowser.jpg. Re-read git status; other agent may advance main. Do not stage those whole files.
-
-## Build / run
-
-Render approved tool upp-builder = E:/upp-18468/umk.exe; method E:/apps/github/upp_render/CLANGx64_Vulkan.bm.
-GUI test nests: E:/apps/github/upp_render/render,E:/apps/github/upp_render/tests,E:/apps/github/upp_Ui,E:/apps/github/upp_animation,E:/upp-18468/uppsrc.
-UMK argv [nests,"UiTextLayoutTest",method,"--out-dir","E:/apps/github/upp_render/build/cache-directwrite-gui","-r","+GUI,GPUUI,CFONTS","E:/apps/github/upp_render/build/UiTextLayoutTest.exe"].
-Gallery nests examples instead of tests.
-Debug omit -r and use separate cache-directwrite-debug. BLITZ -br.
-After build success, Patch stat(hash:true) actual executable then Execute tool-7A0B237BB3E4 with output_path build/UiTextLayoutTest.exe and expected_sha256. One Execute per project. Git tool ID git.
-
-Dashboard dashboard-4ab27ccd4e88f640515329923bfc8637-A686904788EDBBDF15A5796581F90E51 last saved revision19; read fresh before updating, preserve panels. Overall remains 70% (7/10) until full text, physical/final acceptance gates pass.
-
-Primary references: Microsoft DirectWrite IDWriteTextLayout, IDWriteTextRenderer, IDWriteFontFace::GetGlyphRunOutline, HitTestTextPosition; Windows ICU C ABI docs; Unicode ICU ubidi full paragraph direction. Do not write bespoke Arabic/Indic/bidi/range tables.
+WebGPU, Metal, Linux and CineView OCIO/streaming remain future work. No claim that particle tests resolve the separate CineView4K callback outlier. Historical text and baseline evidence stays in WINDOWS_VULKAN_TEXT_QUALIFICATION.json and VULKAN_UI_FINISH_QUALIFICATION.json.

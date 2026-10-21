@@ -15,8 +15,16 @@ int64 GpuShapedText::GetPayloadBytes() const
 {
 	int64 bytes=(int64)runs.GetCount()*sizeof(GpuGlyphRunSnapshot) +
 	            (int64)decorations.GetCount()*sizeof(GpuTextDecoration);
-	for(const auto& run:runs) bytes+=(int64)run.glyphs.GetCount()*sizeof(GpuPositionedGlyph)+
-		(run.face?run.face->GetIdentity().GetCount():0)+(int64)run.bitmap.GetLength()*sizeof(RGBA);
+	Index<int64> images;
+	for(const auto& run:runs) {
+		bytes+=(int64)run.glyphs.GetCount()*sizeof(GpuPositionedGlyph)+
+		       (run.face?run.face->GetIdentity().GetCount():0);
+		// Repeated placed glyphs retain one immutable pixel buffer.
+		if(!run.bitmap.IsEmpty() && images.Find(run.bitmap.GetSerialId())<0) {
+			images.Add(run.bitmap.GetSerialId());
+			bytes+=(int64)run.bitmap.GetLength()*sizeof(RGBA);
+		}
+	}
 	return bytes;
 }
 bool GpuShapedText::IsValid(String *error) const

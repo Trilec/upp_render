@@ -46,7 +46,7 @@ bool TestFontLayers()
  run.bitmap=Image(source); run.bitmap_bounds=Rectf(80,160,104,184);
  check(bitmap->IsValid(),"bounded premultiplied bitmap glyph");
  auto invalid=std::make_shared<GpuShapedText>(); auto& huge=invalid->runs.Add();
- huge.face=run.face; huge.em_size=run.em_size; huge.glyphs=clone(run.glyphs); ImageBuffer oversized(2048,1); huge.bitmap=Image(oversized); huge.bitmap_bounds=run.bitmap_bounds;
+ huge.face=run.face; huge.em_size=run.em_size; huge.glyphs=clone(run.glyphs); ImageBuffer oversized(2048,1); Fill(~oversized,RGBAZero(),oversized.GetLength()); huge.bitmap=Image(oversized); huge.bitmap_bounds=run.bitmap_bounds;
  check(!invalid->IsValid(),"oversized glyph image rejected before GPU upload");
  huge.bitmap=run.bitmap; huge.bitmap_bounds.right=NAN;
  check(!invalid->IsValid(),"nonfinite bitmap placement rejected");
@@ -57,6 +57,11 @@ bool TestFontLayers()
  int bitmap_runs=0; int64 bitmap_serial=0;
  for(const auto& layer:native_bitmap.GetGpuText()->runs) if(!layer.bitmap.IsEmpty()) { ++bitmap_runs; bitmap_serial=layer.bitmap.GetSerialId(); }
  check(bitmap_runs==1 && native_bitmap.GetGlyphCount()==1,"native PNG ligature becomes one positioned bitmap glyph");
+ WString repeated_text;
+ for(int i=0;i<64;++i) { if(i) repeated_text.Cat(' '); repeated_text.Cat("simple_linear"); }
+ auto repeated=UiTextLayout::Create(repeated_text,SansSerif(64),custom);
+ check(repeated.IsValid(),"repeated bitmap text fits shared-source payload budget");
+ if(!repeated.IsValid()) Cout()<<"repeated_bitmap_error="<<repeated.GetError()<<EOL;
  auto assets_before=GetUiTextLayoutStats();
  auto different=UiTextLayout::Create(WString("simple_linear "),SansSerif(64),custom);
  bool reused=false; if(different.IsValid()) for(const auto& layer:different.GetGpuText()->runs) reused|=!layer.bitmap.IsEmpty() && layer.bitmap.GetSerialId()==bitmap_serial;
@@ -68,6 +73,15 @@ bool TestFontLayers()
  auto bounded=GetUiTextLayoutStats();
  check(bounded.bitmap_asset_entries<=bounded.bitmap_asset_limit && bounded.bitmap_asset_bytes<=bounded.bitmap_asset_byte_limit,
        "decoded font asset count and byte budgets");
+ {
+  GpuShapedText distinct;
+  for(int i=0;i<3;++i) {
+   auto& layer=distinct.runs.Add(); layer.face=run.face; layer.em_size=run.em_size; layer.glyphs=clone(run.glyphs);
+   ImageBuffer pixels(600,600); Fill(~pixels,(RGBA)Color(40+i*20,70,90),pixels.GetLength());
+   layer.bitmap=Image(pixels); layer.bitmap_bounds=Rectf(0,0,600,600);
+  }
+  check(!distinct.IsValid(),"distinct bitmap buffers still obey unchanged four MiB payload limit");
+ }
  UiTextLayoutOptions missing; missing.font_file="tests/UiTextLayoutTest/fixtures/missing-font.ttf";
  check(!UiTextLayout::Create(WString("font"),font,missing).IsValid(),"missing application font fails explicitly");
  UiDisplayListBuilder build; build.DrawShapedText(Pointf(10,10),color.GetGpuText(),Rgba8(0,0,0));

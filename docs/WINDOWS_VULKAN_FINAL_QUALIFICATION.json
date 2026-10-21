@@ -1,7 +1,7 @@
 {
   "schema": "windows-vulkan-current-ui-qualification-v1",
   "recorded_at": "2026-10-22",
-  "status": "automated drawing/font/input edge/scaling checks passed; final Gallery rebuild required after legacy input fix",
+  "status": "Automated text, drawing, input and application scaling pass; final Gallery rebuild and current-candidate qualification remain in progress",
   "renderer_commit": "76fe04e3d08cb457f8c4c5880cd5960dc974e8c3",
   "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
   "ui_source_export": {
@@ -475,5 +475,138 @@
     },
     "cases_per_mode": 224,
     "limits": "This tests U++ application1x/2x units and a doubled24px default font. Fixed-size shadow/face/edit reference fixtures run in standard mode. It does not certify physical Windows100/150/200% monitor transitions."
+  },
+  "bitmap_payload_checkpoint": {
+    "status": "PASS Release and Debug",
+    "renderer_base": "5e63bb70482a1e42495206f77fcb23d2b114b7d0",
+    "scope": "Shared immutable bitmap pixels count once per shaped-text snapshot; distinct pixels retain unchanged 4 MiB gate",
+    "reproduction": {
+      "job_id": "exec-FCC1C54302E127B42C90B0734DB9EBE5",
+      "status": "failed",
+      "exit_code": 1,
+      "duration_ms": 4360,
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nime_composition_checks=38 passed=1\r\nFAIL font_layers repeated bitmap text fits shared-source payload budget\r\nrepeated_bitmap_error=shaped text exceeds the frame payload budget\r\nsoftware_bitmap_changed=0 max_error=0\r\nalpha_pixel format=1 rgb=127,0,128\r\nalpha_pixel format=2 rgb=127,0,128\r\nalpha_pixel format=3 rgb=187,0,188\r\nalpha_pixel format=4 rgb=187,0,188\r\nfont_layer_checks=79 palette_runs=5 passed=0\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\n",
+      "stderr": ""
+    },
+    "release": {
+      "binary": {
+        "op": "stat",
+        "path": "build/UiTextLayoutBitmapBudget.exe",
+        "ok": true,
+        "kind": "file",
+        "identity_scope": "approved_workspace_relative_path",
+        "modified": "2026-10-22T06:49:00",
+        "modified_timezone": "local_wall_time",
+        "mime_type": "application/octet-stream",
+        "mime_basis": "filename_extension_not_content_sniffing",
+        "writable": "unknown",
+        "writable_basis": "grant_allows_OS_access_not_proven",
+        "observation": "f6d9e71d76e67fa34855d761e4751aa005cb4e622dff4ed987ef1f533c8bee8b",
+        "total_lines": null,
+        "encoding": "unknown",
+        "newline": "unknown",
+        "bom": "none",
+        "size": 6605824,
+        "sha256": "7dca2c3dfd08b5e9b533c804232f540c3bafdc4422c91db80b3083a1a58254d4",
+        "hash_scope": "complete_file_at_read",
+        "hash_available": true,
+        "hash_budget_scope": "project_filesystem_limits",
+        "encoding_validated": false,
+        "metadata_scan_complete": false,
+        "truncated": true,
+        "limit_reasons": [
+          "metadata_scan_budget"
+        ],
+        "files_scanned": 1,
+        "bytes_scanned": 1048576,
+        "bytes_hashed": 6605824
+      },
+      "build": {
+        "job_id": "exec-EA9F7A8FFDB140A2DB6AD92F7AB8473B",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 7719,
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "stdout": "Saving \r\n----- Ui ( GUI GPUUI CFONTS CLANG WIN32 ) (1 / 23)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG WIN32 ) (2 / 23)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG WIN32 ) (3 / 23)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG WIN32 ) (4 / 23)\r\nGpuTextLayout.cpp\r\nRenderCore: 1 file(s) built in (0:02.76), 2766 msecs / file\r\nCreating library...\r\nE:/upp-18468/bin/clang/bin/llvm-ar.exe: warning: creating E:/apps/github/upp_render/build/cache-qualified-main-text/RenderCore/CLANGx64_Vulkan.Cfonts.Gpuui.Gui\\RenderCore.a\r\nE:/apps/github/upp_render/build/cache-qualified-main-text/RenderCore/CLANGx64_Vulkan.Cfonts.Gpuui.Gui\\RenderCore.a (18128 B) created in (0:00.09)\r\n----- RenderSoftware ( GUI GPUUI CFONTS CLANG WIN32 ) (5 / 23)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG WIN32 ) (6 / 23)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG WIN32 ) (7 / 23)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG WIN32 ) (8 / 23)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG WIN32 ) (9 / 23)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (10 / 23)\r\n----- Core ( GUI GPUUI CFONTS CLANG WIN32 ) (11 / 23)\r\n----- Draw ( GUI GPUUI CFONTS CLANG WIN32 ) (12 / 23)\r\n----- Painter ( GUI GPUUI CFONTS CLANG WIN32 ) (13 / 23)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG WIN32 ) (14 / 23)\r\n----- Animation ( GUI GPUUI CFONTS CLANG WIN32 ) (15 / 23)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG WIN32 ) (16 / 23)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG WIN32 ) (17 / 23)\r\n----- RichText ( GUI GPUUI CFONTS CLANG WIN32 ) (18 / 23)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG WIN32 ) (19 / 23)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (20 / 23)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG WIN32 ) (21 / 23)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG WIN32 ) (22 / 23)\r\n----- UiTextLayoutTest ( GUI GPUUI CFONTS MAIN CLANG WIN32 ) (23 / 23)\r\nFontLayers.cpp\r\nUiTextLayoutTest: 1 file(s) built in (0:03.62), 3625 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\UiTextLayoutBitmapBudget.exe (6605824 B) linked in (0:00.23)\r\n\r\nOK. (0:07.54)\r\n",
+        "stderr": ""
+      },
+      "run": {
+        "job_id": "exec-AAC985BBBDE997C20E5ACC2C109FC831",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 3969,
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nime_composition_checks=38 passed=1\r\nsoftware_bitmap_changed=0 max_error=0\r\nalpha_pixel format=1 rgb=127,0,128\r\nalpha_pixel format=2 rgb=127,0,128\r\nalpha_pixel format=3 rgb=187,0,188\r\nalpha_pixel format=4 rgb=187,0,188\r\nfont_layer_checks=80 palette_runs=5 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n",
+        "stderr": ""
+      }
+    },
+    "debug": {
+      "binary": {
+        "op": "stat",
+        "path": "build/UiTextLayoutFinalDebug.exe",
+        "ok": true,
+        "kind": "file",
+        "identity_scope": "approved_workspace_relative_path",
+        "modified": "2026-10-22T06:54:22",
+        "modified_timezone": "local_wall_time",
+        "mime_type": "application/octet-stream",
+        "mime_basis": "filename_extension_not_content_sniffing",
+        "writable": "unknown",
+        "writable_basis": "grant_allows_OS_access_not_proven",
+        "observation": "a704504e79cab56a782afdce8d0c815e7a76dd15c1f4bc180c51ba07a0ef9dcc",
+        "total_lines": null,
+        "encoding": "unknown",
+        "newline": "unknown",
+        "bom": "none",
+        "size": 9142272,
+        "sha256": "b17d2d315ba192160820dfac4034096468bc2edd9cd7851128d2bed2c8b717d1",
+        "hash_scope": "complete_file_at_read",
+        "hash_available": true,
+        "hash_budget_scope": "project_filesystem_limits",
+        "encoding_validated": false,
+        "metadata_scan_complete": false,
+        "truncated": true,
+        "limit_reasons": [
+          "metadata_scan_budget"
+        ],
+        "files_scanned": 1,
+        "bytes_scanned": 1048576,
+        "bytes_hashed": 9142272
+      },
+      "build": {
+        "job_id": "exec-3F97DDC310A0CA0779D7487D550B5C79",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 7813,
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "stdout": "Saving \r\n----- Ui ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (1 / 23)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (2 / 23)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (3 / 23)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (4 / 23)\r\nGpuTextLayout.cpp\r\nRenderCore: 1 file(s) built in (0:02.71), 2719 msecs / file\r\nCreating library...\r\nE:/upp-18468/bin/clang/bin/llvm-ar.exe: warning: creating E:/apps/github/upp_render/build/cache-directwrite-text-debug/RenderCore/CLANGx64_Vulkan.Cfonts.Debug.Debug_Full.Gpuui.Gui.Noblitz\\RenderCore.a\r\nE:/apps/github/upp_render/build/cache-directwrite-text-debug/RenderCore/CLANGx64_Vulkan.Cfonts.Debug.Debug_Full.Gpuui.Gui.Noblitz\\RenderCore.a (867226 B) created in (0:00.07)\r\n----- RenderSoftware ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (5 / 23)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (6 / 23)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (7 / 23)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (8 / 23)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (9 / 23)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (10 / 23)\r\n----- Core ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (11 / 23)\r\n----- Draw ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (12 / 23)\r\n----- Painter ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (13 / 23)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (14 / 23)\r\n----- Animation ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (15 / 23)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (16 / 23)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (17 / 23)\r\n----- RichText ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (18 / 23)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (19 / 23)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (20 / 23)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (21 / 23)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG DEBUG DEBUG_FULL WIN32 ) (22 / 23)\r\n----- UiTextLayoutTest ( GUI GPUUI CFONTS MAIN CLANG DEBUG DEBUG_FULL WIN32 ) (23 / 23)\r\nFontLayers.cpp\r\nUiTextLayoutTest: 1 file(s) built in (0:03.21), 3219 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\UiTextLayoutFinalDebug.exe (9142272 B) linked in (0:00.82)\r\n\r\nOK. (0:07.68)\r\n",
+        "stderr": ""
+      },
+      "run": {
+        "job_id": "exec-08C2979A41667D114DAED4EFDAAD77B8",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 11610,
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nime_composition_checks=38 passed=1\r\nsoftware_bitmap_changed=0 max_error=0\r\nalpha_pixel format=1 rgb=127,0,128\r\nalpha_pixel format=2 rgb=127,0,128\r\nalpha_pixel format=3 rgb=187,0,188\r\nalpha_pixel format=4 rgb=187,0,188\r\nfont_layer_checks=80 palette_runs=5 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n",
+        "stderr": ""
+      },
+      "source_scope": "Owned Ui text code matches committed f88aab5; unrelated working Ui edits preserved"
+    },
+    "checks": {
+      "gpu": 64,
+      "editor": 37,
+      "styled": 36,
+      "document": 27,
+      "ime": 38,
+      "font_layers": 80
+    },
+    "budgets_unchanged": true
   }
 }
