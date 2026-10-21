@@ -208,7 +208,7 @@ bool TestShapedReference()
    Font font=SansSerif(28); if(sample==7) font.FaceName("Bahnschrift"); if(style) font.Bold().Italic().Underline().Strikeout();
    UiTextInternal::Encoding encoded; String error; bool rtl=false;
    UiTextInternal::BaseDirection((encoded.Build(fixtures[sample],error),encoded),rtl,error);
-   UiTextLayoutOptions options; options.locale="en-US";
+   UiTextLayoutOptions options; options.locale="en-US"; options.color_fonts=false;
    auto shaped=UiTextLayout::Create(fixtures[sample],font,options);
    Image reference; Vector<GeometryCommand> native_geometry,shaped_geometry;
    if(!check(shaped.IsValid() && NativeImage(fixtures[sample],font,rtl,reference,native_geometry),"independent native reference builds")) continue;

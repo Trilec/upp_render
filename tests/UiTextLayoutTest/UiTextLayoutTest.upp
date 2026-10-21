@@ -10,6 +10,6 @@ uses
 	plugin/png;
 uses(CFONTS)
 	RenderFontWin32;
-file main.cpp, NativeReference.cpp, Editing.cpp, Styled.cpp, Document.cpp, Ime.cpp;
+file main.cpp, NativeReference.cpp, Editing.cpp, Styled.cpp, Document.cpp, Ime.cpp, FontLayers.cpp;
 mainconfig
 	"" = "GUI GPUUI CFONTS";

@@ -61,6 +61,7 @@ GpuControlsDialog::GpuControlsDialog(bool validation)
 	WString sample("Arabic: "); for(int cp:{0x633,0x644,0x627,0x645}) sample.Cat(cp);
 	sample.Cat("\nIndic: "); for(int cp:{0x915,0x94d,0x937,0x93f}) sample.Cat(cp);
 	sample.Cat("\nMixed: A "); for(int cp:{0x5d0,0x5d1,0x5d2}) sample.Cat(cp); sample.Cat(" 42");
+	sample.Cat("\nColour emoji: "); sample.Cat(0x1f600);
 	text_entry.SetText(WString("Type or paste here")); text_document.SetText(ToUtf8(sample));
 	text_page.Add(text_help); text_page.Add(text_entry); text_page.Add(text_document); tabs.Add(text_page,"Text & IME");
 

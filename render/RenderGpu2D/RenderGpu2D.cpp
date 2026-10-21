@@ -385,7 +385,20 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size, Po
 			if(!IsFinitePoint(op.point) || !op.shaped_text || !op.shaped_text->IsValid())
 				return Fail("UiRenderer2D received invalid shaped text");
 			bool emitted=false;
-			for(const auto& run:op.shaped_text->runs) for(const auto& positioned:run.glyphs) {
+			for(const auto& run:op.shaped_text->runs) {
+				if(!run.opacity) continue;
+				if(!run.bitmap.IsEmpty()) {
+					UiDisplayOp image; image.type=UiDisplayOpType::DrawImage;
+					image.rect=run.bitmap_bounds+op.point; image.image=run.bitmap;
+					image.image_source=Rect(run.bitmap.GetSize()); image.image_alpha_mask=op.text_ink_override;
+					image.image_tint=op.text_ink_override?op.color:Rgba8(255,255,255,op.color.a);
+					image.image_tint.a=(image.image_tint.a*run.opacity+127)/255;
+					int before=textured_vertices.GetCount(); if(!append_image(image)) return false;
+					emitted=emitted || textured_vertices.GetCount()>before; stats.glyph_count++; continue;
+				}
+				Rgba8 ink=op.text_ink_override || IsNull(run.ink)?op.color:Rgba8::FromColor(run.ink);
+				ink.a=(op.color.a*run.opacity+127)/255;
+				for(const auto& positioned:run.glyphs) {
 				GlyphDraw glyph;
 				Pointf origin=op.point+positioned.origin;
 				Pointf phase(origin.x-floor(origin.x),origin.y-floor(origin.y));
@@ -396,14 +409,16 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size, Po
 				Rectf rect(p.x,p.y,p.x+glyph.size.cx,p.y+glyph.size.cy);
 				int before=textured_vertices.GetCount();
 				if(!append_textured(rect,glyph.uv,glyph.texture,
-				    op.text_ink_override || IsNull(run.ink)?op.color:Rgba8::FromColor(run.ink),"shaped glyph",true)) return false;
+				    ink,"shaped glyph",true)) return false;
 				emitted=emitted || textured_vertices.GetCount()>before;
+			}
 			}
 			if(emitted) stats.emitted_primitive_count++;
 			for(const auto& decoration:op.shaped_text->decorations) {
 				Rectf r=decoration.rect+op.point;
 				UiDisplayOp line; line.type=UiDisplayOpType::FillPath;
-				line.paint=UiPaint::Solid(op.text_ink_override || IsNull(decoration.ink)?op.color:Rgba8::FromColor(decoration.ink));
+				Rgba8 ink=op.text_ink_override || IsNull(decoration.ink)?op.color:Rgba8::FromColor(decoration.ink);
+				ink.a=op.color.a; line.paint=UiPaint::Solid(ink);
 				line.path.MoveTo(r.TopLeft()).LineTo(r.TopRight()).LineTo(r.BottomRight()).LineTo(r.BottomLeft()).Close();
 				// Thin fractional decorations need area coverage rather than a
 				// one-pixel tessellation fringe. Reuse the bounded GPU vector cache.

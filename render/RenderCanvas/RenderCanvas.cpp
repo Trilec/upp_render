@@ -494,7 +494,8 @@ String UiDisplayList::Dump() const
 			if(op.shaped_text) {
 				for(const auto& run:op.shaped_text->runs) {
 					sb << " face=" << StableBytesHash((const byte *)run.face->GetIdentity().Begin(),run.face->GetIdentity().GetCount())
-					   << " ink=" << AsString(run.ink) << " em=" << StableDouble(run.em_size);
+					   << " ink=" << AsString(run.ink) << " opacity=" << (int)run.opacity << " em=" << StableDouble(run.em_size);
+					if(!run.bitmap.IsEmpty()) sb << " bitmap=" << run.bitmap.GetSize() << ":" << DumpRect(run.bitmap_bounds);
 					for(const auto& glyph:run.glyphs) sb << ' ' << glyph.glyph << ':' << DumpPoint(glyph.origin);
 				}
 				for(const auto& r:op.shaped_text->decorations) sb << " decoration=" << DumpRect(r.rect) << " ink=" << AsString(r.ink);

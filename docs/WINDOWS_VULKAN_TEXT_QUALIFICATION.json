@@ -758,5 +758,223 @@
       "Colour/bitmap font layers and final current-text performance/soak remain open.",
       "No changes to external U++ Core or Animation; no push/publication."
     ]
+  },
+  "font_layer_checkpoint": {
+    "recorded_at": "2026-10-22",
+    "renderer_base": "6b7d490",
+    "ui_base": "6ed57ab",
+    "status": "automated font layer Release/Debug/native and Gallery checks passed; final integrated performance/physical input pending",
+    "release": {
+      "build_job": "exec-A2A28792EE7C617858A809277F1D551A",
+      "binary": {
+        "path": "build/UiTextLayoutFonts.exe",
+        "bytes": 6599680,
+        "sha256": "eb4d855a71227483ef3359aa84a727693e2077cc9f9b93197e796c2d4e0ecedb"
+      },
+      "run": {
+        "job_id": "exec-177289E9D90F1C37D93E4C48A39A5941",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4141,
+        "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nime_composition_checks=34 passed=1\r\nsoftware_bitmap_changed=0 max_error=0\r\nalpha_pixel format=1 rgb=127,0,128\r\nalpha_pixel format=2 rgb=127,0,128\r\nalpha_pixel format=3 rgb=187,0,188\r\nalpha_pixel format=4 rgb=187,0,188\r\nfont_layer_checks=78 palette_runs=5 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      }
+    },
+    "debug": {
+      "build_job": "exec-7789A42676A6F2CE8A619EE8DC6AD57C",
+      "binary": {
+        "path": "build/UiTextLayoutFontsDebug.exe",
+        "bytes": 9136640,
+        "sha256": "2c3da14c5c585b6e1a576dd43d6e2e711814fb6ad3c7cfe3764d917b9a0f6abe"
+      },
+      "run": {
+        "job_id": "exec-51AD897C2ED2799EFB6F78BC871159B2",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 11812,
+        "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nime_composition_checks=34 passed=1\r\nsoftware_bitmap_changed=0 max_error=0\r\nalpha_pixel format=1 rgb=127,0,128\r\nalpha_pixel format=2 rgb=127,0,128\r\nalpha_pixel format=3 rgb=187,0,188\r\nalpha_pixel format=4 rgb=187,0,188\r\nfont_layer_checks=78 palette_runs=5 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      }
+    },
+    "native_no_renderer_nest_blitz": {
+      "build": {
+        "job_id": "exec-E722C2F4ECD89F177B61DCB325BB099E",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 70922,
+        "stdout": "Saving \r\n----- Core ( GUI CLANG BLITZ WIN32 ) (1 / 15)\r\n----- Draw ( GUI CLANG BLITZ WIN32 ) (2 / 15)\r\n----- CtrlCore ( GUI CLANG BLITZ WIN32 ) (3 / 15)\r\n----- CtrlLib ( GUI CLANG BLITZ WIN32 ) (4 / 15)\r\n----- Ui ( GUI CLANG BLITZ WIN32 ) (5 / 15)\r\nBLITZ: UiTextLayoutInternal.cpp UiColorProbe.cpp UiColorPickerMicro.cpp UiPlaybackBar.cpp UiFonts.cpp UiGeometry.cpp UiShapePath.cpp UiShapes.cpp UiDraw.cpp UiAxis.cpp UiDataModels.cpp UiItemRender.cpp UiItemRenderData.cpp UiGraphModel.cpp UiGraphNodeTemplate.cpp UiGraphNodeComponent.cpp UiGraphNodeComponentPaint.cpp UiNodeGraphTemplates.cpp UiNodeGraphSpatial.cpp UiDirectContentHost.cpp UiGroupPanel.cpp UiStack.cpp UiTag.cpp UiMediaCard.cpp UiAbsoluteLayout.cpp UiGridLayout.cpp UiSplitButton.cpp UiMultiEdit.cpp UiProgressBar.cpp UiProgressRing.cpp UiChartRing.cpp UiSlider.cpp UiRangeSlider.cpp UiRangeSegments.cpp UiRangeSegmentsModel.cpp UiRangeSegmentsData.cpp UiRangeSegmentsGeometry.cpp UiRangeSegmentsPaint.cpp UiRangeSegmentsInteraction.cpp UiRangeSliderEdit.cpp UiMatrixSelector.cpp UiColorMatrix.cpp UiDateTime.cpp UiBreadcrumbs.cpp UiSplitter.cpp UiQuadSplitter.cpp UiTable.cpp UiTableModelView.cpp UiTableRender.cpp UiTablePaint.cpp UiTableInteraction.cpp UiDocCore.cpp UiDocCoreApply.cpp UiDocCoreApi.cpp UiDocCoreTable.cpp UiDocCoreJson.cpp UiDocMetadata.cpp UiDocLayout.cpp UiDocPages.cpp UiDocParagraphLayout.cpp UiDocGeometry.cpp UiDocPaint.cpp UiDocPaintOverlay.cpp UiDocInput.cpp UiDocInteraction.cpp UiDocCommands.cpp UiTree.cpp UiTreeModelView.cpp UiTreeRender.cpp UiTreeInteraction.cpp UiList.cpp UiListModelView.cpp UiListRender.cpp UiListPaint.cpp UiListInteraction.cpp UiGalleryModel.cpp UiGalleryRender.cpp UiGalleryPaint.cpp UiGalleryInteraction.cpp UiBezierCurveField.cpp UiDropdown.cpp UiDropdownPopup.cpp UiMenu.cpp UiColorPicker.cpp UiColorPickerPaletteLab.cpp\r\nUiTextLayout.cpp\r\nUiIndicatorBase.cpp\r\nUiNodeGraph.cpp\r\nUiNodeGraphInteraction.cpp\r\nUiMeasure.cpp\r\nUiLabel.cpp\r\nUiCheckBox.cpp\r\nUiRadioButton.cpp\r\nUiToggle.cpp\r\nUiPanel.cpp\r\nUiAccordion.cpp\r\nUiScrollPanel.cpp\r\nUiTab.cpp\r\nUiTitleCard.cpp\r\nUiBoxLayout.cpp\r\nUiButton.cpp\r\nUiToolButton.cpp\r\nUiBaseEdit.cpp\r\nUiLineEdit.cpp\r\nUiIntEdit.cpp\r\nUiFloatEdit.cpp\r\nUiPasswordEdit.cpp\r\nUiMaskEdit.cpp\r\nUiSliderEdit.cpp\r\nUiScrollBar.cpp\r\nUiDoc.cpp\r\nUiGallery.cpp\r\nUiBezierCurveEditor.cpp\r\n----- Utilities/PropertyEditor ( GUI CLANG BLITZ WIN32 ) (6 / 15)\r\nBLITZ: PropertyWorkingRangeEditors.cpp PropertyWorkingRangeAutoRegister.cpp PropertySemanticEditors.cpp PropertySemanticScalarEditors.cpp PropertySemanticCollectionEditors.cpp PropertySemanticGradientEditor.cpp PropertyEditorBase.cpp PropertyEditorLayout.cpp PropertyEditorInline.cpp PropertyEditorInteraction.cpp PropertyEditorPaint.cpp\r\nPropertyValueEditors.cpp\r\nPropertyBuiltinEditors.cpp\r\n----- plugin/z ( GUI CLANG BLITZ WIN32 ) (7 / 15)\r\n----- plugin/png ( GUI CLANG BLITZ WIN32 ) (8 / 15)\r\n----- plugin/bmp ( GUI CLANG BLITZ WIN32 ) (9 / 15)\r\n----- RichText ( GUI CLANG BLITZ WIN32 ) (10 / 15)\r\n----- Painter ( GUI CLANG BLITZ WIN32 ) (11 / 15)\r\n----- Animation ( GUI CLANG BLITZ WIN32 ) (12 / 15)\r\n----- Utilities/PropertyEditorCore ( GUI CLANG BLITZ WIN32 ) (13 / 15)\r\n----- Ui/UiOsFileDialog ( GUI CLANG BLITZ WIN32 ) (14 / 15)\r\n----- examples/UiLabelDemo ( GUI MAIN CLANG BLITZ WIN32 ) (15 / 15)\r\nBLITZ: UiLabelDemo.cpp UiLabelOverrideLayout.cpp main.cpp\r\nUtilities/PropertyEditor: 13 file(s) built in (0:07.97), 613 msecs / file\r\nexamples/UiLabelDemo: 3 file(s) built in (0:04.25), 1417 msecs / file\r\nUi: 113 file(s) built in (0:47.72), 422 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_Ui\\build\\klick\\UiLabelNativeText.exe (9698816 B) linked in (0:00.26)\r\n\r\nOK. (1:10.59)\r\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "binary": {
+        "path": "build/klick/UiLabelNativeText.exe",
+        "bytes": 9698816,
+        "sha256": "db3f1f4cbe3cf83226f60513565d5fde2389f09a178f4ea8f4b8ce64b8a432aa"
+      }
+    },
+    "gallery": {
+      "build_job": "exec-8183DCB300401F784F1515C4C7B1127D",
+      "binary": {
+        "path": "build/GpuUiGalleryText.exe",
+        "bytes": 8884736,
+        "sha256": "0a3bf804318d69aa98ad779c87f4324ae541bc9a4d256ac1569c2924ea71aa81"
+      },
+      "run": {
+        "job_id": "exec-1E822280A79ED2B581F646A0FBF21DF0",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 14937,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "report": "workspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=33 dispatches=33 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=31 dispatches=31 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nGpuUi-micro-light=PASS size=(1240, 800) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-idle=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-preedit=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_document_shown=true size=(923, 456) text_length=56 active_tab=3\nGpuUi-text-committed=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_unchanged_document_pixels=0 baseline_ink_pixels=1002\nextended_controls=PASS scan/preview/selection/accept/cancel/nested micro/16 picker states/themes/resize/text composition overlay/cancel/commit picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=18/64 font_error=\n"
+    },
+    "capture": {
+      "path": "build/UiTextLayout-font-layers.png",
+      "bytes": 6901,
+      "sha256": "7c78a576cd065587b67ca02e9412b53294e132131d09579859f9b12e6c22de5f"
+    },
+    "source_manifest": {
+      "renderer": [
+        {
+          "path": "render/RenderCore/GpuTextLayout.h",
+          "sha256": "3b7eaaa33a2ef33b59193231c65deec543731012747cec42dd377fe0765041e6",
+          "size": 2066
+        },
+        {
+          "path": "render/RenderCore/GpuTextLayout.cpp",
+          "sha256": "425f88e642b68eee3456c6e8df102657358b8d41ccc36489de6c9f37988c7bd9",
+          "size": 2676
+        },
+        {
+          "path": "render/RenderCanvas/RenderCanvas.cpp",
+          "sha256": "452bd4ef1b96faa8a230ee091b8bbf4c4e7d833b92c52aefb03cf25b7f2d97d2",
+          "size": 21836
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2D.cpp",
+          "sha256": "4203fcfa82bf1c53f0c8db8a789b34a9dd75214a115ff0b748135fed25a64bb3",
+          "size": 40992
+        },
+        {
+          "path": "render/RenderSoftware/RenderSoftware.cpp",
+          "sha256": "2dd7ffcfcf5a9d945268fd103c196c9e6ac5c251dd482ddb0b8cbda4e4917cc8",
+          "size": 6659
+        },
+        {
+          "path": "tests/UiTextLayoutTest/NativeReference.cpp",
+          "sha256": "ad410466f12e7df5673781355fdb802fb0b2d8b4f332d885abee4e3310f2570b",
+          "size": 18992
+        },
+        {
+          "path": "tests/UiTextLayoutTest/FontLayers.cpp",
+          "sha256": "9a41bad54b12632c7ec7d4df243a876f5efea9dede34bcb1f9168da50ae3e990",
+          "size": 12570
+        },
+        {
+          "path": "tests/UiTextLayoutTest/main.cpp",
+          "sha256": "26250155c22c2a300f3d4a481fb6717091e76c8ce910574bbc5c62eddf2809a1",
+          "size": 7915
+        },
+        {
+          "path": "tests/UiTextLayoutTest/UiTextLayoutTest.upp",
+          "sha256": "e6e0d587710784921858522b2cef730816b1f09b0157f30d6a81a5c2eb7d5649",
+          "size": 291
+        },
+        {
+          "path": "examples/GpuUiGallery/main.cpp",
+          "sha256": "54e864e3c5ad0706bfcefe0c8d355a36810ba2e3a1cf8b2c886636b71028fec7",
+          "size": 49152
+        },
+        {
+          "path": "examples/GpuUiGallery/GpuControls.h",
+          "sha256": "e020e55fc3dc49f35d1bf4ae6ae1d5c5a0b74dc429bc78e3383b77a56cadb5d6",
+          "size": 1031
+        },
+        {
+          "path": "examples/GpuUiGallery/GpuControls.cpp",
+          "sha256": "68d9043ee0a03f48091b17952e9168a6458b97076cc5c0d563f410acd9d25ad5",
+          "size": 12298
+        },
+        {
+          "path": "tests/UiTextLayoutTest/fixtures/samples-sbix.ttf",
+          "sha256": "0fd0a23379b0e982db8bef5f9a50cf7960a6ee3504778a9a9c039bde4d2f573d",
+          "size": 19608
+        },
+        {
+          "path": "tests/UiTextLayoutTest/fixtures/Google-color-fonts-LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "size": 11358
+        },
+        {
+          "path": "tests/UiTextLayoutTest/fixtures/README.md",
+          "sha256": "87abfc2a63b7743f334b099930c807bd16d0bd5297201eb6dd00399f7fc0600e",
+          "size": 657
+        }
+      ],
+      "ui": [
+        {
+          "path": "Ui/UiTextLayout.h",
+          "sha256": "4d4dd958fe6f0aff555dceecf887bf44e23eb02ef534f96ab809c61f1dbe3dfa",
+          "size": 6717
+        },
+        {
+          "path": "Ui/UiTextLayout.cpp",
+          "sha256": "9419d1500ccf75e397a11eaf6df62e4f9781586197aceb6eaae177a0a207f5a0",
+          "size": 61565
+        },
+        {
+          "path": "Ui/Ui.upp",
+          "sha256": "595369630f99b0f47423d0b606d24e80a6b5ef61727425ceed62412afc443e9c",
+          "size": 4993
+        }
+      ]
+    },
+    "checks": {
+      "native_outline": 16,
+      "vulkan_pixels": 64,
+      "editor": 37,
+      "styled": 36,
+      "document": 27,
+      "ime": 34,
+      "font_layers": 78,
+      "palette_runs": 5,
+      "software_bitmap_max_error": 0,
+      "unchanged_gallery_document_pixels": 0,
+      "baseline_gallery_document_ink_pixels": 1002
+    },
+    "fixture": {
+      "project": "googlefonts/color-fonts",
+      "revision": "0046ea4c3b69e9fbbe464c2594816894e3aa5e4b",
+      "file": "tests/UiTextLayoutTest/fixtures/samples-sbix.ttf",
+      "bytes": 19608,
+      "sha256": "0fd0a23379b0e982db8bef5f9a50cf7960a6ee3504778a9a9c039bde4d2f573d",
+      "license": "Apache-2.0, unmodified accompanying repository license",
+      "ligature": "simple_linear",
+      "system_installation": false
+    },
+    "contract": [
+      "Native COLRv0 palette order/opacity uses GPU outline coverage; selection reuses coverage with uniform ink.",
+      "Embedded PNG/JPEG/TIFF/premultiplied BGRA are immutable source images, not CPU outline coverage; actual native PNG/sbix decoding and GPU replay is tested.",
+      "Snapshot max4MiB,1024runs,65536glyphs; each bitmap run has one glyph, max1024 pixels/axis. Decoded font-image cache max128entries/4MiB; payload limits are not total COM/process/driver memory.",
+      "Optional application font_file uses private DirectWrite collections and native metrics; cache identity includes full Windows file modification time. Missing/oversized (>256MiB) font files fail explicitly.",
+      "Monochrome numerical outline/pixel oracle remains explicit color_fonts=false with unchanged tolerances.",
+      "Software reference shares image replay and retains fractional bounds; Ui Painter/reference agree for native palette/bitmap fixtures.",
+      "--text-controls launches the strict Vulkan controls dialog directly; default Text/IME tab includes multilingual text and colour emoji."
+    ],
+    "limits": [
+      "SVG colour glyphs and COLRv1 paint-tree colour rendering are not implemented; no complete arbitrary OpenType colour-format claim.",
+      "Live OS IME conversion/candidate interaction and physical input/DPI acceptance remain open.",
+      "Current normal/heavy/300s performance must be measured after these font/text changes.",
+      "Builds used the current Ui working tree, including preserved unrelated dirty layout files; final clean-main source export qualification will exclude uncommitted foreign edits.",
+      "No external Core/Animation changes or publishing."
+    ]
   }
 }

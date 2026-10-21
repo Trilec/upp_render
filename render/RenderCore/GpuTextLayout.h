@@ -27,11 +27,16 @@ struct GpuGlyphRunSnapshot {
 	double em_size = 12;
 	Vector<GpuPositionedGlyph> glyphs;
 	Color ink = Null; // Null inherits the drawing caller's ink.
+	byte opacity = 255;
+	// Embedded font pixels are immutable source assets, not CPU glyph coverage.
+	// Bitmap runs contain exactly one glyph and retain its native face identity.
+	Image bitmap;
+	Rectf bitmap_bounds = Rectf(0,0,0,0);
 
 };
 
 struct GpuTextDecoration : Moveable<GpuTextDecoration> {
-	Rectf rect;
+	Rectf rect = Rectf(0,0,0,0);
 	Color ink = Null;
 	GpuTextDecoration() = default;
 	GpuTextDecoration(Rectf r,Color c=Null):rect(r),ink(c) {}

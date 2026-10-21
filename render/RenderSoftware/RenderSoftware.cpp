@@ -28,6 +28,33 @@ static Xform2D ToXform(const Transform2D& m)
 	return x;
 }
 
+static void ReplayImage(const UiDisplayOp& op,Painter& painter)
+{
+	if(!op.image.IsEmpty() && op.image_tint.a) {
+		Image resolved = Crop(op.image, op.image_source);
+		if(op.image_tint != Rgba8(255, 255, 255, 255) || op.image_alpha_mask) {
+			ImageBuffer pixels(resolved);
+			for(RGBA& p : pixels) {
+				const int a = p.a;
+				p.r = ((op.image_alpha_mask ? a : p.r) * op.image_tint.r + 127) / 255;
+				p.g = ((op.image_alpha_mask ? a : p.g) * op.image_tint.g + 127) / 255;
+				p.b = ((op.image_alpha_mask ? a : p.b) * op.image_tint.b + 127) / 255;
+				p.r = (p.r * op.image_tint.a + 127) / 255;
+				p.g = (p.g * op.image_tint.a + 127) / 255;
+				p.b = (p.b * op.image_tint.a + 127) / 255;
+				p.a = (a * op.image_tint.a + 127) / 255;
+			}
+			resolved = Image(pixels);
+		}
+		// Match GPU clamp-to-edge sampling instead of Painter's transparent extension.
+		const Rectf dest = op.rect;
+		painter.RectPath(dest).Fill(resolved,
+			Xform2D::Scale((double)dest.GetWidth() / resolved.GetWidth(),
+			               (double)dest.GetHeight() / resolved.GetHeight()) *
+			Xform2D::Translation(dest.left, dest.top), FILL_PAD);
+	}
+}
+
 namespace {
 struct ShapedOutlinePainter : FontGlyphConsumer {
 	Painter& painter; Pointf origin; bool used=false;
@@ -120,39 +147,35 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			painter.Fill(ToRgba(op.color));
 			break;
 		case UiDisplayOpType::DrawImage:
-			if(!op.image.IsEmpty() && op.image_tint.a) {
-				Image resolved = Crop(op.image, op.image_source);
-				if(op.image_tint != Rgba8(255, 255, 255, 255) || op.image_alpha_mask) {
-					ImageBuffer pixels(resolved);
-					for(RGBA& p : pixels) {
-						const int a = p.a;
-						p.r = ((op.image_alpha_mask ? a : p.r) * op.image_tint.r + 127) / 255;
-						p.g = ((op.image_alpha_mask ? a : p.g) * op.image_tint.g + 127) / 255;
-						p.b = ((op.image_alpha_mask ? a : p.b) * op.image_tint.b + 127) / 255;
-						p.r = (p.r * op.image_tint.a + 127) / 255;
-						p.g = (p.g * op.image_tint.a + 127) / 255;
-						p.b = (p.b * op.image_tint.a + 127) / 255;
-						p.a = (a * op.image_tint.a + 127) / 255;
-					}
-					resolved = Image(pixels);
-				}
-				// Match GPU clamp-to-edge sampling instead of Painter's transparent extension.
-				const Rect dest = ToRect(op.rect);
-				painter.RectPath(dest).Fill(resolved,
-					Xform2D::Scale((double)dest.GetWidth() / resolved.GetWidth(),
-					               (double)dest.GetHeight() / resolved.GetHeight()) *
-					Xform2D::Translation(dest.left, dest.top), FILL_PAD);
-			}
+			ReplayImage(op,painter);
 			break;
 		case UiDisplayOpType::DrawShapedText:
 			if(!op.shaped_text || !op.shaped_text->IsValid(&error)) return false;
 			painter.EvenOdd(false);
-			for(const auto& run:op.shaped_text->runs) for(const auto& glyph:run.glyphs) {
-				ShapedOutlinePainter sink(painter,op.point+glyph.origin);
-				if(!run.face->GetOutline(glyph.glyph,run.em_size,sink,error)) return false;
-				if(sink.used) painter.Fill(op.text_ink_override || IsNull(run.ink)?ToRgba(op.color):(RGBA)run.ink);
+			for(const auto& run:op.shaped_text->runs) {
+				if(!run.bitmap.IsEmpty()) {
+					UiDisplayOp image; image.type=UiDisplayOpType::DrawImage;
+					image.rect=run.bitmap_bounds+op.point; image.image=run.bitmap;
+					image.image_source=Rect(run.bitmap.GetSize()); image.image_alpha_mask=op.text_ink_override;
+					image.image_tint=op.text_ink_override?op.color:Rgba8(255,255,255,op.color.a);
+					image.image_tint.a=(image.image_tint.a*run.opacity+127)/255;
+					ReplayImage(image,painter);
+				}
+				else {
+					painter.Begin(); painter.Opacity(run.opacity/255.);
+					if(!op.text_ink_override && !IsNull(run.ink)) painter.Opacity(op.color.a/255.);
+					for(const auto& glyph:run.glyphs) {
+						ShapedOutlinePainter sink(painter,op.point+glyph.origin);
+						if(!run.face->GetOutline(glyph.glyph,run.em_size,sink,error)) { painter.End(); return false; }
+						if(sink.used) painter.Fill(op.text_ink_override || IsNull(run.ink)?ToRgba(op.color):(RGBA)run.ink);
+					}
+					painter.End();
+				}
 			}
-			for(const auto& r:op.shaped_text->decorations) painter.Rectangle(r.rect+op.point).Fill(op.text_ink_override || IsNull(r.ink)?ToRgba(op.color):(RGBA)r.ink);
+			for(const auto& r:op.shaped_text->decorations) {
+				RGBA ink=op.text_ink_override || IsNull(r.ink)?ToRgba(op.color):(RGBA)r.ink;
+				ink.a=op.color.a; painter.Rectangle(r.rect+op.point).Fill(ink);
+			}
 			break;
 		case UiDisplayOpType::DrawText:
 			if(!op.text.IsEmpty()) {

@@ -11,6 +11,7 @@ public:
 	~GpuControlsDialog() override;
 	void Layout() override;
 	void StartQualification(String& report);
+	void ShowTextPage() { tabs.SetActiveTab(3); }
 	bool QualificationPassed() const { return passed; }
 private:
 	void Tick();

@@ -15,6 +15,7 @@ bool TestUnicodeEditing();
 bool TestStyledText();
 bool TestDocumentText();
 bool TestImeComposition();
+bool TestFontLayers();
 GUI_APP_MAIN
 {
 	String error; int cases=0;
@@ -116,6 +117,7 @@ GUI_APP_MAIN
 	ok=TestStyledText() && ok;
 	ok=TestDocumentText() && ok;
 	ok=TestImeComposition() && ok;
+	ok=TestFontLayers() && ok;
 	Font variable=SansSerif(28).FaceName("Bahnschrift");
 	auto variable_regular=UiTextLayout::Create(WString("Variable"),variable);
 	auto variable_bold=UiTextLayout::Create(WString("Variable"),Font(variable).Bold());

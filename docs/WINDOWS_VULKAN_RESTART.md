@@ -86,10 +86,26 @@ Current IME changes are ready for intended local commits. External Core and Anim
 - Host tests generate native messages; live OS IME conversion/candidate selection and physical input/DPI are still open. Keyboard preload currently lists English/German. Do not claim real OS conversion acceptance.
 - Dashboard revision20: overall strict acceptance70% (7/10); text implementation62.5% (5/8). IME input item remains open until live input/DPI/bidi edges are qualified.
 
+## Colour / bitmap fonts automated checkpoint (2026-10-22)
+
+IME commits: Ui6ed57ab, renderer6b7d490. Current font slice is ready for intended local commits; no push.
+- Native COLRv0 palette order/opacity and embedded PNG/JPEG/TIFF/premultiplied BGRA assets reuse GPU coverage/image paths. Private application font_file collections install nothing; native metrics and full Windows file time participate in layout identity.
+- Decoded asset cache128entries/4MiB; bitmap runs max1024pixels/axis and count their full image payload in4MiB snapshot limit. These are declared payload bounds, not total native process memory.
+- Release exec-177289E9D90F1C37D93E4C48A39A5941 PASS4141ms; Debug exec-51AD897C2ED2799EFB6F78BC871159B2 PASS11812ms. Both64 Vulkan pixels,37editor,36style,27document,34IME and78font-layer checks. Software bitmap maxerror0 and native Ui Painter/reference agreement. RGBA/BGRA UNORM/sRGB alpha equations pass, warm uploads/misses0, ownership/validation0.
+- Ordinary no-renderer-nest Ui Release BLITZ exec-E722C2F4ECD89F177B61DCB325BB099E PASS.
+- Gallery exec-1E822280A79ED2B581F646A0FBF21DF0 PASS14937ms; text idle/preedit/commit document changedpixels0 /1002baseline inkpixels. Browser/full/micro/3workspace/3compute cycles pass; CPU glyph/vector0,GDI0,finalnativeZERO.
+- GPU readback build/UiTextLayout-font-layers.png SHA7c78a576cd065587b67ca02e9412b53294e132131d09579859f9b12e6c22de5f inspected. Actual font fixture/provenance/license retained under tests/UiTextLayoutTest/fixtures.
+- Reference fixes: share ReplayImage rather than Painter opacity quantization; preserve fractional image bounds. Do not edit external Painter/Core.
+- Direct manual launch: current build/GpuUiGalleryText.exe --text-controls --validation. Hash it before Execute. No app currently open.
+- Exact binaries/reports/source manifests and supported-format limits in WINDOWS_VULKAN_TEXT_QUALIFICATION.json font_layer_checkpoint.
+- Dashboard revision21:70% overall strict acceptance;75% text implementation (6/8). Live OS IME/physical DPI, remaining edge review and final current-binary load remain open.
+- SVG colour glyphs/COLRv1 paint trees are not implemented; do not claim complete arbitrary OpenType colour-format parity.
+- Preserve foreign Ui layout/theme changes. Final qualification should build from a committed Ui main archive to keep those unrelated uncommitted edits out of the release evidence without touching their working files.
+
 ## Remaining implementation and qualification
 
 1. Commit the qualified IME slice and preserve foreign dirty files. Rich text commits are already complete; temporary staging patch removal was verified.
-2. Implement colour/bitmap font layers; current emoji is outline monochrome. Preserve existing monochrome geometry oracle as an explicit mode and add separate colour/bitmap pixels/caches/ownership tests.
+2. Colour/bitmap font slice is implemented and tested; commit its owned code/evidence. Supported colour formats are documented, with SVG/COLRv1 exclusions.
 3. Finish live OS IME/candidate, physical input/DPI and remaining bidi edge acceptance. Native host composition implementation and34 automated checks are complete; do not reimplement the bridge or edit Core.
 4. Broaden bidi affinity/selection collapse/wrapped edge/table navigation and cache-bound/failure/concurrency/memory tests. Table image/caret pagination text_origin now shifts with cell rect.
 5. Final Debug/native BLITZ, Canvas/semantic/vector/scalar regressions; rebuild Gallery preserving GpuUiGalleryFinish.exe. Re-run all controls/browser/full picker/micro/dialog/captures/input/DPI; normal/heavy/full300s after complete text.
