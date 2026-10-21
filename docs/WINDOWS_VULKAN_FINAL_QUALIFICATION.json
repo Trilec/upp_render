@@ -1263,9 +1263,175 @@
       "bytes_scanned": 52513,
       "bytes_hashed": 52513
     },
-    "source_commit": "Pending local commit; source SHA-256 identifies exact diagnostic delta",
+    "source_commit": "c74d1e589673edf001def198bc43a61213f98ba1",
     "evidence_section": "latency_investigation",
     "release_qualified": false,
-    "reason": "Prior long delays unconfirmed; physical input/DPI and current clean-machine review pending"
+    "reason": "Prior long delays unconfirmed; physical input/DPI and current clean-machine review pending",
+    "committed_main_build": {
+      "job_id": "exec-C5C09580E27711BB4C729DED807E5E3F",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 922,
+      "stdout": "Saving \r\n----- Core ( GUI GPUUI CFONTS CLANG WIN32 ) (1 / 26)\r\n----- Animation ( GUI GPUUI CFONTS CLANG WIN32 ) (2 / 26)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG WIN32 ) (3 / 26)\r\n----- Ui ( GUI GPUUI CFONTS CLANG WIN32 ) (4 / 26)\r\n----- Ui/UiFileBrowser ( GUI GPUUI CFONTS CLANG WIN32 ) (5 / 26)\r\n----- Utilities/PropertyEditor ( GUI GPUUI CFONTS CLANG WIN32 ) (6 / 26)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG WIN32 ) (7 / 26)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG WIN32 ) (8 / 26)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG WIN32 ) (9 / 26)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG WIN32 ) (10 / 26)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG WIN32 ) (11 / 26)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (12 / 26)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG WIN32 ) (13 / 26)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG WIN32 ) (14 / 26)\r\n----- Draw ( GUI GPUUI CFONTS CLANG WIN32 ) (15 / 26)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG WIN32 ) (16 / 26)\r\n----- RichText ( GUI GPUUI CFONTS CLANG WIN32 ) (17 / 26)\r\n----- Painter ( GUI GPUUI CFONTS CLANG WIN32 ) (18 / 26)\r\n----- Utilities/PropertyEditorCore ( GUI GPUUI CFONTS CLANG WIN32 ) (19 / 26)\r\n----- Ui/UiOsFileDialog ( GUI GPUUI CFONTS CLANG WIN32 ) (20 / 26)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG WIN32 ) (21 / 26)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (22 / 26)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG WIN32 ) (23 / 26)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG WIN32 ) (24 / 26)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG WIN32 ) (25 / 26)\r\n----- GpuUiGallery ( GUI GPUUI CFONTS MAIN CLANG WIN32 ) (26 / 26)\r\nE:\\apps\\github\\upp_render\\build\\GpuUiGalleryLatency.exe (8890368 B) is up to date.\r\n\r\nOK. (0:00.78)\r\n",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "committed_main_binary_hash_unchanged": true
+  },
+  "current_runtime": {
+    "zip": {
+      "op": "stat",
+      "path": "build/upp-render-ui-2026-10-22-qualification.zip",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T07:27:35",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "c006d0a290c955d8940beb2d9b7d5fba718aa4198ac2baee3e0da96c996e8fed",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 3871581,
+      "sha256": "462135402b83e150b49f7cbd55827857e5acbba49b3c69c21728292141586ef5",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 3871581
+    },
+    "producer": {
+      "job_id": "exec-B0CB8E37E6B4FBA000433ADDA5542358",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 610,
+      "stdout": "",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "archive_validation": {
+      "chunk_id": "b312ef",
+      "wall_time_seconds": 0.5078048,
+      "exit_code": 0,
+      "original_token_count": 34,
+      "output": "{\r\n  \"Entries\": 4,\r\n  \"UnsafePaths\": 0,\r\n  \"ExecutableSha256\": \"b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49\"\r\n}\r\n"
+    },
+    "share_folder": "F:/networkshare/upp-render-ui-2026-10-22-qualification",
+    "share_extract": {
+      "job_id": "exec-EFC24246635D4B9293DB6E58F7C77E78",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 94,
+      "stdout": "",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "share_readback": {
+      "job_id": "exec-12D9B4CDEB70B1E925B690B21FE7C093",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 937,
+      "stdout": "",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c74d1e589673edf001def198bc43a61213f98ba1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "share_independent_verification": {
+      "chunk_id": "e41af3",
+      "wall_time_seconds": 0.4884735,
+      "exit_code": 0,
+      "original_token_count": 53,
+      "output": "{\r\n  \"ShareFolder\": \"F:/networkshare/upp-render-ui-2026-10-22-qualification\",\r\n  \"Entries\": 4,\r\n  \"ExecutableSha256\": \"b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49\",\r\n  \"Verified\": true\r\n}\r\n"
+    },
+    "caro_run_status": "NOT RUN: approved Robocopy identity changed; owner review pending",
+    "obsoletes": "Earlier runtime ZIPs and folders are comparison artifacts; use this named folder for current qualification."
+  },
+  "dashboard": {
+    "revision": 24,
+    "strict_acceptance_percent": 70,
+    "strict_gates_passed": 7,
+    "total_strict_gates": 10,
+    "text_percent": 87.5,
+    "text_checks_passed": 7,
+    "text_checks_total": 8,
+    "open": "Prior latency spikes not explained; physical input/DPI/IME and current Caro runtime qualification."
   }
 }
