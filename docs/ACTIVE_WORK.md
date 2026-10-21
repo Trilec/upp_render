@@ -1,38 +1,46 @@
 # Active Work
 
-## Restart handoff — 2026-10-21
+## Current Windows / Vulkan checkpoint — 2026-10-22
 
-Read [WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md) before continuing.
-The latest finishing changes are saved but uncommitted. Native lifecycle test
-passed; final regressions, rebuilt captures, whole-UI qualification and current
-memory/load/soak measurements remain. The older percentage below is historical.
+**7 of 10 current acceptance gates pass (70%):1,2,3,4,5,6,8.**
+This counts the ten acceptance criteria below, not coding effort.
 
-## Current priority — Windows/Vulkan whole UI
+The whole-Ui root, modal workspaces, compute dialogs, file browser, full colour
+picker, micro picker and text composition now pass automated Vulkan qualification.
+The catalogue passes224 drawing cases at standard scale and224 at doubled
+application units. Native physical monitor DPI remains a separate review.
 
-The user's confirmed order (2026-10-13) is:
-1. Finish UI drawing through the existing direct Vulkan renderer, including the remaining CPU/GDI drawing seams.
-2. Measure and improve memory use, frame scheduling and responsiveness under load.
-3. Qualify a convincing antialiased whole-UI application with working controls.
+Shared DirectWrite/system ICU layout is implemented for complex scripts, rich
+text, caret/selection/hit-testing and grapheme editing. Native Windows IME
+composition is routed by renderer-owned code. Release and Debug pass64 Vulkan
+pixel,37 editor,36 styled,27 document,38 IME and80 font-layer checks.
+Supported colour fonts:COLRv0 and embedded PNG/JPEG/TIFF/BGRA. SVG colour glyphs
+and COLRv1 paint trees are not implemented.
 
-Keep C++/U++, Ui controls, themes, Designer and application models. Work on main.
-Core and Animation are read-only by owner instruction. Their write access is not
-a blocker: isolate scheduling and rendering within this repository first.
-WebGPU/browser and Metal follow this Windows milestone. wgpu-native is an optional
-experiment; its successful native proof is not authorization to replace the
-current renderer or postpone Vulkan UI completion.
+Renderer source c1eb86f733dcf250ee14797fba0191aa732e825a and committed Ui
+f88aab5150ca7f375b8c4a61a01da57832c82e03 produce the preserved final candidate.
+Normal and512-particle/grid load sustain120 distinct animation updates/s.
+Both full300s runs passed memory/cadence, but the current sustained responsiveness
+gate is reopened: maximum timer delays361ms with validation and404.19ms without
+validation exceed the unchanged100ms gate. Production private memory peaks at
+179,949,568B with1,286,144B early/late growth. No software fallback, CPU glyph/vector
+rasters or legacy GDI fonts; final tracked native ownership is zero.
+The separate diagnostic build then passed both production and validation-enabled300s runs:120 distinct Hz,maximum timer21.23/19.30ms and under1MiB early/late growth. Neither reproduced a stall above50ms. The earlier delays remain unexplained; no scheduling fix is claimed.
 
-## Current checkpoint —2026-10-22
+Remaining:resolve sustained maximum-delay failure; physical controls/AA/monitor
+DPI and real OS IME candidate interaction; current Caro runtime qualification.
+Caro transfer is awaiting owner review of a changed approved Robocopy hash.
+The current runtime ZIP and exact failed/passed reports are recorded in
+[WINDOWS_VULKAN_FINAL_QUALIFICATION.json](WINDOWS_VULKAN_FINAL_QUALIFICATION.json).
+Recover jobs and latest state from
+[WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md).
 
-**7/10 completion gates passed (70%)**:1,2,3,4,6,8,9. The same ten gates below remain in force; this counts acceptance coverage, not engineering effort.
+Work on main; local commits only. Core and Animation remain read-only.
+Unrelated Ui changes are preserved. WebGPU/browser, Linux and Metal follow this
+Windows milestone; the native wgpu experiment does not replace Vulkan completion.
 
-Semantic SVG/Painter, shared Ui helpers, shadows, clips and layers now preserve GPU drawing intent. All56 drawable catalogue entries pass224 inventory cases; eight extra shadow cases and populated main/compute/browser/colour-picker/micro-picker qualification pass. Ordinary non-GPU UiLabelDemo Release BLITZ also builds.
-
-Current Gallery9a4d8f6f... measures120distinct updates/s. The300second heavy soak passes at119.87presentedFPS, CPUmedian/p99=6.15/14.27ms and private early/late decrease747,520B. No CPU vector/glyph raster, shared helper raster misses, software layers, fallback or GDI font requests; final native ownership ZERO.
-Exact source hashes/jobs/reports: VULKAN_UI_FINISH_QUALIFICATION.json and VULKAN_UI_FINISHING.md.
-
-The user explicitly authorized full complex-script shaping/editing now, after discussing font loading versus text layout. Implement a shared layout authority for glyph runs, measurement, hit-testing, caret/selection and cluster-safe editing; reuse DirectWrite and existing GPU glyph coverage. Keep Core/Animation read-only. Full text integration and final physical input/AA/DPI acceptance remain open. Read WINDOWS_VULKAN_RESTART.md for detailed recovery context.
-
-Ui drawing baseline committed locally as228a1b968e0b13ef21b4cbb4baf1115c3c7a8686. Preserve concurrent unrelated Ui changes. No push/publish.
+The material below preserves earlier milestones and the unchanged acceptance
+criteria. Historical passing soaks do not override the current failed run.
 
 ## Starting checkpoint
 

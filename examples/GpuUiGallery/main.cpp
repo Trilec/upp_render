@@ -883,6 +883,34 @@ private:
 		return 0;
 	}
 
+	static double CpuMilliseconds(bool ui_thread)
+	{
+#ifdef PLATFORM_WIN32
+		FILETIME created{}, exited{}, kernel{}, user{};
+		const BOOL ok = ui_thread ? GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)
+		                          : GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
+		if(ok) {
+			const uint64 k = ((uint64)kernel.dwHighDateTime << 32) | kernel.dwLowDateTime;
+			const uint64 u = ((uint64)user.dwHighDateTime << 32) | user.dwLowDateTime;
+			return (k + u) / 10000.0;
+		}
+#endif
+		return -1;
+	}
+
+#ifdef PLATFORM_WIN32
+	LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override
+	{
+		if(benchmark_started_ > 0) {
+			if(message == WM_ENTERSIZEMOVE) ++benchmark_move_loops_;
+			if(message == WM_ENTERMENULOOP) ++benchmark_menu_loops_;
+			if(message == WM_EXITSIZEMOVE || message == WM_EXITMENULOOP)
+				benchmark_native_loop_exit_ms_ = NowMs();
+		}
+		return GpuTopWindow::WindowProc(message, wParam, lParam);
+	}
+#endif
+
 	static double Percentile(Vector<double>& samples, double p)
 	{
 		if(samples.IsEmpty()) return -1;
@@ -894,9 +922,35 @@ private:
 	{
 		const double now = NowMs();
 		const double duration = now - benchmark_started_;
+		const double process_cpu = CpuMilliseconds(false), ui_cpu = CpuMilliseconds(true);
+		const double interval = benchmark_last_tick_ms_ > 0 ? now - benchmark_last_tick_ms_ : 0;
+		const double process_delta = process_cpu >= 0 && benchmark_process_cpu_ms_ >= 0 ? process_cpu - benchmark_process_cpu_ms_ : -1;
+		const double ui_delta = ui_cpu >= 0 && benchmark_ui_cpu_ms_ >= 0 ? ui_cpu - benchmark_ui_cpu_ms_ : -1;
+		benchmark_last_tick_ms_ = now;
+		benchmark_process_cpu_ms_ = process_cpu;
+		benchmark_ui_cpu_ms_ = ui_cpu;
 		if(duration >= 4000) {
-			benchmark_delays_.Add(max(0.0, now - benchmark_due_));
+			const double delay = max(0.0, now - benchmark_due_);
+			benchmark_delays_.Add(delay);
 			const GpuPresentationStats stats = GetGpuStats();
+			if(delay > 50) {
+				++benchmark_latency_events_;
+				if(benchmark_latency_trace_.GetCount() < 32) {
+					String event = Format("latency_event at_ms=%.2f delay_ms=%.2f interval_ms=%.2f process_cpu_ms=%.2f ui_cpu_ms=%.2f",
+					                      duration, delay, interval, process_delta, ui_delta);
+					event << Format(" record_ms=%.2f enqueue_ms=%.2f snapshot_acquire_ms=%.2f snapshot_replay_ms=%.2f snapshot_present_ms=%.2f",
+					                stats.record_ms, stats.enqueue_ms, stats.acquire_ms, stats.replay_ms, stats.present_ms)
+					      << " presented=" << AsString(stats.presented_frames) << " dropped=" << AsString(stats.dropped_frames)
+					      << " pending=" << stats.pending_frames
+					      << " move_loops=" << benchmark_move_loops_ << " menu_loops=" << benchmark_menu_loops_
+					      << Format(" native_loop_exit_age_ms=%.2f", benchmark_native_loop_exit_ms_ > 0 ? now - benchmark_native_loop_exit_ms_ : -1);
+#ifdef PLATFORM_WIN32
+					event << " foreground=" << (GetForegroundWindow() == GetHWND() ? 1 : 0)
+					      << " minimized=" << (IsIconic(GetHWND()) ? 1 : 0);
+#endif
+					benchmark_latency_trace_.Add(event);
+				}
+			}
 			if(!benchmark_measure_started_) {
 				benchmark_measure_started_ = now;
 				benchmark_start_frame_ = stats.presented_frames;
@@ -1011,6 +1065,9 @@ private:
 		       << "gpu_timestamp_ms=unavailable\n"
 		       << "gpu_error=" << GetGpuError() << "\n"
 		       << "responsiveness=" << (pass ? "PASS" : "FAIL") << "\n";
+		report << "latency_events_total=" << benchmark_latency_events_
+		       << " retained=" << benchmark_latency_trace_.GetCount() << " capacity=32 threshold_ms=50\n";
+		for(const String& event : benchmark_latency_trace_) report << event << '\n';
 		const auto tags = UiRasterCache::GetTagBytes();
 		for(int i=0; i<tags.GetCount(); ++i)
 			report << "ui_raster_tag=" << tags.GetKey(i) << " bytes=" << AsString(tags[i]) << "\n";
@@ -1050,6 +1107,13 @@ private:
 	int64 benchmark_vector_peak_ = 0;
 	Vector<double> benchmark_delays_;
 	Vector<double> benchmark_replays_;
+	// Benchmark-only bounded diagnostics; no per-frame event file I/O.
+	Vector<String> benchmark_latency_trace_;
+	int benchmark_latency_events_ = 0;
+	int benchmark_move_loops_ = 0, benchmark_menu_loops_ = 0;
+	double benchmark_native_loop_exit_ms_ = 0;
+	double benchmark_last_tick_ms_ = 0;
+	double benchmark_process_cpu_ms_ = -1, benchmark_ui_cpu_ms_ = -1;
 	UiLabel heading_;
 	UiLabel subheading_;
 	UiMenu menu_;

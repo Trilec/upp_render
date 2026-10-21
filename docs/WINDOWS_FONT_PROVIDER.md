@@ -42,7 +42,41 @@ both built with `+CONSOLE,CFONTS`.
   Font names resolve before taking the provider lock, preserving the U++ font
   lock order. Concurrent metric/outline/diagnostic access is tested.
 
-## What text rendering means here
+## Current Ui text path — 2026-10-22
+
+With GPUUI enabled, UiGetTextSize/UiDrawText and UiTextLayout share native
+DirectWrite layout and system ICU boundaries. Shaped glyph IDs, actual fallback
+faces, positions, decorations and native line geometry drive measurement,
+wrapping, hit-testing, selection, caret movement and Vulkan drawing. Arabic,
+Indic, mixed-direction, combining and supplementary text are covered by the
+focused tests; editing uses scalar mappings and grapheme boundaries rather than
+splitting UTF-16 surrogate pairs.
+
+UiLabel and UiDoc use styled native paragraphs and retained line snapshots.
+BaseEdit retains unchanged line layouts. The renderer-owned Windows IME bridge
+routes composition/result strings and candidate positioning without editing
+Core; Ui draws its composition overlay through the existing Vulkan device.
+Native host-message tests pass; live OS conversion/candidate and physical
+monitor/input review remain separate acceptance checks.
+
+COLRv0 palette layers and embedded PNG/JPEG/TIFF/premultiplied BGRA font assets
+are supported, including private font_file collections without system install.
+SVG glyphs and COLRv1 paint trees are not implemented. Family fallback and
+available glyphs still depend on installed/application fonts.
+
+Layout cache:256 entries/4 MiB declared payload. Decoded font assets:128
+entries/4 MiB, at most1024 pixels per axis. Shaped snapshots:4 MiB,1024 runs,
+65536 glyphs. Repeated references to one immutable bitmap count its pixels once;
+distinct image buffers still count fully. These limits do not bound native
+DirectWrite/COM, driver allocations or total process memory.
+
+Release and Debug pass64 Vulkan pixel,37 editor,36 styled,27 document,38 native
+IME and80 font-layer checks. See
+[exact text evidence](WINDOWS_VULKAN_TEXT_QUALIFICATION.json) and
+[final candidate evidence](WINDOWS_VULKAN_FINAL_QUALIFICATION.json).
+
+## Legacy scalar DrawText path
+
 
 The current neutral DrawText contract preserves U++ control text: per-scalar
 integer Font advances, U++ fallback and decorations. Software replay supplies
@@ -63,10 +97,9 @@ authority. Base and diacritic components composite independently and share their
 ordinary glyph entries. A cold-whitespace bug was fixed: empty outlines now
 return the same advance on their first and cached frames.
 
-The existing scalar contract is deliberate; it does not provide full shaped
-glyph runs, Arabic/Indic shaping, bidi or colour emoji. IME/accessibility and
-monitor-DPI acceptance remain additional work. Individual Unicode tests do not
-qualify those features.
+The legacy scalar DrawText operation retains this narrower contract. Full Ui
+shaping uses the shared layout path described above. Accessibility and physical
+monitor-DPI acceptance are separate from glyph rendering tests.
 
 ## GPU glyph qualification — 2026-10-15
 
@@ -85,7 +118,7 @@ Unicode test, whose tolerance remains unchanged.
 
 See [GPU coverage](GPU_VECTOR_COVERAGE.md) for bounds, cache semantics and the
 qualification manifest. These results remove CPU glyph coverage for the tested
-Vulkan path; they do not complete the shaped-text gate.
+Vulkan scalar path. The later Ui shaped-text qualification is recorded above.
 
 ## Historical CPU-glyph evidence — 2026-10-11
 

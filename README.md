@@ -73,7 +73,7 @@ The accepted/implemented stack includes:
 - clipping, affine transforms, alpha/source-over and batching;
 - sampled images, including caller-owned GPU textures without CPU image copies;
 - optional bounded storage-buffer compute, device-local output and GPU buffer-to-image transfer;
-- text through U++ font/glyph authority and persistent glyph atlases;
+- shared native Ui text shaping/editing, glyph-ID snapshots and persistent GPU glyph atlases;
 - direct GPU convex fills/closed miter and straight strokes with antialiased coverage;
 - general paths, gradients, other strokes and SVG through the bounded U++ Painter reference path;
 - embedded `GpuCtrl` presentation;
@@ -122,7 +122,7 @@ Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; se
 
 ## Version 1 preparation
 
-Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Final regression and native release review are recorded separately. `GpuCtrl::SetGpuContent` now supplies an owned custom-content hook for precompiled shaders/compute through the device API. Shipped apps do not need the Vulkan SDK. See [compute contract and measured results](docs/VULKAN_COMPUTE.md); this does not establish async video streaming or an OCIO pipeline.
+Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Shared Windows text layout now covers complex scripts, rich text, native IME composition and supported colour/bitmap fonts; [text contracts and limits](docs/WINDOWS_FONT_PROVIDER.md) and [current candidate qualification](docs/WINDOWS_VULKAN_FINAL_QUALIFICATION.json) record the exact scope. Physical input/DPI and native release review are recorded separately. `GpuCtrl::SetGpuContent` now supplies an owned custom-content hook for precompiled shaders/compute through the device API. Shipped apps do not need the Vulkan SDK. See [compute contract and measured results](docs/VULKAN_COMPUTE.md); this does not establish async video streaming or an OCIO pipeline.
 
 See [release scope and gates](docs/RELEASE_CANDIDATE.md), [sustained RC1 qualification](docs/RC1_QUALIFICATION.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
 

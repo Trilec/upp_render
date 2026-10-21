@@ -1,8 +1,8 @@
 {
   "schema": "windows-vulkan-current-ui-qualification-v1",
   "recorded_at": "2026-10-22",
-  "status": "Automated text, drawing, input and application scaling pass; final Gallery rebuild and current-candidate qualification remain in progress",
-  "renderer_commit": "76fe04e3d08cb457f8c4c5880cd5960dc974e8c3",
+  "status": "Latest diagnostic UI and two300s soaks PASS, zero stalls over50ms. Earlier361/404ms failures remain unexplained and retained; physical input/DPI/IME and Caro runtime review pending.",
+  "renderer_commit": "c1eb86f733dcf250ee14797fba0191aa732e825a",
   "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
   "ui_source_export": {
     "archive": {
@@ -608,5 +608,664 @@
       "font_layers": 80
     },
     "budgets_unchanged": true
+  },
+  "baseline_renderer_commit": "76fe04e3d08cb457f8c4c5880cd5960dc974e8c3",
+  "latency_investigation": {
+    "status": "COMPLETE: both diagnostic300s PASS; earlier stall cause NOT ESTABLISHED",
+    "binary": {
+      "op": "stat",
+      "path": "build/GpuUiGalleryLatency.exe",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T07:11:43",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "6108b748f61eb0a7d985ad6d6cef8fd8e7bf2cb15ca25c3d722b4309a3163d8a",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 8890368,
+      "sha256": "b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 8890368
+    },
+    "build": {
+      "job_id": "exec-219F25937F9CD7FAE11240B32E80042D",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 7438,
+      "stdout": "Saving \r\n----- Core ( GUI GPUUI CFONTS CLANG WIN32 ) (1 / 26)\r\n----- Animation ( GUI GPUUI CFONTS CLANG WIN32 ) (2 / 26)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG WIN32 ) (3 / 26)\r\n----- Ui ( GUI GPUUI CFONTS CLANG WIN32 ) (4 / 26)\r\n----- Ui/UiFileBrowser ( GUI GPUUI CFONTS CLANG WIN32 ) (5 / 26)\r\n----- Utilities/PropertyEditor ( GUI GPUUI CFONTS CLANG WIN32 ) (6 / 26)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG WIN32 ) (7 / 26)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG WIN32 ) (8 / 26)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG WIN32 ) (9 / 26)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG WIN32 ) (10 / 26)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG WIN32 ) (11 / 26)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (12 / 26)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG WIN32 ) (13 / 26)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG WIN32 ) (14 / 26)\r\n----- Draw ( GUI GPUUI CFONTS CLANG WIN32 ) (15 / 26)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG WIN32 ) (16 / 26)\r\n----- RichText ( GUI GPUUI CFONTS CLANG WIN32 ) (17 / 26)\r\n----- Painter ( GUI GPUUI CFONTS CLANG WIN32 ) (18 / 26)\r\n----- Utilities/PropertyEditorCore ( GUI GPUUI CFONTS CLANG WIN32 ) (19 / 26)\r\n----- Ui/UiOsFileDialog ( GUI GPUUI CFONTS CLANG WIN32 ) (20 / 26)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG WIN32 ) (21 / 26)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (22 / 26)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG WIN32 ) (23 / 26)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG WIN32 ) (24 / 26)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG WIN32 ) (25 / 26)\r\n----- GpuUiGallery ( GUI GPUUI CFONTS MAIN CLANG WIN32 ) (26 / 26)\r\nmain.cpp\r\nGpuUiGallery: 1 file(s) built in (0:06.12), 6125 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\GpuUiGalleryLatency.exe (8890368 B) linked in (0:00.29)\r\n\r\nOK. (0:07.21)\r\n",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "ui": {
+      "run": {
+        "job_id": "exec-EBB9FF90B29CD009E0E50293F35C75B9",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 14437,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-qualification.txt",
+        "ok": true,
+        "text": "workspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=35 dispatches=35 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=33 dispatches=33 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nGpuUi-micro-light=PASS size=(1240, 800) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-idle=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-preedit=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_document_shown=true size=(923, 456) text_length=56 active_tab=3\nGpuUi-text-committed=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_unchanged_document_pixels=0 baseline_ink_pixels=1002\nextended_controls=PASS scan/preview/selection/accept/cancel/nested micro/16 picker states/themes/resize/text composition overlay/cancel/commit picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=18/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 2394,
+        "size": 2394,
+        "truncated": false,
+        "sha256": "9bd9a9e1bdff7e81677b6e2313cc1d6bf17f3ee40490c597bcd7157d77297847",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "scope": "Benchmark-only GetProcessTimes/GetThreadTimes and at most32 events over50ms; record/enqueue/snapshot phase timings, native move/menu counters and app foreground/minimized state. No per-tick file I/O.",
+    "source_base": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+    "source_change": "examples/GpuUiGallery/main.cpp uncommitted; actual build uses this diagnostic change",
+    "source": {
+      "op": "stat",
+      "path": "examples/GpuUiGallery/main.cpp",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T07:11:30",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "text/x-c++",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "53154bd9d65c500079ab0248b27559c2807f3a77294d4c575d4d2b42c4803307",
+      "total_lines": 1239,
+      "encoding": "utf-8",
+      "newline": "crlf",
+      "bom": "none",
+      "size": 52513,
+      "sha256": "61f066ecf2bbf4c38dcda8073fbd196f3a4e360316d7863329eecaf2f1b900fe",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": true,
+      "metadata_scan_complete": true,
+      "newline_scope": "complete_file",
+      "truncated": false,
+      "limit_reasons": [],
+      "files_scanned": 1,
+      "bytes_scanned": 52513,
+      "bytes_hashed": 52513
+    },
+    "production": {
+      "run": {
+        "job_id": "exec-0EE9981A861D6E6E11F788FFD44E7611",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 304485,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-soak.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300020.67\npresented_frames=36967 dropped_frames=90 pending_frames=0\nmeasured_presented_frames=36547 throughput_elapsed_ms=300000.14 presented_fps=121.82\nanimation_callback_hz=120.00 distinct_animation_hz=120.00 scene_record_hz=122.08\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=77.91\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=120.00\nframe_clock_active=1\ntimer_delay_ms p50=13.02 p95=17.59 p99=17.83 max=21.23\nacquire_replay_present_cpu_ms p50=3.73 p95=7.58 p99=8.26 max=11.61\nroot_record_ms last=0.80 lifetime_max=5.59\nroot_enqueue_ms last=0.01 lifetime_max=0.20\nprocess_private_peak_bytes=180785152\nsampled_descriptor_pools_created=1 reused=36966 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=0\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nlatency_events_total=0 retained=0 capacity=32 threshold_ms=50\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=179234816 late_mean_bytes=180143104 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=178130944\nprivate_sample_bytes=178728960\nprivate_sample_bytes=179679232\nprivate_sample_bytes=180400128\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180785152\nprivate_sample_bytes=180752384\nprivate_sample_bytes=179970048\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180133888\nprivate_sample_bytes=180170752\nupp_heap_sample_bytes=5791744\nupp_heap_sample_bytes=6119424\nupp_heap_sample_bytes=6512640\nupp_heap_sample_bytes=5685248\nupp_heap_sample_bytes=7151616\nupp_heap_sample_bytes=7159808\nupp_heap_sample_bytes=5865472\nupp_heap_sample_bytes=7213056\nupp_heap_sample_bytes=7229440\nupp_heap_sample_bytes=7221248\nupp_heap_sample_bytes=5910528\nupp_heap_sample_bytes=7229440\nupp_heap_sample_bytes=5533696\nupp_heap_sample_bytes=5529600\nupp_heap_sample_bytes=7229440\nupp_heap_sample_bytes=5828608\nupp_heap_sample_bytes=7241728\nupp_heap_sample_bytes=7815168\nupp_heap_sample_bytes=7749632\nupp_heap_sample_bytes=7352320\nupp_heap_sample_bytes=7348224\nupp_heap_sample_bytes=7344128\nupp_heap_sample_bytes=7749632\nupp_heap_sample_bytes=5652480\nupp_heap_sample_bytes=5664768\nupp_heap_sample_bytes=5660672\nupp_heap_sample_bytes=6057984\nupp_heap_sample_bytes=5754880\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 3917,
+        "size": 3917,
+        "truncated": false,
+        "sha256": "1fa020bc04a0da3cb3cb639aa87edbc61aa305cd0ec34d281934b0f8b8b49afd",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "resolution": "No renderer behavior or gate changed. Both diagnostic300s runs had zero events above50ms, so earlier361/404ms delays were not reproduced. Retain the issue until interaction/repeatability is resolved; do not claim a proven scheduling fix.",
+    "validation": {
+      "run": {
+        "job_id": "exec-EA0315E4D0CC761F2AD3042371D56A1B",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 304469,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-soak.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300015.29\npresented_frames=36183 dropped_frames=377 pending_frames=0\nmeasured_presented_frames=35792 throughput_elapsed_ms=300000.32 presented_fps=119.31\nanimation_callback_hz=120.00 distinct_animation_hz=120.00 scene_record_hz=120.48\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=112.41\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=120.00\nframe_clock_active=1\ntimer_delay_ms p50=13.19 p95=17.64 p99=17.99 max=19.30\nacquire_replay_present_cpu_ms p50=5.88 p95=11.69 p99=13.29 max=19.63\nroot_record_ms last=0.83 lifetime_max=4.59\nroot_enqueue_ms last=0.00 lifetime_max=0.58\nprocess_private_peak_bytes=206610432\nsampled_descriptor_pools_created=1 reused=36182 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nlatency_events_total=0 retained=0 capacity=32 threshold_ms=50\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=205028352 late_mean_bytes=205964288 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=203890688\nprivate_sample_bytes=204521472\nprivate_sample_bytes=205574144\nprivate_sample_bytes=206127104\nprivate_sample_bytes=206536704\nprivate_sample_bytes=206573568\nprivate_sample_bytes=206573568\nprivate_sample_bytes=206573568\nprivate_sample_bytes=206573568\nprivate_sample_bytes=206610432\nprivate_sample_bytes=206577664\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205955072\nprivate_sample_bytes=205991936\nupp_heap_sample_bytes=5689344\nupp_heap_sample_bytes=4378624\nupp_heap_sample_bytes=8642560\nupp_heap_sample_bytes=6922240\nupp_heap_sample_bytes=7184384\nupp_heap_sample_bytes=5783552\nupp_heap_sample_bytes=7589888\nupp_heap_sample_bytes=5562368\nupp_heap_sample_bytes=5701632\nupp_heap_sample_bytes=7159808\nupp_heap_sample_bytes=7270400\nupp_heap_sample_bytes=7274496\nupp_heap_sample_bytes=5578752\nupp_heap_sample_bytes=5570560\nupp_heap_sample_bytes=7282688\nupp_heap_sample_bytes=9371648\nupp_heap_sample_bytes=7360512\nupp_heap_sample_bytes=7479296\nupp_heap_sample_bytes=7540736\nupp_heap_sample_bytes=7294976\nupp_heap_sample_bytes=7245824\nupp_heap_sample_bytes=9560064\nupp_heap_sample_bytes=9572352\nupp_heap_sample_bytes=7471104\nupp_heap_sample_bytes=7868416\nupp_heap_sample_bytes=7487488\nupp_heap_sample_bytes=7368704\nupp_heap_sample_bytes=5890048\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 3921,
+        "size": 3921,
+        "truncated": false,
+        "sha256": "7bcd587cd373340df852077085fe3c5c79871081eea35345316cad336ae29c1a",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    }
+  },
+  "pre_diagnostic_candidate": {
+    "status": "Current whole-Ui/text/normal/heavy PASS; two completed300s runs pass memory but fail maximum UI delay. Bounded stall diagnostic run in progress; physical input/DPI and Caro remain open.",
+    "renderer_commit": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+    "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
+    "binary": {
+      "op": "stat",
+      "path": "build/GpuUiGalleryFinal.exe",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T06:56:32",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "482a0aaa400d5d571ef014db25cbb3001e5fe4b80090334721e63317d40a79e3",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 8886272,
+      "sha256": "9d3ac0a1f0eed7c575c008bd7996973836c5749c8d7f41c74a875ce87074bfd4",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 8886272
+    },
+    "build": {
+      "job_id": "exec-EA4C84BC7F2687F624E0031853E3388C",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 1265,
+      "stdout": "Saving \r\n----- Core ( GUI GPUUI CFONTS CLANG WIN32 ) (1 / 26)\r\n----- Animation ( GUI GPUUI CFONTS CLANG WIN32 ) (2 / 26)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG WIN32 ) (3 / 26)\r\n----- Ui ( GUI GPUUI CFONTS CLANG WIN32 ) (4 / 26)\r\n----- Ui/UiFileBrowser ( GUI GPUUI CFONTS CLANG WIN32 ) (5 / 26)\r\n----- Utilities/PropertyEditor ( GUI GPUUI CFONTS CLANG WIN32 ) (6 / 26)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG WIN32 ) (7 / 26)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG WIN32 ) (8 / 26)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG WIN32 ) (9 / 26)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG WIN32 ) (10 / 26)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG WIN32 ) (11 / 26)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (12 / 26)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG WIN32 ) (13 / 26)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG WIN32 ) (14 / 26)\r\n----- Draw ( GUI GPUUI CFONTS CLANG WIN32 ) (15 / 26)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG WIN32 ) (16 / 26)\r\n----- RichText ( GUI GPUUI CFONTS CLANG WIN32 ) (17 / 26)\r\n----- Painter ( GUI GPUUI CFONTS CLANG WIN32 ) (18 / 26)\r\n----- Utilities/PropertyEditorCore ( GUI GPUUI CFONTS CLANG WIN32 ) (19 / 26)\r\n----- Ui/UiOsFileDialog ( GUI GPUUI CFONTS CLANG WIN32 ) (20 / 26)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG WIN32 ) (21 / 26)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (22 / 26)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG WIN32 ) (23 / 26)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG WIN32 ) (24 / 26)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG WIN32 ) (25 / 26)\r\n----- GpuUiGallery ( GUI GPUUI CFONTS MAIN CLANG WIN32 ) (26 / 26)\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\GpuUiGalleryFinal.exe (8886272 B) linked in (0:00.28)\r\n\r\nOK. (0:01.07)\r\n",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      }
+    },
+    "ui": {
+      "run": {
+        "job_id": "exec-149E27F2ABE09A2658FCFEEDD9CDC968",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 14500,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-qualification.txt",
+        "ok": true,
+        "text": "workspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=33 dispatches=33 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=32 dispatches=32 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nGpuUi-micro-light=PASS size=(1240, 800) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-idle=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-preedit=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_document_shown=true size=(923, 456) text_length=56 active_tab=3\nGpuUi-text-committed=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_unchanged_document_pixels=0 baseline_ink_pixels=1002\nextended_controls=PASS scan/preview/selection/accept/cancel/nested micro/16 picker states/themes/resize/text composition overlay/cancel/commit picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=18/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 2394,
+        "size": 2394,
+        "truncated": false,
+        "sha256": "57682498312d6d74f27ff8d71ab241e2d8dad3d394a680afc1ec1f292bfda9f4",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "normal": {
+      "run": {
+        "job_id": "exec-0BD91B24BF0C7D706CC725FB58667A15",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 24422,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-normal.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 96 particles\nwarmup_ms=4000 measured_ms=20008.22\npresented_frames=2815 dropped_frames=15 pending_frames=0\nmeasured_presented_frames=2406 throughput_elapsed_ms=20000.24 presented_fps=120.30\nanimation_callback_hz=120.00 distinct_animation_hz=120.00 scene_record_hz=120.30\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=108.68\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=120.00\nframe_clock_active=1\ntimer_delay_ms p50=13.06 p95=17.59 p99=17.91 max=18.44\nacquire_replay_present_cpu_ms p50=4.88 p95=9.39 p99=10.46 max=14.75\nroot_record_ms last=0.95 lifetime_max=2.21\nroot_enqueue_ms last=0.01 lifetime_max=0.14\nprocess_private_peak_bytes=202928128\nsampled_descriptor_pools_created=1 reused=2814 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=261\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=233\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=262144\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 2006,
+        "size": 2006,
+        "truncated": false,
+        "sha256": "ecc821198a37ca5f1c706cf83da07cd3eae075cec4ae245553c4f655d50b1c81",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "heavy": {
+      "run": {
+        "job_id": "exec-46ECEA7E8AF0BA71E2CB0F4E6F227D0B",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 24406,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-load.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=20033.12\npresented_frames=2841 dropped_frames=74 pending_frames=0\nmeasured_presented_frames=2430 throughput_elapsed_ms=20032.92 presented_fps=121.30\nanimation_callback_hz=120.00 distinct_animation_hz=120.00 scene_record_hz=124.05\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=110.84\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=120.00\nframe_clock_active=1\ntimer_delay_ms p50=13.13 p95=17.62 p99=17.94 max=18.81\nacquire_replay_present_cpu_ms p50=5.97 p95=11.10 p99=13.43 max=23.62\nroot_record_ms last=0.80 lifetime_max=4.79\nroot_enqueue_ms last=0.01 lifetime_max=0.20\nprocess_private_peak_bytes=202858496\nsampled_descriptor_pools_created=1 reused=2840 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=PASS\nsoak=0\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 2010,
+        "size": 2010,
+        "truncated": false,
+        "sha256": "c5672cfecb724fc00503aecc3d82ee0a5987c424e81e26fbdd29b5fc02e865ed",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "package": {
+      "zip": {
+        "op": "stat",
+        "path": "build/upp-render-ui-2026-10-22.zip",
+        "ok": true,
+        "kind": "file",
+        "identity_scope": "approved_workspace_relative_path",
+        "modified": "2026-10-22T06:59:18",
+        "modified_timezone": "local_wall_time",
+        "mime_type": "application/octet-stream",
+        "mime_basis": "filename_extension_not_content_sniffing",
+        "writable": "unknown",
+        "writable_basis": "grant_allows_OS_access_not_proven",
+        "observation": "b26bf75fc5cae18ef0f01733bd7d838d4424a220541fda07d1b7376960a41616",
+        "total_lines": null,
+        "encoding": "unknown",
+        "newline": "unknown",
+        "bom": "none",
+        "size": 3868656,
+        "sha256": "f969d30872fecdbfb40ce547bcc9cfeac5d4b3c579787942d0140d1010c0687f",
+        "hash_scope": "complete_file_at_read",
+        "hash_available": true,
+        "hash_budget_scope": "project_filesystem_limits",
+        "encoding_validated": false,
+        "metadata_scan_complete": false,
+        "truncated": true,
+        "limit_reasons": [
+          "metadata_scan_budget"
+        ],
+        "files_scanned": 1,
+        "bytes_scanned": 1048576,
+        "bytes_hashed": 3868656
+      },
+      "producer": {
+        "job_id": "exec-F4478F800579D53548CF5312DB7F9F99",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 531,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "entries": [
+        "upp-render-ui-2026-10-22/",
+        "upp-render-ui-2026-10-22/GpuUiGalleryFinal.exe",
+        "upp-render-ui-2026-10-22/README.txt",
+        "upp-render-ui-2026-10-22/SHA256SUMS.txt"
+      ]
+    },
+    "caro": {
+      "status": "NOT RUN: transfer executable identity changed; owner reapproval requested",
+      "machine": {
+        "name": "DESKTOP-ASUSPN6",
+        "connection_id": "chat",
+        "project_root": "C:\\GitHub\\upp_render",
+        "availability_scope": "this running machine; copied settings do not install compilers, SDKs or drivers"
+      },
+      "admission": {
+        "ok": false,
+        "service": "execute",
+        "schema_version": 1,
+        "code": "EXECUTABLE_CHANGED",
+        "message": "Selected executable does not match the approved/expected SHA-256.",
+        "error_code": "INVALID_ARGUMENT"
+      },
+      "readiness": {
+        "ok": true,
+        "project_id": "project-ED940563C935",
+        "selected_program": {
+          "project_id": "project-ED940563C935",
+          "tool_id": "file-transfer-8B6A91A31C5F",
+          "output_path": "",
+          "executable": "C:\\WINDOWS\\System32\\robocopy.exe",
+          "sha256": "84abbd32d074881164b8cf6b30593828e53f368c3854854aefe5b3cf06d3e356",
+          "launch_verified": false,
+          "scope": "read_only_selected_approved_program"
+        }
+      }
+    },
+    "manual": "Physical controls/DPI and live OS IME candidate review pending. Prior manual timeout is not human acceptance.",
+    "soak": {
+      "run": {
+        "job_id": "exec-3C015D0B0C9D4A7221B399AFC37CD9A9",
+        "status": "failed",
+        "exit_code": 1,
+        "duration_ms": 304453,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-soak.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300016.34\npresented_frames=35990 dropped_frames=700 pending_frames=0\nmeasured_presented_frames=35586 throughput_elapsed_ms=300016.04 presented_fps=118.61\nanimation_callback_hz=119.79 distinct_animation_hz=119.79 scene_record_hz=120.89\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=115.59\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=119.79\nframe_clock_active=1\ntimer_delay_ms p50=13.05 p95=17.61 p99=17.95 max=361.00\nacquire_replay_present_cpu_ms p50=5.77 p95=11.49 p99=13.32 max=522.70\nroot_record_ms last=1.75 lifetime_max=16.52\nroot_enqueue_ms last=0.00 lifetime_max=0.45\nprocess_private_peak_bytes=206012416\nsampled_descriptor_pools_created=1 reused=35989 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=1\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=FAIL\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=204378112 late_mean_bytes=205435904 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=203276288\nprivate_sample_bytes=203886592\nprivate_sample_bytes=204902400\nprivate_sample_bytes=205447168\nprivate_sample_bytes=205840384\nprivate_sample_bytes=205840384\nprivate_sample_bytes=205971456\nprivate_sample_bytes=205971456\nprivate_sample_bytes=205971456\nprivate_sample_bytes=206012416\nprivate_sample_bytes=205979648\nprivate_sample_bytes=205881344\nprivate_sample_bytes=205881344\nprivate_sample_bytes=205881344\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205950976\nprivate_sample_bytes=205426688\nprivate_sample_bytes=205426688\nprivate_sample_bytes=205426688\nprivate_sample_bytes=205463552\nupp_heap_sample_bytes=6111232\nupp_heap_sample_bytes=4386816\nupp_heap_sample_bytes=6545408\nupp_heap_sample_bytes=6934528\nupp_heap_sample_bytes=7274496\nupp_heap_sample_bytes=7675904\nupp_heap_sample_bytes=7675904\nupp_heap_sample_bytes=7225344\nupp_heap_sample_bytes=7344128\nupp_heap_sample_bytes=7352320\nupp_heap_sample_bytes=5656576\nupp_heap_sample_bytes=5722112\nupp_heap_sample_bytes=6119424\nupp_heap_sample_bytes=5726208\nupp_heap_sample_bytes=7417856\nupp_heap_sample_bytes=5730304\nupp_heap_sample_bytes=7880704\nupp_heap_sample_bytes=9760768\nupp_heap_sample_bytes=8069120\nupp_heap_sample_bytes=5980160\nupp_heap_sample_bytes=8069120\nupp_heap_sample_bytes=5984256\nupp_heap_sample_bytes=5976064\nupp_heap_sample_bytes=7667712\nupp_heap_sample_bytes=6246400\nupp_heap_sample_bytes=7536640\nupp_heap_sample_bytes=9629696\nupp_heap_sample_bytes=7651328\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 3862,
+        "size": 3862,
+        "truncated": false,
+        "sha256": "8d8fcb29e14a17935bc2f67509643caad753018b0a4ed7f956429a82bfe53c50",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      }
+    },
+    "production_comparison": {
+      "status": "FAIL responsiveness; PASS cadence and memory",
+      "run": {
+        "job_id": "exec-D01C37FEE954CFFE59651C403D2494A3",
+        "status": "failed",
+        "exit_code": 1,
+        "duration_ms": 304422,
+        "stdout": "",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false,
+        "source_before": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        },
+        "source_after": {
+          "workspace_id": "folder-D804EA49C6B4",
+          "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+          "git_head_available": true,
+          "git_head": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+          "git_ref": "refs/heads/main",
+          "scope": "configured_workspace_and_direct_git_head"
+        }
+      },
+      "report": {
+        "path": "build/GpuUiGallery-required-soak.txt",
+        "ok": true,
+        "text": "GpuUiGallery Windows/Vulkan 512 particles\nwarmup_ms=4000 measured_ms=300021.30\npresented_frames=37292 dropped_frames=97 pending_frames=0\nmeasured_presented_frames=36888 throughput_elapsed_ms=300001.88 presented_fps=122.96\nanimation_callback_hz=119.64 distinct_animation_hz=119.64 scene_record_hz=123.21\nadapter=NVIDIA GeForce RTX 4070 Ti\ncold_first_successful_frame_cpu_ms=79.76\ncold_texture_uploads=4 cold_glyph_misses=436 cold_vector_rasters=0 cold_gpu_coverage_renders=39 cold_gpu_vector_rasters=3 cold_gpu_glyph_rasters=398 cold_cpu_glyph_rasters=0 cold_gpu_vector_submits=9\ncadence=PASS distinct_hz=119.64\nframe_clock_active=1\ntimer_delay_ms p50=13.08 p95=17.58 p99=17.82 max=404.19\nacquire_replay_present_cpu_ms p50=3.55 p95=7.36 p99=8.34 max=91.00\nroot_record_ms last=0.77 lifetime_max=4.29\nroot_enqueue_ms last=0.01 lifetime_max=0.25\nprocess_private_peak_bytes=179949568\nsampled_descriptor_pools_created=1 reused=37291 retained=1\nimage_cache_entry_peak=4\nimage_pixel_payload_peak_bytes=35392\nvector_pixel_payload_peak_bytes=10664\ngpu_paths_last=1093\ngpu_path_vertices_last=1008\ngpu_coverage_draws_last=1065\ngpu_coverage_renders_last=0\ngpu_coverage_atlas_bytes=1048576\ngpu_path_cache_misses_last=0\ngpu_path_cache_entries_last=67\ngpu_path_cache_payload_bytes_last=178656\ncpu_vector_rasters_last=0\nglyph_cache_misses_last=0\ncpu_glyph_rasters_last=0\ngpu_glyph_rasters_last=0\ngpu_vector_rasters_last=0\ngpu_vector_scratch_bytes=4280320\nui_shared_raster_cache_bytes=0\nui_shared_raster_cache_misses_total=0\ngpu_composition_layers_last=0 retained_layer_pixel_bytes=0\nui_software_layer_allocations_total=0\nvertex_buffer_capacity_bytes_last=32768\ntextured_vertex_buffer_capacity_bytes_last=524288\ngrid=1\nanimation_driver=upp_animation_state_steady_clock target_fps=120\ngpu_required=1\nsoftware_fallback_count=0\nvalidation_requested=0\ngpu_timestamp_ms=unavailable\ngpu_error=\nresponsiveness=FAIL\nsoak=1\nmemory_sample_interval_ms=10000 early_mean_bytes=177980416 late_mean_bytes=179266560 allowed_growth_bytes=33554432\nmemory_plateau=PASS\nprivate_sample_bytes=177020928\nprivate_sample_bytes=177668096\nprivate_sample_bytes=178323456\nprivate_sample_bytes=178909184\nprivate_sample_bytes=179548160\nprivate_sample_bytes=179879936\nprivate_sample_bytes=179949568\nprivate_sample_bytes=179949568\nprivate_sample_bytes=179949568\nprivate_sample_bytes=179949568\nprivate_sample_bytes=179916800\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179822592\nprivate_sample_bytes=179134464\nprivate_sample_bytes=179298304\nprivate_sample_bytes=179298304\nprivate_sample_bytes=179335168\nupp_heap_sample_bytes=5390336\nupp_heap_sample_bytes=4104192\nupp_heap_sample_bytes=4546560\nupp_heap_sample_bytes=4939776\nupp_heap_sample_bytes=5292032\nupp_heap_sample_bytes=5496832\nupp_heap_sample_bytes=7180288\nupp_heap_sample_bytes=7016448\nupp_heap_sample_bytes=7143424\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5566464\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5558272\nupp_heap_sample_bytes=5566464\nupp_heap_sample_bytes=7479296\nupp_heap_sample_bytes=7446528\nupp_heap_sample_bytes=7512064\nupp_heap_sample_bytes=5758976\nupp_heap_sample_bytes=7450624\nupp_heap_sample_bytes=5746688\nupp_heap_sample_bytes=5754880\nupp_heap_sample_bytes=5750784\nupp_heap_sample_bytes=5746688\nupp_heap_sample_bytes=7368704\nupp_heap_sample_bytes=7282688\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=9/64 font_error=\n",
+        "offset": 0,
+        "next_offset": 3856,
+        "size": 3856,
+        "truncated": false,
+        "sha256": "3fa1a3ecef8858eb69c539097bae22478fa6bf4d5e592ad46d9066c1dc828d3a",
+        "hash_scope": "complete_file_at_read",
+        "newline": "lf",
+        "encoding": "utf-8"
+      },
+      "validation_requested": false,
+      "seconds": 300
+    }
+  },
+  "current_candidate": {
+    "binary": {
+      "op": "stat",
+      "path": "build/GpuUiGalleryLatency.exe",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T07:11:43",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "6108b748f61eb0a7d985ad6d6cef8fd8e7bf2cb15ca25c3d722b4309a3163d8a",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 8890368,
+      "sha256": "b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 8890368
+    },
+    "renderer_base": "c1eb86f733dcf250ee14797fba0191aa732e825a",
+    "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
+    "demo_source": {
+      "op": "stat",
+      "path": "examples/GpuUiGallery/main.cpp",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-22T07:11:30",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "text/x-c++",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "53154bd9d65c500079ab0248b27559c2807f3a77294d4c575d4d2b42c4803307",
+      "total_lines": 1239,
+      "encoding": "utf-8",
+      "newline": "crlf",
+      "bom": "none",
+      "size": 52513,
+      "sha256": "61f066ecf2bbf4c38dcda8073fbd196f3a4e360316d7863329eecaf2f1b900fe",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": true,
+      "metadata_scan_complete": true,
+      "newline_scope": "complete_file",
+      "truncated": false,
+      "limit_reasons": [],
+      "files_scanned": 1,
+      "bytes_scanned": 52513,
+      "bytes_hashed": 52513
+    },
+    "source_commit": "Pending local commit; source SHA-256 identifies exact diagnostic delta",
+    "evidence_section": "latency_investigation",
+    "release_qualified": false,
+    "reason": "Prior long delays unconfirmed; physical input/DPI and current clean-machine review pending"
   }
 }

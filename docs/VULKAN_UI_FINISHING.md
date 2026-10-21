@@ -1,54 +1,104 @@
-# Windows/Vulkan whole-UI finishing
+# Windows / Vulkan whole-Ui qualification
 
-Updated 2026-10-22. **7/10 acceptance gates passed (70%)**:1,2,3,4,6,8,9 from ACTIVE_WORK.md. This is a count of acceptance gates, not engineering effort. Full shaped-text/editing and final physical input/DPI acceptance remain active work. The user explicitly requested full shaping now; it has not been deferred.
+Updated2026-10-22. **7 of10 current acceptance gates pass (70%)**.
+Text and whole-Ui drawing are implemented and pass automated checks.
+Two diagnostic five-minute runs now pass, but earlier long delays remain
+unexplained. Physical input/DPI and visual acceptance also remain open.
+This is not a finished-release claim.
 
-## Qualified drawing and scheduling baseline
+## Current source and executable
 
-Current executable: build/GpuUiGalleryFinish.exe, SHA-256
-9a4d8f6fc61713e7d8e04dba22289380462219e825325d96939da994420efb57 (8,296,960B).
-Ui dependency commit:228a1b968e0b13ef21b4cbb4baf1115c3c7a8686.
-Exact source/dependency hashes, jobs and raw reports:
-[VULKAN_UI_FINISH_QUALIFICATION.json](VULKAN_UI_FINISH_QUALIFICATION.json).
+Renderer:c1eb86f733dcf250ee14797fba0191aa732e825a.
+Ui:f88aab5150ca7f375b8c4a61a01da57832c82e03, built from a verified committed-main
+export so unrelated working Ui changes are excluded and preserved.
 
-- Entire client roots, modal workspaces and owned popups are presented through Vulkan. Required-GPU failure/retry and destruction during frame callbacks are tested.
-- Semantic Painter/SVG/retained Painting record paths and gradients without CPU coverage images. General curves, winding, caps/joins/dashes, linear/radial/angular gradients, image fills, path clips and bounded blur composition execute through the GPU path.
-- Ui faces, focus, shadows, rings, range tracks, layers, dropdowns, tags and graph-grid drawing preserve semantic intent. Bitmap decoding, procedural colour fields and icons remain asset preparation, separately from vector/glyph rasterization.
-- The 57-entry current Ui catalogue has56 drawable entries and one OS dialog service. All224 enabled/disabled/two-size drawing cases pass; eight additional hard/soft/inset shadow cases check pixels, cutouts and resource reuse.
-- Scene > Browser and colour pickers embeds UiFileBrowser, UiColorPicker and UiColorPickerMicro in a Vulkan modal window. Qualification exercises worker scan, image preview, selection, accept/cancel, filter and nested colour popups,16 picker states, hex validation, RGB, themes and resize.
-- Three populated workspace and three compute-dialog cycles pass. Workspace cycles observe one device/two surfaces/two swapchains; final native ownership is ZERO. Current font requests use DirectWrite, with zero legacy GDI font requests.
-- Native non-GPU UiLabelDemo still builds without the renderer nest (Release BLITZ).
-- Core and Animation were not modified. GpuTopWindow exposes coalesced UI-thread steady-clock callbacks; Gallery steps the existing Animation::State using that clock and skips missed deadlines. Ordinary U++ timers retain their original clock.
+Pre-diagnostic comparison:build/GpuUiGalleryFinal.exe,8,886,272B.
+SHA-256:9d3ac0a1f0eed7c575c008bd7996973836c5749c8d7f41c74a875ce87074bfd4.
 
-## Current measured results
+[Exact build, runtime, regression and benchmark evidence](WINDOWS_VULKAN_FINAL_QUALIFICATION.json).
+Earlier scalar/drawing baselines remain in VULKAN_UI_FINISH_QUALIFICATION.json;
+they are historical results for different executable hashes.
 
-All runs use required Vulkan, validation requested, grid enabled,120FPS target and4second warmup. Normal/heavy measure20seconds; soak measures300seconds.
+Current diagnostic candidate:build/GpuUiGalleryLatency.exe,8,890,368B.
+SHA-256:b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49.
+It adds benchmark diagnostics only; renderer code and pass limits are unchanged.
+Exact demo source SHA-256:61f066ecf2bbf4c38dcda8073fbd196f3a4e360316d7863329eecaf2f1b900fe.
 
-| Workload | Distinct updates/s | Presented FPS | CPU median/p99 | Peak private bytes |
-| --- | ---: | ---: | ---: | ---: |
-|96 particles|120.00|120.30|5.04/8.31ms|199,028,736|
-|512 particles|120.02|122.22|6.26/10.65ms|198,844,416|
-|512 particles,300s|119.92|119.87|6.15/14.27ms|198,815,744|
+## Implemented and checked
 
-CPU figures include acquire/replay/present elapsed time; GPU timestamps are unavailable. Additional status/control refreshes explain why presentation can exceed animation cadence; distinct progress is measured separately.
+- The entire client root, modal workspaces and owned popups present through
+  Vulkan. Required-GPU failure/retry and callback destruction are tested.
+  Native window frames and OS input services remain Windows services.
+- Semantic Painter/SVG/vector paths, gradients, masks, shadows, clipping and
+  bounded blur use GPU coverage. Ui helpers preserve that semantic drawing.
+- All56 drawable catalogue controls pass224 enabled/disabled/two-size probes
+  at standard scale and224 at doubled application units.
+- The Vulkan controls dialog includes UiFileBrowser, UiColorPicker and
+  UiColorPickerMicro. Automation covers worker scan, preview, selection,
+  accept/cancel/filter/nested colour popups,16 picker states,RGB/hex,themes/resize.
+- Three workspace and three compute dialog cycles pass. Workspaces share one
+  device with two surfaces/swapchains; final tracked native ownership is zero.
+- Shared DirectWrite/ICU shaping and editing cover Arabic,Indic,mixed bidi,
+  combining and supplementary text. Rich labels and UiDoc share native paragraph
+  and line geometry; native IME composition uses a Vulkan overlay.
+- Release and Debug pass64 GPU pixels,37 editor,36 styled,27 document,38 IME and
+  80 font-layer checks. COLRv0 palettes and embedded PNG/JPEG/TIFF/BGRA assets
+  reuse bounded glyph/image resources. SVG glyphs/COLRv1 paint trees are excluded.
+- Repeated bitmap glyphs charge shared immutable pixels once per snapshot.
+  Distinct images retain the unchanged4MiB payload gate.
+- Normal native Ui without a renderer nest still builds in Release BLITZ.
+  Core and Animation were not modified. The demo steps existing Animation::State
+  using a coalesced renderer-owned steady clock and skips missed deadlines.
 
-The soak's private-memory early/late means were198,714,368/197,966,848B (747,520B decrease), against the unchanged33,554,432B growth allowance. U++ heap samples ranged2,461,696–4,702,208B; these do not represent all process/driver allocations. Timer-delay p99/max was17.98/79.40ms, within the existing50/100ms gates. No strict per-frame8.33ms deadline claim is made.
+## Measured final-candidate results
 
-Normal/heavy/soak show zero cold and warm CPU vector/glyph rasters, shared helper raster-cache misses, software layer allocations and fallback. Warm glyph/vector coverage misses are zero. One sampled descriptor pool is retained/reused. Every completed run ends with native ownership ZERO and GDI font requests0.
+RTX4070Ti,512 particles and grid where indicated. Four-second warmup.
+CPU timings include acquire/replay/present elapsed time; GPU timestamps are
+unavailable. Presented frames and distinct simulation updates are separate.
 
-The earlier193.937s soak was interrupted by the user closing the app and is preserved as INCOMPLETE. It is not counted as a failed GPU run or a passed soak.
+| Workload | Validation | Distinct Hz | Presented FPS | CPU median/p99 ms | Peak private bytes | Max timer delay ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+|96 particles,20s|on|120.00|120.30|4.88/10.46|202,928,128|18.44|
+|512 particles,20s|on|120.00|121.30|5.97/13.43|202,858,496|18.81|
+|512 particles,300s|on|119.79|118.61|5.77/13.32|206,012,416|361.00|
+|512 particles,300s|off|119.64|122.96|3.55/8.34|179,949,568|404.19|
+|Diagnostic,512 particles,300s|off|120.00|121.82|3.73/8.26|180,785,152|21.23|
+|Diagnostic,512 particles,300s|on|120.00|119.31|5.88/13.29|206,610,432|19.30|
 
-## Memory and work bounds
+The two pre-diagnostic300s runs **FAIL responsiveness** because maximum timer delay exceeds the
+unchanged100ms limit. Timer p99 is17.95/17.82ms, within50ms, and cadence passes.
+The validation-on CPU phase maximum is522.70ms; validation-off91.00ms.
+The cause is not established. A separate diagnostic demo records bounded stall
+events with process/UI CPU deltas, presentation snapshots and native move/menu
+activity. It does not change renderer behavior or pass thresholds. Both diagnostic300s runs **PASS**, with zero events above50ms. Early/late private growth is908,288B production and935,936B validation-enabled. Those passing repeats do not explain or erase the earlier failures.
 
-Retained payload limits per renderer remain64MiB images/4096entries,32MiB vector reference/GPU pixels/4096entries,16MiB glyph pages/8192entries,8MiB path geometry/256entries,1MiB fast path coverage and32MiB combined active vertices. Clip/filter composition adds a separate64MiB pixel-payload pool with32entries,4nested scopes,64operations/frame and4096pixels/axis. These are limits, not reserved or total process/VRAM sizes.
+Memory plateau passes both runs:validation-on early/late204,378,112/205,435,904B;
+production177,980,416/179,266,560B. Growth is below the unchanged33,554,432B gate.
+U++ heap counters are a subset of process memory; declared cache payload limits
+are not total COM/driver/process or VRAM measurements.
 
-Clip targets crop to conservative path bounds and reuse idle sizes. In-flight frame ownership remains bounded by one replaceable pending frame; resource retirement relies on existing synchronous GPU completion. This does not introduce asynchronous queue submission.
+Warm coverage misses/uploads,CPU vector/glyph rasters,Ui helper raster misses,
+software layers,fallback and legacy GDI font requests are zero. Each run retains
+and reuses one sampled descriptor pool and ends with native ownership zero.
+The earlier user-closed soak is INCOMPLETE, not a crash or pass.
 
-## Remaining acceptance
+## Bounds and remaining acceptance
 
-1. Full shaped glyph runs, language-aware fallback/direction and cluster-correct measurement/hit-testing/editing. Rendering alone must not diverge from caret/selection/undo. This is the next authorized implementation.
-2. Final physical keyboard/mouse/AA and100%/150%/200% monitor-DPI acceptance after text integration. Readback captures and callback automation do not replace those checks.
-3. Rerun affected drawing/load/soak tests on the final text-integrated artifact and refresh this manifest. Current evidence describes the identified baseline.
+Per renderer:images64MiB/4096 entries; vector pixels32MiB/4096;glyph pages16MiB/
+8192;path geometry8MiB/256;fast coverage1MiB;active vertices32MiB. Clip/filter
+payload has a separate64MiB pool,32 entries,4 nested scopes,64 operations/frame
+and4096 pixels/axis. These are explicit limits, not reserved allocations.
 
-Unsupported Painter operations fail explicitly (including BeginMask, text-on-path and image-pattern strokes). Image repetition has64cells/axis and256total-cell bounds. Software BlurLayer is explicitly unsupported by the neutral reference; ordinary native Ui software helper paths remain available. Layered-mask AA does not promise exact legacy per-primitive compositing.
+One replaceable pending frame bounds worker backlog. Existing synchronous GPU
+completion owns retirement; asynchronous streaming is not implemented.
 
-WebGPU/Metal, Linux hosting, OCIO/LUTs and asynchronous video remain separate platform/imaging work. Current clean-machine Karo qualification applies to the earlier bundle, not this artifact. Historical evidence remains in the2026-10-11/13/15 manifests and Git history.
+Finish sustained responsiveness diagnosis, then qualify the actual final binary.
+Physical keyboard/mouse/AA,real OS IME candidates and100/150/200% monitor changes
+are unqualified. Doubled application units and generated native messages do not
+replace those checks. Current Caro runtime transfer awaits owner reapproval of
+its changed Robocopy identity; no compiler or Vulkan SDK is needed there.
+
+Unsupported semantic operations fail explicitly, including BeginMask,text-on-path
+and image-pattern strokes. Repetition is bounded to64 cells/axis and256 total.
+WebGPU/Metal,Linux,OCIO/LUTs and asynchronous video remain separate work.
+Particle tests do not resolve the historical4K CineView callback outlier.
