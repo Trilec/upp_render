@@ -85,6 +85,18 @@ bool TestImeComposition()
         !(flags&ISC_SHOWUICOMPOSITIONWINDOW),"host suppresses legacy application-owned composition popup");
   flags=0; check(HandleWin32GpuIme(root,root.GetHWND(),WM_IME_ENDCOMPOSITION,0,flags,result) &&
                 result==0 && children()==child_count,"native end-composition cancels overlay");
+  field.SetText(WString()); field.SetFocus(); flags=CS_INSERTCHAR;
+  check(HandleWin32GpuIme(root,root.GetHWND(),WM_IME_COMPOSITION,0xac00,flags,result) &&
+        field.GetText().IsEmpty() && children()==child_count+1,"legacy interim character stays outside the model");
+  Rect advanced=field.GetCaret(); flags=CS_INSERTCHAR|CS_NOMOVECARET;
+  check(HandleWin32GpuIme(root,root.GetHWND(),WM_IME_COMPOSITION,0xac01,flags,result) &&
+        field.GetText().IsEmpty() && field.GetCaret().left<advanced.left,"legacy no-move interim caret");
+  flags=0;
+  check(HandleWin32GpuIme(root,root.GetHWND(),WM_IME_COMPOSITION,0,flags,result) &&
+        children()==child_count && field.GetText().IsEmpty(),"native zero-flags composition cancellation");
+  flags=CS_INSERTCHAR;
+  check(HandleWin32GpuIme(root,root.GetHWND(),WM_IME_COMPOSITION,0xd800,flags,result) &&
+        children()==child_count && field.GetText().IsEmpty(),"malformed interim surrogate rejected without publication");
   field.SetText(WString()); field.SetFocus();
   SendMessageW(root.GetHWND(),WM_CHAR,0xd83d,1);
   SendMessageW(root.GetHWND(),WM_CHAR,0xde00,1);

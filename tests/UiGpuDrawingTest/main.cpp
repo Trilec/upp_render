@@ -62,7 +62,7 @@ static void Probe(const char *name, UiRenderer2D& renderer, const UiRenderer2DTa
 {
 	Control control;
 	Configure(control);
-	for(Size size : { Size(128, 32), Size(320, 180) }) {
+	for(Size size : { DPI(128, 32), DPI(320, 180) }) {
 		control.SetRect(Rect(size));
 		for(bool enabled : { true, false }) {
 			control.Enable(enabled);
@@ -238,6 +238,13 @@ static void CheckTableEditing(UiRenderer2D& renderer, const UiRenderer2DTarget& 
 GUI_APP_MAIN
 {
 	capture = FindIndex(CommandLine(),String("--capture")) >= 0;
+	const bool uhd=FindIndex(CommandLine(),String("--uhd"))>=0;
+	if(uhd && capture) { SetExitCode(2); return; }
+	if(uhd) {
+		Font font=StdFont(); font.RealizeStd(); font.Height(max(1,abs(font.GetHeight()))*2);
+		Font::SetStdFont(font); Ctrl::ReSkin(); SetUHDMode(true);
+	}
+	Cout()<<"ui_scale_mode="<<(uhd?"UHD2x":"normal")<<" dpi_unit="<<DPI(1)<<" std_font_height="<<StdFont().GetHeight()<<EOL;
 	if(capture) { contact.Create(1920,1800); Fill(~*contact,RGBAZero(),contact->GetLength()); }
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	HWND hwnd = CreateWindowExW(0, L"STATIC", L"UiGpuDrawingTest", WS_POPUP,
@@ -250,7 +257,7 @@ GUI_APP_MAIN
 	if(ok) {
 		VulkanGpuDevice device(session);
 		GpuTextureDesc desc;
-		desc.size = Size(320, 180);
+		desc.size = DPI(320, 180);
 		desc.format = GpuFormat::RGBA8Srgb;
 		desc.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_TransferSrc;
 		GpuTextureId texture;
@@ -261,9 +268,11 @@ GUI_APP_MAIN
 			target.color_target = texture; target.size = desc.size; target.color_format = desc.format;
 			target.load_op = GpuLoadOp::Clear; target.store_op = GpuStoreOp::Store;
 			target.clear_color.alpha = 1;
-			CheckStyledFace(renderer, target, device);
-			CheckTableEditing(renderer, target);
-			CheckShadows(renderer, target, device);
+			if(!uhd) {
+				CheckStyledFace(renderer, target, device);
+				CheckTableEditing(renderer, target);
+				CheckShadows(renderer, target, device);
+			}
 			// The independent CPU reference above is excluded from production helper evidence.
 			UiRasterCache::Clear();
 			target.clear_color.red=target.clear_color.green=target.clear_color.blue=1;

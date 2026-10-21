@@ -88,7 +88,7 @@ Current IME changes are ready for intended local commits. External Core and Anim
 
 ## Colour / bitmap fonts automated checkpoint (2026-10-22)
 
-IME commits: Ui6ed57ab, renderer6b7d490. Current font slice is ready for intended local commits; no push.
+IME commits: Ui6ed57ab, renderer6b7d490. Font slice is committed: Ui f88aab5150ca7f375b8c4a61a01da57832c82e03, renderer76fe04e. No push.
 - Native COLRv0 palette order/opacity and embedded PNG/JPEG/TIFF/premultiplied BGRA assets reuse GPU coverage/image paths. Private application font_file collections install nothing; native metrics and full Windows file time participate in layout identity.
 - Decoded asset cache128entries/4MiB; bitmap runs max1024pixels/axis and count their full image payload in4MiB snapshot limit. These are declared payload bounds, not total native process memory.
 - Release exec-177289E9D90F1C37D93E4C48A39A5941 PASS4141ms; Debug exec-51AD897C2ED2799EFB6F78BC871159B2 PASS11812ms. Both64 Vulkan pixels,37editor,36style,27document,34IME and78font-layer checks. Software bitmap maxerror0 and native Ui Painter/reference agreement. RGBA/BGRA UNORM/sRGB alpha equations pass, warm uploads/misses0, ownership/validation0.
@@ -101,6 +101,30 @@ IME commits: Ui6ed57ab, renderer6b7d490. Current font slice is ready for intende
 - Dashboard revision21:70% overall strict acceptance;75% text implementation (6/8). Live OS IME/physical DPI, remaining edge review and final current-binary load remain open.
 - SVG colour glyphs/COLRv1 paint trees are not implemented; do not claim complete arbitrary OpenType colour-format parity.
 - Preserve foreign Ui layout/theme changes. Final qualification should build from a committed Ui main archive to keep those unrelated uncommitted edits out of the release evidence without touching their working files.
+
+## Current clean-main qualification (resume here)
+
+- Renderer main76fe04e, Ui mainf88aab5150ca7f375b8c4a61a01da57832c82e03. No owned code remains uncommitted; foreign Ui dirty files are preserved. Git branches remain main only.
+- Ui committed main was exported by Git archive job exec-44FB1726F2D76E72F1054F5FB646C782. ZIP build/klick/qualified-ui-main-text.zip in the Ui repository:7,685,886B SHA4befa3631816a6c75833cc26f7bbcf8ce2c9d0e1a8802456a30fde025873a0c1.796entries/16,113,151uncompressed bytes; full central-directory validation found0unsafe paths.
+- Native ZIP extraction job exec-5D994E810EACB2E8445BAB01BFF0094C succeeded into renderer build/qualified-ui-main-text. Key exported source hashes verified. This excludes unrelated uncommitted Ui layout/theme/docs changes without altering their working files.
+- CURRENT BUILD: exec-6CCA935B82F2ED7DAA45C1F323E865DF. Package GpuUiGallery, method CLANGx64_Vulkan.bm, release +GUI,GPUUI,CFONTS, cache build/cache-qualified-main-text, output build/GpuUiGalleryQualified.exe. Recover job result before replay.
+- Nests: E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc. For test packages replace /examples, with /tests,. Keep using this committed Ui export for final qualification.
+- After build: stat/hash actual Qualified.exe, --qualify-ui --validation. Then build/run catalogue and affected Canvas/image/semantic regressions through the same nests. Current text tests (78font/34IME etc) already passed Release/Debug, but qualification should also build against the committed Ui export.
+- Final normal/heavy20s and300s512particle+grid soak must use the same Qualified.exe and hash. Do not modify implementation during a timed run; do not replay incomplete runs without inspecting retained evidence.
+- Manual text dialog launch: Qualified.exe --text-controls --validation after automation. Ask specific checks when it is actually open. Live OS IME/native candidate selection and physical monitor DPI remain unqualified; do not invent a pass.
+- Current task has NO push/publish authorization. Preserve old GalleryFinish.exe baseline and don't reissue old2026-10-04ZIP references.
+ 
+## Latest final checks and legacy IME edge (resume first)
+
+- Clean-main Gallery build exec-6CCA935B82F2ED7DAA45C1F323E865DF completed. Preserved build/GpuUiGalleryQualified.exe8884736B SHA2a777e3af816248f9ab4212fd6fb7d478b7af9571fe3b0141ca8d22e760981e8.
+- Committed-main Gallery UI run exec-809C9307EF1B0988FC0D97EE2D7484D1 passed; all7 regression suites passed. Exact binaries, producer jobs and reports in WINDOWS_VULKAN_FINAL_QUALIFICATION.json and functions qualifiedRegressionResults.
+- Current-binary normal/heavy20s and full300s passed: exec-FCEF31BFCAF7BCC99062EABBC0103B04 /exec-C33023335C3767583055624FA898C5A1 /exec-EEFD75580F63E408462E83CD73B23F97. Heavy119presentedFPS/120distinctHz,CPUmedian/p99=5.98/13.51ms,maxtimer18.49ms. Privateearly/late205137920/222807040B,peak223375360B,stepnear50s thenplateau;unchanged33554432growthgate passes. WarmCPU/vector/glyphrasters/uploads0,GDI0,finalownershipZERO.
+- Manual --text-controls run exec-828E95C4F8010B8364B0F9978FC64CBA reached180s timeout. Human questions about controls and optional realIME are pending; no human pass is established.
+- NEW UNCOMMITTED shipping change only render/GpuRender/Win32GpuIme.cpp: handle CS_INSERTCHAR/CS_NOMOVECARET without changing model/undo, prefer full native strings, reject malformed interim scalar and preserve callback guards. Source tests/UiTextLayoutTest/Ime.cpp adds4native-message checks. Release build exec-692F3EA826A430B378DBABF76FA0BB30, run exec-850BE1B26D841F1E4D23206AADEB6846 PASS:38IME plusprevious64GPU/37editor/36style/27doc/78fonts.
+- NEW test-only --uhd option in UiGpuDrawingTest doubles native defaultfont/applicationDPI units and control/targetbounds, leaving standard mode unchanged. Fixed-size face/shadow/edit fixtures remain in standard mode; UHD specifically checks224control drawing cases. This does not claim physical Windows monitor-DPI validation.
+- CURRENT UHD build exec-861EE3FC1B254DF7D714A18E47DB0D22; runtime exec-1A9792B4941756CB209D9D311D662BCB. Recover current job before replay.
+- Next: read UHD result; run standard mode after test edit; verify final legacy Debug; commit owned edge/test changes with evidence; rebuild final Gallery against same committed Ui export using a new output name (preserve prior qualified binary), then refresh UI and current-candidate performance. Include a production validation-off measurement to distinguish driver/layer footprint. No implementation edits during timed runs.
+- No external Core/Animation writes. No publish/push. Keep Ui foreign work untouched. Dashboard revision21 currently70% overall/75% text and will be reconciled after final current-candidate qualification.
 
 ## Remaining implementation and qualification
 

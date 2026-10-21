@@ -40,7 +40,7 @@ void PositionCandidate(HWND hwnd,Ctrl& focus)
  ImmReleaseContext(hwnd,context);
 }
 }
-bool HandleWin32GpuIme(Ctrl& root,HWND hwnd,UINT message,WPARAM,LPARAM& lparam,LRESULT& result)
+bool HandleWin32GpuIme(Ctrl& root,HWND hwnd,UINT message,WPARAM key,LPARAM& lparam,LRESULT& result)
 {
  if(message!=WM_IME_SETCONTEXT && message!=WM_IME_STARTCOMPOSITION &&
     message!=WM_IME_COMPOSITION && message!=WM_IME_ENDCOMPOSITION && message!=WM_KILLFOCUS) return false;
@@ -58,8 +58,24 @@ bool HandleWin32GpuIme(Ctrl& root,HWND hwnd,UINT message,WPARAM,LPARAM& lparam,L
  if(message==WM_IME_STARTCOMPOSITION || message==WM_IME_ENDCOMPOSITION || lparam==0) {
   client->CancelGpuComposition(); return true;
  }
+ const bool has_result=(lparam&GCS_RESULTSTR)!=0;
+ const bool has_composition=(lparam&(GCS_COMPSTR|GCS_COMPATTR|GCS_COMPCLAUSE|GCS_CURSORPOS))!=0;
+ const bool has_interim=(lparam&CS_INSERTCHAR)!=0 && !has_composition;
+ GpuImeComposition interim;
+ if(has_interim) {
+  // Legacy IMEs may supply a temporary character without a composition-string
+  // notification. Keep it transient; the final result still owns model/undo.
+  if(key<32 || key>0x10ffff || (key>=0xd800 && key<=0xdfff)) {
+   client->CancelGpuComposition(); return true;
+  }
+  interim.text.Cat((int)key); interim.caret=(lparam&CS_NOMOVECARET)?0:1;
+  if(!has_result) {
+   client->UpdateGpuComposition(interim);
+   if(root_alive && focus && Ctrl::GetFocusCtrl()==~focus && IsWindow(hwnd)) PositionCandidate(hwnd,*focus);
+   return true;
+  }
+ }
  HIMC context=ImmGetContext(hwnd); if(!context) { client->CancelGpuComposition(); return true; }
- bool has_result=(lparam&GCS_RESULTSTR)!=0,has_composition=(lparam&(GCS_COMPSTR|GCS_COMPATTR|GCS_COMPCLAUSE|GCS_CURSORPOS))!=0;
  GpuImeComposition committed,composition; Vector<char16_t> raw; Vector<byte> no_attributes;
  bool result_valid=!has_result || (ReadUtf16(context,GCS_RESULTSTR,raw) &&
     GpuImeComposition::DecodeUtf16(raw,raw.GetCount(),no_attributes,committed));
@@ -76,6 +92,10 @@ bool HandleWin32GpuIme(Ctrl& root,HWND hwnd,UINT message,WPARAM,LPARAM& lparam,L
  if(has_composition) {
   client=dynamic_cast<GpuImeClient *>(~focus);
   if(client) client->UpdateGpuComposition(composition);
+ }
+ else if(has_interim) {
+  client=dynamic_cast<GpuImeClient *>(~focus);
+  if(client) client->UpdateGpuComposition(interim);
  }
  if(root_alive && focus && Ctrl::GetFocusCtrl()==~focus && IsWindow(hwnd)) PositionCandidate(hwnd,*focus);
  return true;
