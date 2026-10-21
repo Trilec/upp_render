@@ -209,12 +209,12 @@ public:
 	}
 
 
-	bool DrawShapedText(Pointf origin, const std::shared_ptr<const GpuShapedText>& text, Color ink) override
+	bool DrawShapedText(Pointf origin, const std::shared_ptr<const GpuShapedText>& text, Color ink,bool override_ink=false) override
 	{
 		if(!text || !text->IsValid()) { Fail("invalid shaped text snapshot"); return false; }
 		if(IsNull(ink)) return true;
 		if(ink==InvertColor()) { Fail("invert shaped text is unsupported"); return false; }
-		builder.DrawShapedText(origin,text,ToRgba8(ink)); ++report.text_count;
+		builder.DrawShapedText(origin,text,ToRgba8(ink),override_ink); ++report.text_count;
 		return !Failed();
 	}
 	bool DrawVectorArtwork(const Rect& bounds, const Function<void(Painter&)>& paint) override

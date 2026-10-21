@@ -17,7 +17,7 @@ After restart use klick_resume_context; recover retained jobs before replaying a
 
 Ui drawing commit 228a1b968e0b13ef21b4cbb4baf1115c3c7a8686.
 Render baseline commit 2ebf036506f612e20d24e3786a498a61a5d655a7.
-Current renderer main remains at that commit with new text work UNCOMMITTED.
+Current renderer foundation is committed at 3598226; rich-text renderer integration is pending its local commit.
 Ui HEAD observed cf237c78e4ef0155b18fa077adc5ca45b7e86604 after concurrent work. Re-read current state.
 
 Exact baseline sources, jobs and raw results: docs/VULKAN_UI_FINISH_QUALIFICATION.json.
@@ -58,15 +58,29 @@ Current integration checkpoint (still uncommitted):
 - Current Debug build exec-04F71759CAD71B74C8C5CC1362FFD7A1 and run exec-E8A113732560D1B76A81BA723C091DE0 PASS (37 editor / 64 GPU cases). Native ordinary no-render-nest Release BLITZ build exec-800CC8D2BABB73CC4EB786EAC3871E29 PASS (9691648-byte UiLabelNativeText.exe). Catalogue run exec-26CF6FD19FB4740F5578DB99E9D2D087 PASS (224/224 probes, GDI-font and validation0). Native visual/complex-script rich-doc review not implied.
 - U++ .upp files do not accept // comments. Do not add them. Do not add uses(GPUUI)RenderCore to Ui.upp: UMK resolves inactive uses and breaks no-render-nest native assemblies. GPU hosts supply RenderCore via their assembly/dependencies.
 
+## Rich text checkpoint (2026-10-22)
+
+Ui main commit 594ba7d follows 83ac3bd. Renderer foundation main commit 3598226 follows 2ebf036; current renderer rich changes will be committed next. No push/publish.
+- Native styled scalar ranges (font/ink/tracking), physical alignment/character wrap, per-line metrics and inline object placements. Immutable line snapshots reuse actual font faces, avoid replaying whole paragraphs for each line, and are included in declared cache payload. Single-line layouts alias the full snapshot.
+- Per-run and decoration ink travels through Canvas/recorders/semantic Painter/software/Vulkan; uniform-ink override recolours selection without reshaping.
+- Rich labels share one styled native line across spans/icons/bullets and map native placeholders to clipboard scalar positions. Font defaults corrected: span Font is Null and old zero Font inherits base; DirectWrite styled size never receives zero.
+- UiDoc paragraph and table cells use shared native layout for drawing, wrapping, caret, hit, selection, visual movement and grapheme deletion. Table selected-range removal is linear in runs. Metadata text uses native wrapped lines; card and marker outlines use GPU artwork instead of CPU images. UiDoc now overrides Ctrl::GetCaret for IME placement.
+- BaseEdit GPU cache no longer computes redundant per-scalar native widths. TitleCard and Olive text calls migrated; only owned text hunks were staged in those concurrently dirty files.
+- Release exec-5C1231F9493C8DB89E7D4906C9FCDAF0 PASS 2828ms, 6448640B SHA 54bfe7c2998c2899a51401d72e1fe6ce6dbc5485b48bf65a1696848e09a244b9.
+- Debug exec-9923DF11AC312BE7FF23117C27F3E573 PASS 10282ms, 8920064B SHA 4525ebd928f8716da9c6741a023850edf38923e5577ec8c5ff867d69a0897105.
+- Both: 16 native / 64 GPU pixel cases, 37 basic editor, 36 styled, 27 rich document/table/expanded metadata checks. Retained line-slice pixels equal whole paragraph pixels. GPU glyph coverage CPU0; metadata CPU vector/helper raster0; final GPU/validation0.
+- Native no-render-nest BLITZ exec-BD0AF217D367CAF33761115CD577A97F PASS. Actual 224 control probes exec-9DEDD9CAC485EED8A38AB7FB358B8F0F PASS, GDI-font/validation0.
+- Readback build/UiTextLayout-document.png inspected after named-channel capture fix. Exact hashes/evidence in WINDOWS_VULKAN_TEXT_QUALIFICATION.json rich_text_checkpoint.
+- Dashboard revision19: overall strict acceptance70% (7/10), text implementation62.5% (5/8). Do not mark final text gate complete.
+
 ## Remaining implementation and qualification
 
-1. Recover Debug result, run/hash its fresh output; preserve this passing foundation before larger changes. Rebuild UiGpuDrawingTest (224 catalogue probes) against new text.
-2. Add styled paragraph layout/ranges, per-run ink/selection override, line metrics and inline object metrics to the single text authority; integrate rich UiLabel and UiDoc including styled/table text. UiDoc still has per-character layout/drawing/editing; do not merely replace DrawText one character at a time.
-3. Full colour/bitmap font layers, system font parity and actual IME behaviour remain open. Emoji outlines are presently monochrome.
-4. UiTitleCard.cpp and UiThemeOlive.h are concurrently dirty and have not been migrated. Preserve unrelated work and stage only intended hunks if changed.
-5. Broaden text tests, cache-bound/failure/concurrency/memory costs. Existing duplicate editor change notifications and ShiftInsert/ShiftDelete shortcut dispatch are not fixed or claimed by this checkpoint.
-6. Final Debug/native BLITZ, Canvas/semantic/vector/scalar regressions; rebuild Gallery preserving GpuUiGalleryFinish.exe. Re-run all controls/browser/full picker/micro/dialog, capture/input/DPI, then normal/heavy/full 300s load and memory AFTER complete text integration.
-7. Update final evidence/docs/dashboard, intended local commits. No100% claim or publishing while these gates remain open.
+1. Complete renderer rich commit/evidence and verify no owned code remains uncommitted. Preserve foreign dirty files. Temporary Ui/.renderer-text-only.patch was used solely to stage owned TitleCard/Olive hunks; rollback of its create transaction requested, verify removed.
+2. Implement colour/bitmap font layers; current emoji is outline monochrome. Preserve existing monochrome geometry oracle as an explicit mode and add separate colour/bitmap pixels/caches/ownership tests.
+3. IME composition remains open. Read-only Core Win32Proc converts WM_CHAR surrogate pairs and IME results to UTF32, but its app-owned PreeditCtrl draws legacy scalar text/prefix metrics. UiBaseEdit has GetCaret; UiDoc now has GetCaret override. Returning Null GetPreedit is NOT a fix: Core PreeditSync disables ImmAssociateContext when absent. Do not edit Core. A small renderer-host IME bridge and Ui-owned composition capability can intercept WM_IME_COMPOSITION before Core, use shared layout for preedit, leave native candidate selection to Windows, and commit atomically. This is a proposed next implementation, not completed.
+4. Broaden bidi affinity/selection collapse/wrapped edge/table navigation and cache-bound/failure/concurrency/memory tests. Table image/caret pagination text_origin now shifts with cell rect.
+5. Final Debug/native BLITZ, Canvas/semantic/vector/scalar regressions; rebuild Gallery preserving GpuUiGalleryFinish.exe. Re-run all controls/browser/full picker/micro/dialog/captures/input/DPI; normal/heavy/full300s after complete text.
+6. Final evidence/docs/dashboard and local commits; no100% claim or publishing until acceptance passes.
 
 ## Unrelated Ui files to preserve
 
@@ -81,6 +95,6 @@ Gallery nests examples instead of tests.
 Debug omit -r and use separate cache-directwrite-debug. BLITZ -br.
 After build success, Patch stat(hash:true) actual executable then Execute tool-7A0B237BB3E4 with output_path build/UiTextLayoutTest.exe and expected_sha256. One Execute per project. Git tool ID git.
 
-Dashboard dashboard-4ab27ccd4e88f640515329923bfc8637-A686904788EDBBDF15A5796581F90E51 last saved revision18; read fresh before updating, preserve panels. Overall remains 70% (7/10) until full text, physical/final acceptance gates pass.
+Dashboard dashboard-4ab27ccd4e88f640515329923bfc8637-A686904788EDBBDF15A5796581F90E51 last saved revision19; read fresh before updating, preserve panels. Overall remains 70% (7/10) until full text, physical/final acceptance gates pass.
 
 Primary references: Microsoft DirectWrite IDWriteTextLayout, IDWriteTextRenderer, IDWriteFontFace::GetGlyphRunOutline, HitTestTextPosition; Windows ICU C ABI docs; Unicode ICU ubidi full paragraph direction. Do not write bespoke Arabic/Indic/bidi/range tables.

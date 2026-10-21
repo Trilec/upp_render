@@ -26,6 +26,16 @@ struct GpuGlyphRunSnapshot {
 	std::shared_ptr<const GpuGlyphFaceSource> face;
 	double em_size = 12;
 	Vector<GpuPositionedGlyph> glyphs;
+	Color ink = Null; // Null inherits the drawing caller's ink.
+
+};
+
+struct GpuTextDecoration : Moveable<GpuTextDecoration> {
+	Rectf rect;
+	Color ink = Null;
+	GpuTextDecoration() = default;
+	GpuTextDecoration(Rectf r,Color c=Null):rect(r),ink(c) {}
+	bool operator==(const GpuTextDecoration& b) const { return rect==b.rect && ink==b.ink; }
 };
 
 // Derived immutable rendering snapshot, not a second editable text model.
@@ -33,7 +43,7 @@ struct GpuGlyphRunSnapshot {
 // Runs use final local pixel positions; the ordinary canvas transform applies.
 struct GpuShapedText {
 	Array<GpuGlyphRunSnapshot> runs;
-	Vector<Rectf> decorations;
+	Vector<GpuTextDecoration> decorations;
 	bool IsValid(String *error = nullptr) const;
 	int GetGlyphCount() const;
 	int64 GetPayloadBytes() const;

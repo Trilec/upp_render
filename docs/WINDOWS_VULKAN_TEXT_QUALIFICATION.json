@@ -339,5 +339,214 @@
       "validation_errors": 0,
       "note": "ASCII drawing catalogue, not complete complex-script document or physical input qualification."
     }
+  },
+  "rich_text_checkpoint": {
+    "recorded_at": "2026-10-22",
+    "ui_commit": "594ba7d",
+    "renderer_base": "3598226",
+    "status": "passed_automated_rich_text_scope_only",
+    "scope": "Styled paragraph font/ink/tracking, native wrapped line geometry and immutable line slices, rich labels/inline bullet metrics, UiDoc and table grapheme/caret/hit/selection/editing, GPU metadata marker/card drawing.",
+    "release": {
+      "build_job": "exec-255106EAB25291D44752D7852CBDE30D",
+      "run_job": "exec-5C1231F9493C8DB89E7D4906C9FCDAF0",
+      "exit_code": 0,
+      "binary": {
+        "path": "build/UiTextLayoutStyled.exe",
+        "bytes": 6448640,
+        "sha256": "54bfe7c2998c2899a51401d72e1fe6ce6dbc5485b48bf65a1696848e09a244b9"
+      },
+      "duration_ms": 2828,
+      "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n"
+    },
+    "debug": {
+      "build_job": "exec-0678A08CFEDBF8769DF379A198C6E820",
+      "run_job": "exec-9923DF11AC312BE7FF23117C27F3E573",
+      "exit_code": 0,
+      "binary": {
+        "path": "build/UiTextLayoutStyledDebug.exe",
+        "bytes": 8920064,
+        "sha256": "4525ebd928f8716da9c6741a023850edf38923e5577ec8c5ff867d69a0897105"
+      },
+      "duration_ms": 10282,
+      "stdout": "grapheme_case=0 actual=[0] error=\r\ngrapheme_case=1 actual=[0, 1, 2] error=\r\ngrapheme_case=2 actual=[0, 2, 3] error=\r\ngrapheme_case=3 actual=[0, 3] error=\r\ngrapheme_case=4 actual=[0, 2, 3] error=\r\ngrapheme_case=5 actual=[0, 4] error=\r\ngrapheme_case=6 actual=[0, 1, 3, 4] error=\r\narabic_glyphs=3 size=(35.26171875, 27.59765625) error=\r\narabic_caret=0 point=[35.25, 0] upstream=[35.25, 0]\r\narabic_caret=1 point=[22.51171875, 0] upstream=[22.51171875, 0]\r\narabic_caret=2 point=[15.3046875, 0] upstream=[15.3046875, 0]\r\narabic_caret=3 point=[8.09765625, 0] upstream=[8.09765625, 0]\r\narabic_caret=4 point=[-0.01171875, 0] upstream=[-0.01171875, 0]\r\npartial_selection_rects=1\r\npartial_rect=[15.3046875, 0] - [22.51171875, 27.59765625] : (7.20703125, 27.59765625) width=7.20703125\r\nshaped_reference_cases=16 gpu_cases=64 passed=1\r\nunicode_edit_checks=37 passed=1\r\nstyled_text_checks=36 passed=1\r\ndocument_text_checks=27 passed=1\r\nunicode_version=13.0.0.0 grapheme_cases=7\r\nUiTextLayoutTest Unicode foundation passed\r\n"
+    },
+    "checks": {
+      "native_outline_cases": 16,
+      "vulkan_pixel_cases": 64,
+      "basic_editor": 37,
+      "styled_layout_and_gpu": 36,
+      "document_rich_label_table_and_metadata": 27,
+      "identical_whole_and_line_slice_gpu_pixels": true,
+      "cold_cpu_glyph_coverage": 0,
+      "metadata_cpu_vector_rasters": 0,
+      "metadata_helper_raster_misses": 0,
+      "final_gpu_resources_and_validation_messages": 0
+    },
+    "native_no_renderer_nest_blitz": {
+      "build_job": "exec-BD0AF217D367CAF33761115CD577A97F",
+      "exit_code": 0,
+      "bytes": 9700352
+    },
+    "catalogue": {
+      "build_job": "exec-5603EFBE3FED18F0F6A0BF747B32F098",
+      "run_job": "exec-9DEDD9CAC485EED8A38AB7FB358B8F0F",
+      "binary_sha256": "f2fde7f575c323dbf3b324dad3a7d89cb398b79eea71f1d626d3f481c8d57f5a",
+      "entries": 56,
+      "probes": 224,
+      "failures": 0,
+      "gdi_font_requests": 0,
+      "validation_messages": 0
+    },
+    "capture": {
+      "path": "build/UiTextLayout-document.png",
+      "sha256": "fe8d4de0058dd01bf184ca7735122dfccaf08dae4d15a34d04c3dbd6fed1c33c",
+      "inspected": true,
+      "note": "Readback capture uses named RGBA channels, not platform-dependent aggregate byte order."
+    },
+    "source_manifest": {
+      "note": "Observed after qualification without intervening source edits; not a locked prebuild manifest. TitleCard and Olive include unrelated working-tree layout changes; only text hunks were committed.",
+      "ui": [
+        {
+          "path": "Ui/UiBaseEdit.cpp",
+          "sha256": "1e5d55d8e565bca1091f5a58231b5981543c9904eafedf86c01fb0430a320f49"
+        },
+        {
+          "path": "Ui/UiTextLayout.cpp",
+          "sha256": "9dfda4b36b45e5105e212cc3a24cc5df611baabad354127572f6d2c6acc2d587"
+        },
+        {
+          "path": "Ui/UiTextLayout.h",
+          "sha256": "5c7d463e542e79cd39ec04b06d4b8d6661b829df5d9b32ec5a14a8375c777636"
+        },
+        {
+          "path": "Ui/UiLabel.cpp",
+          "sha256": "1f8f772fb6ae7cd475ef12bdbeef7270108c7bf8dd18fb52809d0be1c6b51585"
+        },
+        {
+          "path": "Ui/UiLabel.h",
+          "sha256": "d75dce5822a1840787a23f3db1c9cb0bc9487b0392daa5bcedc7807858ce3a25"
+        },
+        {
+          "path": "Ui/UiDoc/UiDoc.cpp",
+          "sha256": "587137d9afdf8c82fe601796800a3c3717aa2da4d34d146cf1df7ae77e501e64"
+        },
+        {
+          "path": "Ui/UiDoc/UiDoc.h",
+          "sha256": "1d89563f1a55e0d794603ce62b64f95b3a36d2a2090e77b335ea76ac7a58333d"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocGeometry.cpp",
+          "sha256": "feeb60becb3f9ec41146ef010281bd2611a82bbb100724fa5f9f5a93c3de7236"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocInput.cpp",
+          "sha256": "27943443ca31680ee46e920f72daed324ce8f675f4cef6ebb8c61bb08b915771"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocInteraction.cpp",
+          "sha256": "e34b1ad5169b7d04165190d7962f12839a73f86acf1231e8c0e3010fc69e84ec"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocMetadataPrivate.h",
+          "sha256": "bde4e406e64140c6e0033d8225eab9f1a0ad869268a5aa7db30e824407282a88"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocPages.cpp",
+          "sha256": "e1b2a7788f8e9f780e903b3e338e62932286924be71e0a32ded61b5d35c0f562"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocPaint.cpp",
+          "sha256": "1916ea66ef09db8c24f0f59ed18061cf6b4c4def825273e4f45cd2ee2ef8d7e1"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocPaintOverlay.cpp",
+          "sha256": "6f9c12c3f1bb50451955793d3a583706400672cf1fd19e4ea962d27b9a8982f4"
+        },
+        {
+          "path": "Ui/UiThemeOlive.h",
+          "sha256": "d8930650ba8c4826fd9af4118f8e6f8c9e7fe3b4c160b0e1a493e9ba12a056d7"
+        },
+        {
+          "path": "Ui/UiTitleCard.cpp",
+          "sha256": "62817c8d262d091b54c79d926b657ab36e7c4aa72d40a36dc03c04005e180488"
+        },
+        {
+          "path": "Ui/UiDoc/UiDocParagraphLayout.cpp",
+          "sha256": "72a5d37702ef92a4fce8124e45c7f7412d80e067934fe33f33b2117a2f81ab0d"
+        }
+      ],
+      "render": [
+        {
+          "path": "render/RenderCanvas/RenderCanvas.cpp",
+          "sha256": "ced6eb5c79bdd3420e3faa5efa9c7d96f631881fc19cbce7f0574fb24403c913"
+        },
+        {
+          "path": "render/RenderCanvas/RenderCanvas.h",
+          "sha256": "06420e4b7c342877ce5989dfa78e1689b3d8bd30a1d78fa0e6252869f33da3ab"
+        },
+        {
+          "path": "render/RenderCore/GpuDrawTarget.h",
+          "sha256": "8ff35f8668c3d13e4c20fd083cc3968381f84b8201cde2cb92d34934851d0191"
+        },
+        {
+          "path": "render/RenderCore/GpuTextLayout.cpp",
+          "sha256": "6ddaf45d7107ef9200ba7a810e26050ba06ad20379879cce0c8c8b66d880902a"
+        },
+        {
+          "path": "render/RenderCore/GpuTextLayout.h",
+          "sha256": "0fb5f5632d91be8da0e1e6363fd1c6537947e4d4067662e0122d3ed0c151ebf7"
+        },
+        {
+          "path": "render/RenderCtrlBridge/RenderCtrlBridge.cpp",
+          "sha256": "7c4d2a87cbf3f8d067c2fac4161357db16fd7996f33d279294ae156cdf39946b"
+        },
+        {
+          "path": "render/RenderCtrlBridge/RenderCtrlBridgeRegion.h",
+          "sha256": "c39dd06dfe713ecb7dccf90ece760e735cb05bdef3cc893d9a85ab57a927666b"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2D.cpp",
+          "sha256": "03dcb25c94913c65ca04c040cb5d10df352eeb754d36098e931f327e7bffb3ac"
+        },
+        {
+          "path": "render/RenderGpu2D/RenderGpu2DVector.cpp",
+          "sha256": "06ad1fdb534bfbda15eac5a323da8d2443f92ecaa47eae5bfd52649415d0425c"
+        },
+        {
+          "path": "render/RenderSoftware/RenderSoftware.cpp",
+          "sha256": "9e2c5a0f6aedbd38edea45352213ee3674adc36cdf0bc0d6ea2bff0d2259924f"
+        },
+        {
+          "path": "render/RenderVector/SemanticPainter.cpp",
+          "sha256": "cab05d700effd7a62533efb282de18efb91d18ee0de175671b3fd909e4e5ebfd"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/NativeReference.cpp",
+          "sha256": "ec4b334c5f932b1a13e046692a0d51f5071ae3b6eaaf9af4e543cf9c52e00a66"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/UiTextLayoutTest.upp",
+          "sha256": "8ecfdd5eda594c37f6bdcab66ed7a20dc001a5d8d1b12ffc6f5bfa0a9041eda9"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/main.cpp",
+          "sha256": "fe5be4dd1a9dd30c2b60376ec4d50e256a93f61126d67407d7605d86b6db39b9"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/Document.cpp",
+          "sha256": "99f1a46b1a7db921f64a7ca4660d72de94f783d8759b3f2a64e0bd8909fdd95b"
+        },
+        {
+          "path": "tests/UiTextLayoutTest/Styled.cpp",
+          "sha256": "c643d287c0a8413452ab120ff2d7eb25eb6bdfa7d65f69b94c68cb1ee92c51e8"
+        }
+      ]
+    },
+    "open_scope": [
+      "Colour and bitmap font layers; emoji is currently outline monochrome",
+      "IME composition and physical input/DPI; UiDoc GetCaret wired but composition popup remains Core implementation",
+      "Broader bidi affinity, table interaction/selection and shaped layout cache/load boundaries",
+      "Complete final whole-app Gallery and normal/heavy/300s qualification after all text changes"
+    ]
   }
 }

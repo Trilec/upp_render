@@ -12,6 +12,8 @@ static WString Scalars(std::initializer_list<int> values) {
 }
 bool TestShapedReference();
 bool TestUnicodeEditing();
+bool TestStyledText();
+bool TestDocumentText();
 GUI_APP_MAIN
 {
 	String error; int cases=0;
@@ -110,6 +112,8 @@ GUI_APP_MAIN
 	Check(!UiTextLayout::Create(arabic,font,bad).IsValid(),"layout options fail explicitly");
 	ok=TestShapedReference() && ok;
 	ok=TestUnicodeEditing() && ok;
+	ok=TestStyledText() && ok;
+	ok=TestDocumentText() && ok;
 	Font variable=SansSerif(28).FaceName("Bahnschrift");
 	auto variable_regular=UiTextLayout::Create(WString("Variable"),variable);
 	auto variable_bold=UiTextLayout::Create(WString("Variable"),Font(variable).Bold());

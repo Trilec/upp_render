@@ -52,8 +52,8 @@ public:
         Emit([&] { target.DrawImage(r, image, src, tint, mask); });
     }
     void DrawText(const Pointf& p, const WString& s, Font f, Rgba8 c) override { Emit([&] { target.DrawText(p, s, f, c); }); }
-    void DrawShapedText(const Pointf& p, const std::shared_ptr<const GpuShapedText>& s, Rgba8 c) override {
-        Emit([&] { target.DrawShapedText(p,s,c); });
+    void DrawShapedText(const Pointf& p, const std::shared_ptr<const GpuShapedText>& s, Rgba8 c,bool override_ink=false) override {
+        Emit([&] { target.DrawShapedText(p,s,c,override_ink); });
     }
     void FillPath(const UiPath& p, const UiPaint& paint, UiFillRule rule = UiFillRule::NonZero) override {
         Emit([&] { target.FillPath(p, paint, rule); });

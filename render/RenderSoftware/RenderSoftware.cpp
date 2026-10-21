@@ -150,9 +150,9 @@ bool SoftwareUiRenderer::Replay(const UiDisplayList& list, Painter& painter)
 			for(const auto& run:op.shaped_text->runs) for(const auto& glyph:run.glyphs) {
 				ShapedOutlinePainter sink(painter,op.point+glyph.origin);
 				if(!run.face->GetOutline(glyph.glyph,run.em_size,sink,error)) return false;
-				if(sink.used) painter.Fill(ToRgba(op.color));
+				if(sink.used) painter.Fill(op.text_ink_override || IsNull(run.ink)?ToRgba(op.color):(RGBA)run.ink);
 			}
-			for(const auto& r:op.shaped_text->decorations) painter.Rectangle(r+op.point).Fill(ToRgba(op.color));
+			for(const auto& r:op.shaped_text->decorations) painter.Rectangle(r.rect+op.point).Fill(op.text_ink_override || IsNull(r.ink)?ToRgba(op.color):(RGBA)r.ink);
 			break;
 		case UiDisplayOpType::DrawText:
 			if(!op.text.IsEmpty()) {

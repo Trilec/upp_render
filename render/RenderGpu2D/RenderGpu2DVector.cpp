@@ -262,7 +262,7 @@ bool UiRenderer2D::MaterializeVectorList(const UiDisplayList& source, UiDisplayL
 			builder.DrawImage(op.rect, op.image, op.image_source, op.image_tint, op.image_alpha_mask);
 			break;
 		case UiDisplayOpType::DrawShapedText:
-			builder.DrawShapedText(op.point,op.shaped_text,op.color); break;
+			builder.DrawShapedText(op.point,op.shaped_text,op.color,op.text_ink_override); break;
 		case UiDisplayOpType::DrawText:
 			builder.DrawText(op.point, op.text, op.font, op.color);
 			break;

@@ -395,14 +395,15 @@ bool UiRenderer2D::BuildGeometry(const UiDisplayList& list, Size target_size, Po
 				Pointf p=op.point+positioned.origin+glyph.offset;
 				Rectf rect(p.x,p.y,p.x+glyph.size.cx,p.y+glyph.size.cy);
 				int before=textured_vertices.GetCount();
-				if(!append_textured(rect,glyph.uv,glyph.texture,op.color,"shaped glyph",true)) return false;
+				if(!append_textured(rect,glyph.uv,glyph.texture,
+				    op.text_ink_override || IsNull(run.ink)?op.color:Rgba8::FromColor(run.ink),"shaped glyph",true)) return false;
 				emitted=emitted || textured_vertices.GetCount()>before;
 			}
 			if(emitted) stats.emitted_primitive_count++;
 			for(const auto& decoration:op.shaped_text->decorations) {
-				Rectf r=decoration+op.point;
+				Rectf r=decoration.rect+op.point;
 				UiDisplayOp line; line.type=UiDisplayOpType::FillPath;
-				line.paint=UiPaint::Solid(op.color);
+				line.paint=UiPaint::Solid(op.text_ink_override || IsNull(decoration.ink)?op.color:Rgba8::FromColor(decoration.ink));
 				line.path.MoveTo(r.TopLeft()).LineTo(r.TopRight()).LineTo(r.BottomRight()).LineTo(r.BottomLeft()).Close();
 				// Thin fractional decorations need area coverage rather than a
 				// one-pixel tessellation fringe. Reuse the bounded GPU vector cache.

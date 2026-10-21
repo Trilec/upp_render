@@ -165,7 +165,7 @@ double CoverageAt(const Array<CoverageOracle>& glyphs,const GpuShapedText& text,
  double alpha=0;
  for(const auto& glyph:glyphs) { double a=glyph.Sample(pixel); alpha=a+alpha*(1-a); }
  for(const auto& decoration:text.decorations) {
-  Rectf r=decoration+Pointf(12,8);
+  Rectf r=decoration.rect+Pointf(12,8);
   double a=max(0.0,min(r.right,(double)pixel.x+1)-max(r.left,(double)pixel.x))*
            max(0.0,min(r.bottom,(double)pixel.y+1)-max(r.top,(double)pixel.y));
   alpha=a+alpha*(1-a);

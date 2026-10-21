@@ -11,7 +11,7 @@ class Painter;
 class GpuPainterEffects {
 public:
 	virtual ~GpuPainterEffects() {}
-	virtual bool DrawShapedText(Pointf origin,const std::shared_ptr<const GpuShapedText>& text,Color ink) { return false; }
+	virtual bool DrawShapedText(Pointf origin,const std::shared_ptr<const GpuShapedText>& text,Color ink,bool override_ink=false) { return false; }
 	virtual void BlurLayer(int radius = 1) = 0;
 	virtual void PaintAngular(Pointf centre, double start, double sweep,
 	                          Color first, Color last, double stroke_width = -1) = 0;
@@ -26,7 +26,7 @@ public:
 	// Immutable positioned glyphs from the shared layout service. Return false
 	// before emitting when unsupported. Native font resources are owned by text.
 	virtual bool DrawShapedText(Pointf origin, const std::shared_ptr<const GpuShapedText>& text,
-	                            Color ink) { return false; }
+	                            Color ink,bool override_ink=false) { return false; }
 	// Local Painter coordinates inside bounds. Return false before emitting if
 	// unsupported; the caller may use its existing software receiver.
 	virtual bool DrawVectorArtwork(const Rect& bounds,
