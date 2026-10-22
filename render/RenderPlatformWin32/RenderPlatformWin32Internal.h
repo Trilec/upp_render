@@ -21,6 +21,11 @@ public:
 	void Stop();
 	bool IsActive() const;
 	bool Consume(WPARAM generation);
+	struct Timing {
+		double wake_ms = 0, wake_max_ms = 0;
+		double queue_ms = 0, queue_max_ms = 0;
+	};
+	Timing GetTiming() const;
 	static UINT Message();
 private:
 	struct Impl;

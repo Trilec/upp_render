@@ -13,6 +13,7 @@
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include <RenderVulkan/RenderVulkanRhi.h>
 #include <chrono>
+#include <thread>
 #ifdef PLATFORM_WIN32
 #include <psapi.h>
 #endif
@@ -426,6 +427,7 @@ public:
 		Add(gpu_state_);
 
 		SetTimeCallback(-250, [=] {
+			const double status_started = NowMs();
 			String e = GetGpuError();
 			String state = e.IsEmpty() ? String(IsGpuReady() ? "Vulkan root compositor active" : "GPU initialization pending")
 			                         : "GPU compositor: " + e;
@@ -440,6 +442,7 @@ public:
 			                                live_fps_, stats.replay_ms, stats.renderer.gpu_path_count,
 			                                stats.renderer.vector_raster_count);
 			gpu_state_.SetText(state);
+			if(benchmark_started_ > 0) ObserveBenchmarkWork("status_refresh", status_started, benchmark_status_max_ms_);
 			if(IsGpuRequired() && !e.IsEmpty()) {
 				SaveFile(GetExeDirFile("GpuUiGallery-gpu-failure.txt"), e + "\n");
 				SetExitCode(1);
@@ -450,6 +453,13 @@ public:
 		SyncAllControlsFromScene();
 	}
 
+	~GpuUiGallery() override
+	{
+		if(benchmark_native_thread_.joinable()) {
+			GuiUnlock unlock;
+			benchmark_native_thread_.join();
+		}
+	}
 	void SetDemoScene(int particles, bool grid)
 	{
 		scene_.SetParticleCount(particles);
@@ -463,17 +473,20 @@ public:
 		SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), "qualification=RUNNING\n");
 		SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
 	}
-	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300)
+	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300, bool native_menu_probe = false, bool tooltip_probe = false)
 	{
 		scene_.SetParticleCount(heavy ? 512 : 96);
 		SyncAllControlsFromScene();
 		benchmark_heavy_ = heavy;
 		benchmark_soak_ = soak;
 		benchmark_seconds_ = seconds;
+		benchmark_native_menu_ = native_menu_probe;
+		benchmark_tooltip_probe_ = tooltip_probe;
 		SaveFile(BenchmarkReportPath(heavy, soak, IsGpuRequired()), "benchmark_status=RUNNING\n");
 		benchmark_started_ = NowMs();
 		benchmark_due_ = benchmark_started_ + 16;
 		SetTimeCallback(-16, [=] { BenchmarkTick(); }, 987);
+		if(tooltip_probe) SetTimeCallback(8000, [=] { OpenTooltipProbe(); }, 994);
 	}
 
 	void Layout() override
@@ -907,7 +920,20 @@ private:
 			if(message == WM_EXITSIZEMOVE || message == WM_EXITMENULOOP)
 				benchmark_native_loop_exit_ms_ = NowMs();
 		}
-		return GpuTopWindow::WindowProc(message, wParam, lParam);
+		if(benchmark_started_ <= 0) return GpuTopWindow::WindowProc(message, wParam, lParam);
+		Ptr<GpuUiGallery> alive(this);
+		const double started = NowMs();
+		const LRESULT result = GpuTopWindow::WindowProc(message, wParam, lParam);
+		if(alive) {
+			const double elapsed = NowMs() - started;
+			if(elapsed > 50) {
+				++benchmark_slow_messages_;
+				if(benchmark_message_trace_.GetCount() < 32)
+					benchmark_message_trace_.Add(Format("slow_message at_ms=%.2f message=%d elapsed_ms=%.2f move_loops=%d menu_loops=%d",
+						started - benchmark_started_, (int64)message, elapsed, benchmark_move_loops_, benchmark_menu_loops_));
+			}
+		}
+		return result;
 	}
 #endif
 
@@ -918,11 +944,66 @@ private:
 		return samples[min(samples.GetCount() - 1, (int)ceil(p * samples.GetCount()) - 1)];
 	}
 
+	void ObserveBenchmarkWork(const char *phase, double started, double& maximum)
+	{
+		const double elapsed = NowMs() - started;
+		maximum = max(maximum, elapsed);
+		if(elapsed > 50) {
+			++benchmark_slow_work_;
+			if(benchmark_message_trace_.GetCount() < 32)
+				benchmark_message_trace_.Add(Format("slow_benchmark_work phase=%s at_ms=%.2f elapsed_ms=%.2f",
+					phase, started - benchmark_started_, elapsed));
+		}
+	}
+	void OpenTooltipProbe()
+	{
+		if(!IsOpen()) return;
+		benchmark_tooltip_started_ = NowMs();
+		benchmark_tooltip_effect_ = GUI_PopUpEffect();
+		benchmark_tooltip_.Set("Vulkan tooltip responsiveness probe");
+		benchmark_tooltip_.PopUp(this, GetScreenRect().TopLeft() + Point(120, 200), true);
+		benchmark_tooltip_seen_ = benchmark_tooltip_.IsOpen();
+		ObserveBenchmarkWork("tooltip_open", benchmark_tooltip_started_, benchmark_tooltip_open_ms_);
+		SetTimeCallback(1000, [=] {
+			const double started = NowMs();
+			benchmark_tooltip_.Close();
+			ObserveBenchmarkWork("tooltip_close", started, benchmark_tooltip_close_ms_);
+		}, 995);
+	}
 	void BenchmarkTick()
 	{
+		if(benchmark_tick_active_) { ++benchmark_tick_reentries_; return; }
+		benchmark_tick_active_ = true;
+		struct ResetActive { bool& flag; ~ResetActive() { flag = false; } } reset { benchmark_tick_active_ };
 		const double now = NowMs();
 		const double duration = now - benchmark_started_;
+#ifdef PLATFORM_WIN32
+		if(benchmark_native_menu_ && !benchmark_native_queued_ && duration >= 8000) {
+			benchmark_native_queued_ = true;
+			const HWND hwnd = GetHWND();
+			const DWORD ui_thread = GetCurrentThreadId();
+			try {
+				benchmark_native_thread_ = std::thread([hwnd, ui_thread] {
+					Sleep(400);
+					PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
+					// Only address the test window; never synthesize global keyboard input.
+					for(int attempt = 0; attempt < 5; ++attempt) {
+						Sleep(100);
+						GUITHREADINFO info{}; info.cbSize = sizeof(info);
+						if(!IsWindow(hwnd) || !GetGUIThreadInfo(ui_thread, &info) ||
+						   !(info.flags & GUI_INMENUMODE)) break;
+						PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
+						PostMessageW(hwnd, WM_KEYDOWN, VK_ESCAPE, 0);
+					}
+				});
+			}
+			catch(...) { SetExitCode(2); Close(); return; }
+			PostMessageW(hwnd, WM_SYSCOMMAND, SC_KEYMENU, VK_SPACE);
+		}
+#endif
+		const double cpu_started = NowMs();
 		const double process_cpu = CpuMilliseconds(false), ui_cpu = CpuMilliseconds(true);
+		ObserveBenchmarkWork("cpu_counters", cpu_started, benchmark_cpu_query_max_ms_);
 		const double interval = benchmark_last_tick_ms_ > 0 ? now - benchmark_last_tick_ms_ : 0;
 		const double process_delta = process_cpu >= 0 && benchmark_process_cpu_ms_ >= 0 ? process_cpu - benchmark_process_cpu_ms_ : -1;
 		const double ui_delta = ui_cpu >= 0 && benchmark_ui_cpu_ms_ >= 0 ? ui_cpu - benchmark_ui_cpu_ms_ : -1;
@@ -932,7 +1013,9 @@ private:
 		if(duration >= 4000) {
 			const double delay = max(0.0, now - benchmark_due_);
 			benchmark_delays_.Add(delay);
+			const double stats_started = NowMs();
 			const GpuPresentationStats stats = GetGpuStats();
+			ObserveBenchmarkWork("stats_snapshot", stats_started, benchmark_stats_query_max_ms_);
 			if(delay > 50) {
 				++benchmark_latency_events_;
 				if(benchmark_latency_trace_.GetCount() < 32) {
@@ -940,6 +1023,8 @@ private:
 					                      duration, delay, interval, process_delta, ui_delta);
 					event << Format(" record_ms=%.2f enqueue_ms=%.2f snapshot_acquire_ms=%.2f snapshot_replay_ms=%.2f snapshot_present_ms=%.2f",
 					                stats.record_ms, stats.enqueue_ms, stats.acquire_ms, stats.replay_ms, stats.present_ms)
+					      << Format(" clock_wake_ms=%.2f clock_queue_ms=%.2f prior_frame_callback_ms=%.2f prior_timer_callback_ms=%.2f",
+					                stats.clock_wake_ms, stats.clock_queue_ms, stats.frame_callback_ms, stats.timer_callback_ms)
 					      << " presented=" << AsString(stats.presented_frames) << " dropped=" << AsString(stats.dropped_frames)
 					      << " pending=" << stats.pending_frames
 					      << " move_loops=" << benchmark_move_loops_ << " menu_loops=" << benchmark_menu_loops_
@@ -962,7 +1047,9 @@ private:
 				benchmark_replays_.Add(stats.acquire_ms + stats.replay_ms + stats.present_ms);
 				benchmark_last_frame_ = stats.presented_frames;
 			}
+			const double memory_started = NowMs();
 			const uint64 private_bytes = PrivateBytes();
+			ObserveBenchmarkWork("private_bytes", memory_started, benchmark_memory_query_max_ms_);
 			benchmark_private_peak_ = max(benchmark_private_peak_, private_bytes);
 			if(benchmark_soak_ && duration >= benchmark_next_memory_) {
 				benchmark_memory_.Add(private_bytes);
@@ -982,7 +1069,9 @@ private:
 		const double elapsed=max(1.0,now-benchmark_measure_started_);
 		const double distinct_hz=(scene_.GetDistinctUpdates()-benchmark_start_distinct_)*1000.0/elapsed;
 		const bool cadence=distinct_hz>=Animation::GetFPS()*.90;
-		const bool pass = cadence && IsGpuReady() && GetGpuError().IsEmpty() &&
+		const bool native_probe_entered = !benchmark_native_menu_ || benchmark_menu_loops_ > 0;
+		const bool tooltip_entered = !benchmark_tooltip_probe_ || benchmark_tooltip_seen_;
+		const bool pass = tooltip_entered && native_probe_entered && cadence && IsGpuReady() && GetGpuError().IsEmpty() &&
 		                  stats.presented_frames >= 50 && (!IsGpuRequired() || GetSoftwareFallbackCount() == 0) && p99 >= 0 && p99 <= 50 && worst <= 100;
 		uint64 early = 0, late = 0;
 		if(benchmark_soak_ && benchmark_memory_.GetCount() >= 8) {
@@ -1062,12 +1151,24 @@ private:
 		       << "gpu_required=" << (IsGpuRequired() ? 1 : 0) << "\n"
 		       << "software_fallback_count=" << AsString(GetSoftwareFallbackCount()) << "\n"
 		       << "validation_requested=" << (IsValidationRequested() ? 1 : 0) << "\n"
+		       << "tooltip_probe=" << (benchmark_tooltip_probe_ ? (tooltip_entered ? "OPENED" : "NOT_OPENED") : "OFF")
+		       << Format(" effect=%d open_ms=%.2f close_ms=%.2f\n", benchmark_tooltip_effect_, benchmark_tooltip_open_ms_, benchmark_tooltip_close_ms_)
+		       << "native_menu_probe=" << (benchmark_native_menu_ ? (native_probe_entered ? "ENTERED" : "NOT_ENTERED") : "OFF") << "\n"
 		       << "gpu_timestamp_ms=unavailable\n"
 		       << "gpu_error=" << GetGpuError() << "\n"
 		       << "responsiveness=" << (pass ? "PASS" : "FAIL") << "\n";
 		report << "latency_events_total=" << benchmark_latency_events_
 		       << " retained=" << benchmark_latency_trace_.GetCount() << " capacity=32 threshold_ms=50\n";
 		for(const String& event : benchmark_latency_trace_) report << event << '\n';
+		report << Format("host_clock_ms wake_last=%.2f wake_max=%.2f queue_last=%.2f queue_max=%.2f\n",
+		                 stats.clock_wake_ms, stats.clock_wake_max_ms, stats.clock_queue_ms, stats.clock_queue_max_ms)
+		       << Format("host_callbacks_ms frame_last=%.2f frame_max=%.2f timers_last=%.2f timers_max=%.2f\n",
+		                 stats.frame_callback_ms, stats.frame_callback_max_ms, stats.timer_callback_ms, stats.timer_callback_max_ms)
+		       << "slow_messages_total=" << benchmark_slow_messages_ << " retained=" << benchmark_message_trace_.GetCount() << " capacity=32\n";
+		for(const String& message : benchmark_message_trace_) report << message << '\n';
+		report << Format("benchmark_work_max_ms cpu_counters=%.2f stats_snapshot=%.2f private_bytes=%.2f status_refresh=%.2f\n",
+		                 benchmark_cpu_query_max_ms_, benchmark_stats_query_max_ms_, benchmark_memory_query_max_ms_, benchmark_status_max_ms_)
+		       << "slow_benchmark_work_total=" << benchmark_slow_work_ << " benchmark_tick_reentries=" << benchmark_tick_reentries_ << "\n";
 		const auto tags = UiRasterCache::GetTagBytes();
 		for(int i=0; i<tags.GetCount(); ++i)
 			report << "ui_raster_tag=" << tags.GetKey(i) << " bytes=" << AsString(tags[i]) << "\n";
@@ -1085,6 +1186,14 @@ private:
 		Close();
 	}
 
+	ToolTip benchmark_tooltip_;
+	bool benchmark_tooltip_probe_ = false, benchmark_tooltip_seen_ = false;
+	bool benchmark_tick_active_ = false;
+	int benchmark_tick_reentries_ = 0;
+	int benchmark_tooltip_effect_ = 0;
+	double benchmark_tooltip_started_ = 0, benchmark_tooltip_open_ms_ = 0, benchmark_tooltip_close_ms_ = 0;
+	std::thread benchmark_native_thread_;
+	bool benchmark_native_menu_ = false, benchmark_native_queued_ = false;
 	bool benchmark_heavy_ = false;
 	bool benchmark_soak_ = false;
 	int benchmark_seconds_ = 300;
@@ -1108,7 +1217,10 @@ private:
 	Vector<double> benchmark_delays_;
 	Vector<double> benchmark_replays_;
 	// Benchmark-only bounded diagnostics; no per-frame event file I/O.
-	Vector<String> benchmark_latency_trace_;
+	Vector<String> benchmark_latency_trace_, benchmark_message_trace_;
+	int benchmark_slow_messages_ = 0, benchmark_slow_work_ = 0;
+	double benchmark_cpu_query_max_ms_ = 0, benchmark_stats_query_max_ms_ = 0;
+	double benchmark_memory_query_max_ms_ = 0, benchmark_status_max_ms_ = 0;
 	int benchmark_latency_events_ = 0;
 	int benchmark_move_loops_ = 0, benchmark_menu_loops_ = 0;
 	double benchmark_native_loop_exit_ms_ = 0;
@@ -1143,7 +1255,7 @@ private:
 GUI_APP_MAIN
 {
 	bool capture_scenes = false;
-	bool benchmark = false;
+	bool benchmark = false, native_menu_probe = false, tooltip_probe = false;
 	bool qualification = false;
 	bool compute_demo = false;
 	bool text_controls = false;
@@ -1163,9 +1275,11 @@ GUI_APP_MAIN
 			heavy = arg == "--benchmark-load";
 		}
 		if(arg == "--benchmark-soak") { benchmark = true; heavy = true; soak = true; }
+		if(arg == "--benchmark-native-menu") { native_menu_probe = true; require_gpu = true; }
+		if(arg == "--benchmark-tooltip") { tooltip_probe = true; require_gpu = true; }
 		if(arg.StartsWith("--benchmark-seconds=")) {
 			seconds = ScanInt(arg.Mid(20));
-			if(IsNull(seconds) || seconds < 20 || seconds > 300) { SetExitCode(2); return; }
+			if(IsNull(seconds) || seconds < 20 || seconds > 900) { SetExitCode(2); return; }
 		}
 		if(arg.StartsWith("--particles=")) {
 			particles = ScanInt(arg.Mid(12));
@@ -1193,6 +1307,7 @@ GUI_APP_MAIN
 		if(arg == "--require-gpu") require_gpu = true;
 	}
 	if((qualification && benchmark) || (compute_benchmark && (qualification || benchmark))) { SetExitCode(2); return; }
+	if((native_menu_probe || tooltip_probe) && !benchmark) { SetExitCode(2); return; }
 	if(compute_size.cx && !compute_benchmark) { SetExitCode(2); return; }
 	if(capture_scenes && (qualification || benchmark || compute_benchmark || compute_demo)) { SetExitCode(2); return; }
 	if(text_controls && (qualification || benchmark || compute_benchmark || compute_demo || capture_scenes)) { SetExitCode(2); return; }
@@ -1208,7 +1323,7 @@ GUI_APP_MAIN
 		app.SetDemoScene(particles, grid);
 		if(validation) app.SetValidation();
 		if(require_gpu) app.SetRequireGpu();
-		if(benchmark) app.StartBenchmark(heavy, soak, seconds);
+		if(benchmark) app.StartBenchmark(heavy, soak, seconds, native_menu_probe, tooltip_probe);
 		if(qualification) app.StartQualification();
 		if(capture_scenes) app.StartCapture();
 		if(compute_demo && !qualification && !benchmark) app.OpenComputeOnStart();

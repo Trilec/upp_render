@@ -1,7 +1,7 @@
 {
   "schema": "windows-vulkan-current-ui-qualification-v1",
-  "recorded_at": "2026-10-22",
-  "status": "Latest diagnostic UI and two300s soaks PASS, zero stalls over50ms. Earlier361/404ms failures remain unexplained and retained; physical input/DPI/IME and Caro runtime review pending.",
+  "recorded_at": "2026-10-23",
+  "status": "Current wakeup fix qualified: Release/Debug lifecycle, whole-UI, normal/probes and both300s soaks PASS. Strict80% (8/10); physical controls/IME/DPI and current Caro pending. Historical361/404ms failures retained without attributing every event to the proven wakeup race.",
   "renderer_commit": "c1eb86f733dcf250ee14797fba0191aa732e825a",
   "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
   "ui_source_export": {
@@ -1433,5 +1433,75 @@
     "text_checks_passed": 7,
     "text_checks_total": 8,
     "open": "Prior latency spikes not explained; physical input/DPI/IME and current Caro runtime qualification."
+  },
+  "current_wakeup_fix": {
+    "evidence": "WINDOWS_VULKAN_LATENCY_INVESTIGATION.json",
+    "source_base": "993fedfb3a20102797b19dd15a058446af803a11",
+    "sources": [
+      {
+        "path": "render/RenderPlatformWin32/RenderPlatformWin32.cpp",
+        "sha256": "616984e1bb14f5df4ba1dcc3d7640ea1187ae7911594672527b715ddbd5ff141",
+        "size": 5829
+      },
+      {
+        "path": "render/RenderPlatformWin32/RenderPlatformWin32Internal.h",
+        "sha256": "099fa299953c2588c5809fb59d7c3984a0519828092149fc6a41d24aa97c81b7",
+        "size": 878
+      },
+      {
+        "path": "render/GpuRender/GpuTopWindow.cpp",
+        "sha256": "012ef8e9dfef7f9341d82510b72a49c6515b7f999115d705a52ca02273624235",
+        "size": 15462
+      },
+      {
+        "path": "render/GpuRender/RenderPresentation.h",
+        "sha256": "ae6e380c1db7291e7f427781b859719f50710bcf24f1ccc7aeb165ac909853b8",
+        "size": 3925
+      },
+      {
+        "path": "examples/GpuUiGallery/main.cpp",
+        "sha256": "c3536e23a90f857a1716617c9595dca6deefa81412c97675b232b14a408c6f30",
+        "size": 59215
+      },
+      {
+        "path": "tests/GpuTopWindowPresentationTest/main.cpp",
+        "sha256": "dde8d4e43b0b38bf81472ba8fef64786f408f19a7a8bad338c3ab48d5f8033f0",
+        "size": 21382
+      },
+      {
+        "path": "tests/GpuTopWindowPresentationTest/GpuTopWindowPresentationTest.upp",
+        "sha256": "13b9531c8d76204c639967e9730b5333a1a9ca344b9e55dca8877c460b797411",
+        "size": 160
+      }
+    ],
+    "binary": {
+      "path": "build/GpuUiGalleryWakeFixed.exe",
+      "sha256": "2d45c0120f073d6d26d71d1bcff5910b570a5fccdfd951ef56cf8d1467a9f813",
+      "size": 8904192
+    },
+    "acceptance": {
+      "passed": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9
+      ],
+      "total": 10,
+      "percent": 80,
+      "remaining": [
+        "Gate7: physical keyboard/mouse, actual OS IME candidate interaction and physical monitor100/150/200% DPI",
+        "Gate10: final current whole-UI human visual/input/AA acceptance"
+      ],
+      "clean_machine": "Current exact binary not yet qualified on Caro."
+    },
+    "runtime_zip": {
+      "path": "build/upp-render-ui-2026-10-23-wakeup.zip",
+      "sha256": "798ce03a6109a709b91a0058eb8f5d8acaa782d2d7fab3d7536501f38340e096",
+      "size": 3875443
+    }
   }
 }

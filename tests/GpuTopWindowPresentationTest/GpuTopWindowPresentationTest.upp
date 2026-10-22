@@ -2,7 +2,8 @@ uses
 	Core,
 	CtrlLib,
 	GpuRender,
-	RenderVulkan;
+	RenderVulkan,
+	RenderPlatformWin32;
 
 uses(CFONTS)
 	RenderFontWin32;

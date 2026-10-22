@@ -32,6 +32,17 @@ struct GpuTopWindow::Impl {
 		result.record_max_ms = record_max_ms;
 		result.enqueue_ms = enqueue_ms;
 		result.enqueue_max_ms = enqueue_max_ms;
+		result.frame_callback_ms = frame_callback_ms;
+		result.frame_callback_max_ms = frame_callback_max_ms;
+		result.timer_callback_ms = timer_callback_ms;
+		result.timer_callback_max_ms = timer_callback_max_ms;
+#ifdef PLATFORM_WIN32
+		const auto timing = frame_clock.GetTiming();
+		result.clock_wake_ms = timing.wake_ms;
+		result.clock_wake_max_ms = timing.wake_max_ms;
+		result.clock_queue_ms = timing.queue_ms;
+		result.clock_queue_max_ms = timing.queue_max_ms;
+#endif
 		return result;
 	}
 	struct PendingFrame {
@@ -268,6 +279,9 @@ struct GpuTopWindow::Impl {
 	// UI-thread diagnostics, cumulative for this window lifetime.
 	double record_ms = 0, record_max_ms = 0;
 	double enqueue_ms = 0, enqueue_max_ms = 0;
+	double frame_callback_ms = 0, frame_callback_max_ms = 0;
+	double timer_callback_ms = 0, timer_callback_max_ms = 0;
+	bool frame_callback_active = false, timer_callback_active = false;
 	bool frame_clock_requested = false;
 #ifdef PLATFORM_WIN32
 	Win32GpuFrameClock frame_clock;
@@ -359,14 +373,32 @@ LRESULT GpuTopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 	if(message == Win32GpuFrameClock::Message()) {
 		if(impl && impl->frame_clock.Consume(wParam)) {
 			Ptr<GpuTopWindow> alive(this);
-			if(IsShown() && !IsIconic(GetHWND())) {
+			if(IsShown() && !IsIconic(GetHWND()) && !impl->frame_callback_active) {
+				impl->frame_callback_active = true;
 				auto callback = WhenGpuFrame;
 				const double now = std::chrono::duration<double, std::milli>(
 					std::chrono::steady_clock::now().time_since_epoch()).count();
 				callback(now);
+				if(alive && alive->impl) {
+					auto& d = *alive->impl;
+					d.frame_callback_active = false;
+					d.frame_callback_ms = std::chrono::duration<double, std::milli>(
+						std::chrono::steady_clock::now().time_since_epoch()).count() - now;
+					d.frame_callback_max_ms = max(d.frame_callback_max_ms, d.frame_callback_ms);
+				}
 			}
-			if(alive && alive->IsOpen())
+			if(alive && alive->impl && alive->IsOpen() && !alive->impl->timer_callback_active) {
+				alive->impl->timer_callback_active = true;
+				const auto started = std::chrono::steady_clock::now();
 				TimerProc(msecs()); // Preserve ordinary U++ timers in their original clock domain.
+				if(alive && alive->impl) {
+					auto& d = *alive->impl;
+					d.timer_callback_active = false;
+					d.timer_callback_ms = std::chrono::duration<double, std::milli>(
+						std::chrono::steady_clock::now() - started).count();
+					d.timer_callback_max_ms = max(d.timer_callback_max_ms, d.timer_callback_ms);
+				}
+			}
 		}
 		return 0;
 	}

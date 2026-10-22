@@ -10,6 +10,8 @@ struct Win32GpuFrameClock::Impl {
 	HANDLE timer = nullptr, stop = nullptr;
 	std::thread thread;
 	std::atomic<bool> pending { false }, running { false };
+	std::atomic<int64> wake_ns { 0 }, wake_max_ns { 0 }, posted_ns { 0 };
+	int64 queue_ns = 0, queue_max_ns = 0; // UI thread only
 	uintptr_t generation = 0;
 	bool active = false;
 };
@@ -44,6 +46,8 @@ bool Win32GpuFrameClock::Start(HWND hwnd, int pulse_hz)
 	const auto period = std::chrono::nanoseconds(1000000000LL / pulse_hz);
 	const UINT message = Message();
 	const uintptr_t generation = d.generation;
+	d.wake_ns = 0; d.wake_max_ns = 0; d.posted_ns = 0;
+	d.queue_ns = d.queue_max_ns = 0;
 	d.running.store(true);
 	try {
 		d.thread = std::thread([&d, hwnd, period, message, generation] {
@@ -56,8 +60,17 @@ bool Win32GpuFrameClock::Start(HWND hwnd, int pulse_hz)
 				delay.QuadPart = -max<int64>(1, (remaining + 99) / 100);
 				if(!SetWaitableTimer(d.timer, &delay, 0, nullptr, nullptr, FALSE)) break;
 				if(WaitForMultipleObjects(2, handles, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) break;
-				if(!d.pending.exchange(true) && !PostMessageW(hwnd, message, (WPARAM)generation, 0))
-					d.pending.store(false);
+				const auto woke = Clock::now();
+				const int64 late = max<int64>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(woke - due).count());
+				d.wake_ns.store(late);
+				d.wake_max_ns.store(max(d.wake_max_ns.load(), late));
+				if(!d.pending.exchange(true)) {
+					d.posted_ns.store(std::chrono::duration_cast<std::chrono::nanoseconds>(woke.time_since_epoch()).count());
+					// A posted pulse inspected by PeekMessage becomes "old" input and can be
+					// stranded by MsgWaitForMultipleObjects. A nonqueued async notification
+					// is dispatched by Peek/GetMessage and never waits for the UI callback.
+					if(!SendNotifyMessageW(hwnd, message, (WPARAM)generation, 0)) d.pending.store(false);
+				}
 				due += period;
 				if(due <= Clock::now()) due = Clock::now() + period; // skip missed pulses
 			}
@@ -86,7 +99,24 @@ bool Win32GpuFrameClock::Consume(WPARAM generation)
 {
 	auto& d = *impl;
 	if(!d.active || (uintptr_t)generation != d.generation) return false;
-	return d.pending.exchange(false);
+	// Read the timestamp while pending is still true: the producer cannot replace it.
+	const int64 posted = d.posted_ns.load();
+	if(!d.pending.exchange(false)) return false;
+	const int64 now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()).count();
+	d.queue_ns = posted > 0 ? max<int64>(0, now - posted) : 0;
+	d.queue_max_ns = max(d.queue_max_ns, d.queue_ns);
+	return true;
+}
+Win32GpuFrameClock::Timing Win32GpuFrameClock::GetTiming() const
+{
+	const auto& d = *impl;
+	Timing timing;
+	timing.wake_ms = d.wake_ns.load() / 1000000.0;
+	timing.wake_max_ms = d.wake_max_ns.load() / 1000000.0;
+	timing.queue_ms = d.queue_ns / 1000000.0;
+	timing.queue_max_ms = d.queue_max_ns / 1000000.0;
+	return timing;
 }
 
 bool BuildWin32GpuNativeWindowDesc(HWND hwnd, GpuNativeWindowDesc& out, String& error)

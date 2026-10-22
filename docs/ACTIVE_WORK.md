@@ -1,46 +1,48 @@
 # Active Work
 
-## Current Windows / Vulkan checkpoint — 2026-10-22
+## Current Windows / Vulkan checkpoint — 2026-10-23
 
-**7 of 10 current acceptance gates pass (70%):1,2,3,4,5,6,8.**
-This counts the ten acceptance criteria below, not coding effort.
+**8 of10 current acceptance gates pass (80%):1,2,3,4,5,6,8,9.**
+This counts complete acceptance criteria, not coding effort.
 
-The whole-Ui root, modal workspaces, compute dialogs, file browser, full colour
-picker, micro picker and text composition now pass automated Vulkan qualification.
-The catalogue passes224 drawing cases at standard scale and224 at doubled
-application units. Native physical monitor DPI remains a separate review.
+A renderer-owned Windows wakeup race is reproduced and fixed. A coalesced
+PostMessage pulse could become old input after PeekMessage and leave
+MsgWaitForMultipleObjects waiting for new input. Independent regression:
+202ms timeout before;2.2ms next wake after SendNotifyMessage. One pending pulse,
+generation protection and stop/join remain; separate callback guards prevent
+nested reentry. Core and Animation remain read-only.
 
-Shared DirectWrite/system ICU layout is implemented for complex scripts, rich
-text, caret/selection/hit-testing and grapheme editing. Native Windows IME
-composition is routed by renderer-owned code. Release and Debug pass64 Vulkan
-pixel,37 editor,36 styled,27 document,38 IME and80 font-layer checks.
-Supported colour fonts:COLRv0 and embedded PNG/JPEG/TIFF/BGRA. SVG colour glyphs
-and COLRv1 paint trees are not implemented.
+Release/Debug lifecycle and current whole-Ui automation pass, including browser,
+full/micro pickers, native composition, three workspace and three compute cycles.
+Current five-minute512/grid soaks both pass:120distinctHz; validation timer
+max19.20ms, production18.95ms; memory growth below32MiB; no warm CPU glyph/vector
+rasters, GDI font requests or fallback; final ownership ZERO.
+4K compute20s retest119.99FPS, callback max25.45ms; no historical-cause claim.
 
-Renderer source c1eb86f733dcf250ee14797fba0191aa732e825a and committed Ui
-f88aab5150ca7f375b8c4a61a01da57832c82e03 produce the preserved final candidate.
-Normal and512-particle/grid load sustain120 distinct animation updates/s.
-Both full300s runs passed memory/cadence, but the current sustained responsiveness
-gate is reopened: maximum timer delays361ms with validation and404.19ms without
-validation exceed the unchanged100ms gate. Production private memory peaks at
-179,949,568B with1,286,144B early/late growth. No software fallback, CPU glyph/vector
-rasters or legacy GDI fonts; final tracked native ownership is zero.
-The separate diagnostic build then passed both production and validation-enabled300s runs:120 distinct Hz,maximum timer21.23/19.30ms and under1MiB early/late growth. Neither reproduced a stall above50ms. The earlier delays remain unexplained; no scheduling fix is claimed.
+Exact sources, binaries, jobs, before/after and reports:
+[WINDOWS_VULKAN_LATENCY_INVESTIGATION.json](WINDOWS_VULKAN_LATENCY_INVESTIGATION.json).
+[Qualification summary](VULKAN_UI_FINISHING.md).
+Original361/404ms failures are retained in
+[WINDOWS_VULKAN_FINAL_QUALIFICATION.json](WINDOWS_VULKAN_FINAL_QUALIFICATION.json);
+their missing trace prevents attributing every old event to the reproduced bug.
 
-Remaining:resolve sustained maximum-delay failure; physical controls/AA/monitor
-DPI and real OS IME candidate interaction; current Caro runtime qualification.
-Caro transfer is awaiting owner review of a changed approved Robocopy hash.
-The current runtime ZIP and exact failed/passed reports are recorded in
-[WINDOWS_VULKAN_FINAL_QUALIFICATION.json](WINDOWS_VULKAN_FINAL_QUALIFICATION.json).
-Recover jobs and latest state from
-[WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md).
+Current runtime build/upp-render-ui-2026-10-23-wakeup.zip contains the tested exe,
+README,SHA256SUMS and a matching AGENT_TASK. Share folder:
+F:/networkshare/upp-render-ui-2026-10-23-wakeup.
+Current Caro transfer/run remains unqualified; changed Robocopy identity still
+needs owner review. No compiler or Vulkan SDK installation is needed there.
 
-Work on main; local commits only. Core and Animation remain read-only.
-Unrelated Ui changes are preserved. WebGPU/browser, Linux and Metal follow this
-Windows milestone; the native wgpu experiment does not replace Vulkan completion.
+Gates7/10 remain:physical keyboard/mouse/AA, actual OS IME candidates and monitor
+DPI100/150/200%. Existing automated input/doubled units are not those checks.
+Text implementation checklist remains7/8 (87.5%) pending actual IME/input/DPI.
 
-The material below preserves earlier milestones and the unchanged acceptance
-criteria. Historical passing soaks do not override the current failed run.
+Candidate uses pinned Ui main f88aab5. Independent Ui main dc789c1 theme/gallery
+work is clean and preserved, not silently substituted into the tested binary.
+Work on main; local commits only. WebGPU/Metal/Linux and OCIO/video follow this
+Windows milestone. Recover from [WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md).
+
+The material below preserves earlier checkpoints; later current evidence above
+supersedes earlier statuses while retaining their historical results.
 
 ## Starting checkpoint
 

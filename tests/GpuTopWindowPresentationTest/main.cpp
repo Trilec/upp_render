@@ -1,6 +1,9 @@
 #include <CtrlLib/CtrlLib.h>
 #include <GpuRender/GpuRender.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
+#include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
+#include <chrono>
+#include <thread>
 
 using namespace Upp;
 
@@ -13,6 +16,56 @@ static bool Check(bool condition, const char *message)
 	return condition;
 }
 
+struct WakeRaceContext {
+	Win32GpuFrameClock clock;
+	WNDPROC previous = nullptr;
+	int received = 0;
+};
+static LRESULT CALLBACK WakeRaceProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+	auto *ctx = reinterpret_cast<WakeRaceContext *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+	if(ctx && message == Win32GpuFrameClock::Message()) {
+		if(ctx->clock.Consume(wparam)) ++ctx->received;
+		return 0;
+	}
+	return ctx && ctx->previous ? CallWindowProcW(ctx->previous, hwnd, message, wparam, lparam)
+	                           : DefWindowProcW(hwnd, message, wparam, lparam);
+}
+static bool CheckObservedInputWake()
+{
+	bool passed = false;
+	double waited_ms = -1;
+	int delivered_before_wait = 0;
+	DWORD wait_result = WAIT_FAILED;
+	// A separate native message queue has no U++ utility timer to mask a lost wake.
+	std::thread probe([&] {
+		WakeRaceContext ctx;
+		HWND hwnd = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 1, 1, HWND_MESSAGE,
+		                           nullptr, GetModuleHandleW(nullptr), nullptr);
+		if(!hwnd) return;
+		ctx.previous = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
+		SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&ctx));
+		SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WakeRaceProc));
+		if(ctx.clock.Start(hwnd, 240)) {
+			::Sleep(30); // let one coalesced notification become pending
+			MSG message{};
+			PeekMessageW(&message, hwnd, Win32GpuFrameClock::Message(),
+			             Win32GpuFrameClock::Message(), PM_NOREMOVE);
+			delivered_before_wait = ctx.received;
+			const auto started = std::chrono::steady_clock::now();
+			wait_result = MsgWaitForMultipleObjects(0, nullptr, FALSE, 200, QS_ALLINPUT);
+			waited_ms = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - started).count();
+			passed = delivered_before_wait > 0 && wait_result == WAIT_OBJECT_0 && waited_ms < 100;
+			ctx.clock.Stop();
+		}
+		DestroyWindow(hwnd);
+	});
+	{ GuiUnlock unlock; probe.join(); }
+	Cout() << "observed_input_wake delivered_before_wait=" << delivered_before_wait
+	       << " wait_result=" << AsString(wait_result) << " waited_ms=" << waited_ms << EOL;
+	return Check(passed, "an observed clock notification must not strand the UI waiting for new input");
+}
 static void PumpEvents(int count)
 {
 	for(int i = 0; i < count; ++i) {
@@ -158,6 +211,7 @@ GUI_APP_MAIN
 {
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	bool ok = true;
+	ok &= CheckObservedInputWake();
 
 	{
 		RootPresentationWindow win;
@@ -307,6 +361,13 @@ GUI_APP_MAIN
 		            win.GetGpuError().IsEmpty(),
 		            "async root must present a recorded control tree");
 		ok &= Check(win.IsFrameClockActive(), "async animated root must start its precise host clock");
+		// A queued clock pulse must remain observable when the UI thread is blocked.
+		// The worker keeps waking without adding an unbounded message backlog.
+		Sleep(80);
+		PumpEvents(4);
+		const auto delayed = win.GetGpuStats();
+		ok &= Check(delayed.clock_queue_max_ms >= 20 && delayed.clock_wake_ms >= 0,
+		            "clock diagnostics distinguish a blocked UI queue from producer wake timing");
 		const auto cold = win.GetGpuStats();
 		ok &= Check(!cold.adapter_name.IsEmpty() && cold.first_frame_cpu_ms >= 0 &&
 		            cold.first_renderer.display_op_count > 0,
@@ -425,6 +486,27 @@ GUI_APP_MAIN
 		ok &= Check(!window && callbacks==8 && monotonic,
 		            "precise callbacks have monotonic time and may destroy their window safely");
 		window.Clear(); PumpEvents(20);
+	}
+
+
+	{
+		RootPresentationWindow win;
+		win.SetRequireGpu().SetFrameClock();
+		int depth = 0, max_depth = 0, callbacks = 0;
+		win.WhenGpuFrame = [&](double) {
+			++depth; max_depth = max(max_depth, depth); ++callbacks;
+			if(callbacks == 1)
+				for(int i = 0; i < 12; ++i) {
+					Sleep(3);
+					Ctrl::ProcessEvents(); // sent notifications arrive during nested pumps
+				}
+			--depth;
+		};
+		win.Open();
+		for(int i = 0; i < 500 && callbacks < 8; ++i) PumpEvents(1);
+		ok &= Check(callbacks >= 8 && max_depth == 1,
+		            "nested message pumps must not recursively invoke the same frame callback");
+		win.Close(); PumpEvents(20);
 	}
 
 	auto final_diag = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();

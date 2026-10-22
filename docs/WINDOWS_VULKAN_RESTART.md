@@ -1,64 +1,90 @@
-# Windows / Vulkan continuation — 2026-10-22
+# Windows / Vulkan continuation — 2026-10-23
 
-## Scope and boundaries
+## Current qualified checkpoint
 
-Complete the Windows whole-Ui Vulkan application, efficient drawing/scheduling,
-all controls/dialogs and the full native text/editing integration chosen by the
-user. Work on main; local commits authorized; no push/publish. Core
-E:/upp-18468/uppsrc and Animation E:/apps/github/upp_animation are READ ONLY.
-Use KlickCurt Patch for mutations and Execute for builds/runs/Git changes.
-Preserve foreign Ui edits.
+- Strict acceptance8/10 (80%):1,2,3,4,5,6,8,9. Remaining7/10 require physical
+  controls/AA, OS IME candidate interaction and physical monitor DPI.
+- Renderer main base993fedfb3a20102797b19dd15a058446af803a11 plus exact file hashes
+  in WINDOWS_VULKAN_LATENCY_INVESTIGATION.json. Local commit only; no push/publish.
+- Ui tested export build/qualified-ui-main-text:f88aab5150ca7f375b8c4a61a01da57832c82e03.
+  Independent Ui main advanced to dc789c1 (theme/title-card/gallery), clean.
+  Do not silently substitute it into the qualified candidate.
+- External E:/upp-18468/uppsrc and E:/apps/github/upp_animation READ ONLY.
+- Proven lost wake:PostMessage pulse became old input after PeekMessage; ordinary
+  MsgWaitForMultipleObjects ignored it, while one-pending coalescing suppressed
+  fresh messages. Regression timed out202ms before fix; next wake2.2ms after.
+- Fix:SendNotifyMessageW (different clock/UI threads), scalar generation, one
+  pending notification, stop/join before HWND destruction; separate frame/timer
+  callback guards. No external Core/Animation changes.
+- Release exec-BDC9D3621E89C07554982FFAD282D8F7 and Debug
+  exec-905445ADAA581DDE64B9AA6CC31E9D6C PASS lifecycle/regression, nested pumps,
+  callback deletion and final native ZERO.
+- Current build/GpuUiGalleryWakeFixed.exe:8,904,192B,
+  SHA2d45c0120f073d6d26d71d1bcff5910b570a5fccdfd951ef56cf8d1467a9f813.
+- Whole-Ui exec-3A030AFB66F69785AB31411F4DAED26A PASS browser/full/micro/text,
+  three workspace/three compute cycles, shared device, GDI/fallback0, finalZERO.
+- Current300s validation exec-07B46409F9D4E84F06A867A3D13461CF:
+  120distinctHz,118.85presentedFPS,CPU6.14/13.74ms,timermax19.20ms,
+  peak224542720B,early/late223115264/220366848B.
+- Current300s production exec-2458C1E479F51F7E8FE1FDB20BDB5895:
+  120distinctHz,123.85presentedFPS,CPU3.75/8.36ms,timermax18.95ms,
+  peak208199680B,early/late193324032/203960320B.
+- Both PASS unchanged thresholds,zero measured >50ms events,warm CPU rasters/
+  GDI/fallback0,one reused pool,finalZERO. No timed benchmark currently running.
+-4K compute20s exec-2E5BB82C49B69ED6ECF5BAF7AB742E8F PASS119.99FPS,
+  CPU2.96/4.96ms,callbackmax25.45ms. Compute root does not use new clock;
+  a short pass does not prove every historical outlier fixed.
+- Fresh Vulkan root/dialog light/dark readback PASS; images inspected. This is
+  offscreen replay, not physical scanout/keyboard/DPI acceptance.
 
-## Current result — recover here
+## Evidence and limits
 
-- Renderer base c1eb86f733dcf250ee14797fba0191aa732e825a; Ui main f88aab5150ca7f375b8c4a61a01da57832c82e03. Bitmap payload fix is committed. Demo diagnostics and qualification evidence are committed at c74d1e589673edf001def198bc43a61213f98ba1.
-- Shared DirectWrite/ICU layout, rich text, native IME composition, GPU glyph coverage and COLRv0/embedded bitmap fonts are implemented. Release/Debug pass64GPU/37editor/36style/27document/38IME/80font checks. SVG colour glyphs/COLRv1 paint trees excluded.
-- Seven clean-main regressions,224 standard/224 doubled-application-scale catalogue cases pass. Physical monitor DPI is not certified.
-- Current diagnostic build/GpuUiGalleryLatency.exe:8,890,368B,SHA b4a20e21e44b4dc3a71d6de61c7683391b64de20c9b6b0ab7409a55641134d49.
-  Demo source SHA61f066ecf2bbf4c38dcda8073fbd196f3a4e360316d7863329eecaf2f1b900fe.
-- Build exec-219F25937F9CD7FAE11240B32E80042D; whole-Ui run exec-EBB9FF90B29CD009E0E50293F35C75B9 PASS.
-- Diagnostic production300s exec-0EE9981A861D6E6E11F788FFD44E7611 PASS:120distinctHz,121.82presentedFPS,CPUmedian/p993.73/8.26ms,timermax21.23ms,peak180785152B,early/late179234816/180143104B.
-- Diagnostic validation-on300s exec-EA0315E4D0CC761F2AD3042371D56A1B PASS:120distinctHz,119.31presentedFPS,CPU5.88/13.29ms,timermax19.30ms,peak206610432B,early/late205028352/205964288B.
-- Both record zero latency events above50ms. Warm CPU glyph/vector raster/upload/helper layers/fallback/GDI requests0; final tracked native ownership ZERO.
-- IMPORTANT: Earlier exact c1eb86f candidate completed two300s runs that passed cadence/memory but FAILED max timer delay361.00ms validation-on and404.19ms off. Both failures are retained in WINDOWS_VULKAN_FINAL_QUALIFICATION.json. Cause remains unconfirmed; diagnostics did not change renderer behavior or thresholds. Do not claim a proven fix or erase failures.
-- User confirmed closing the much earlier interrupted soak:INCOMPLETE/user-closed, not crash/pass.
-- No benchmark is now running. Committed-main rebuild exec-C5C09580E27711BB4C729DED807E5E3F is up to date and has the identical tested executable hash. Runtime below is ready. Next:current controls human review and owner-approved Caro copy/run; retain prior latency question.
-- CURRENT runtime ZIP build/upp-render-ui-2026-10-22-qualification.zip,3,871,581B,SHA462135402b83e150b49f7cbd55827857e5acbba49b3c69c21728292141586ef5.
-- CURRENT extracted share folder F:/networkshare/upp-render-ui-2026-10-22-qualification contains GpuUiGallery.exe (same tested hash),README.txt,SHA256SUMS.txt. Share extraction exec-EFC24246635D4B9293DB6E58F7C77E78 and independent readback exec-12D9B4CDEB70B1E925B690B21FE7C093 succeeded; actual delivered executable hash verified.
-- Dashboard revision24:70% strict acceptance,87.5% text checklist. Current diagnostic soaks PASS; gate9 remains open for unexplained prior latency. Physical/input gates7/10 remain open.
+- WINDOWS_VULKAN_LATENCY_INVESTIGATION.json contains exact before/after jobs,
+  binaries/sources,reports,native-menu/tooltip probes and runtime metadata.
+- WINDOWS_VULKAN_FINAL_QUALIFICATION.json preserves older361/404ms FAILED soaks.
+  They lacked clock tracing; do not retroactively claim all had the same cause.
+- Earlier user-closed soak is INCOMPLETE,not a crash/pass.
+- Seven baseline regressions,224 standard/224 doubled-unit catalogue and full
+  native text Release/Debug matrix remain preserved. Text checklist7/8 (87.5%).
+- Colour fonts:COLRv0/embedded bitmap supported; SVG glyphs/COLRv1 excluded.
+- Cache payloads are not total COM/driver/process memory or VRAM measurements.
 
-## Acceptance still open
+## Runtime delivery and Caro
 
-- Explain/resolve prior latency spikes or obtain the pending interaction evidence. The user's move/resize/menu question is pending.
-- Physical controls/AA/100/150/200% monitor DPI and actual OS IME candidate interaction. Existing manual questions have no pass answer. Earlier180s timeout is not acceptance.
-- Current clean-machine Caro qualification. Transfer tool rejected EXECUTABLE_CHANGED; owner approval question pending. Do not auto-refresh identity or use another route to bypass that rejected tool.
-- Current successful diagnostic runs must be reported alongside the earlier failures. Physical/input gates and unresolved repeatability remain open; see latest dashboard revision above.
+- Current ZIP build/upp-render-ui-2026-10-23-wakeup.zip:3,875,443B,
+  SHA798ce03a6109a709b91a0058eb8f5d8acaa782d2d7fab3d7536501f38340e096.
+- Four files:GpuUiGallery.exe,README.txt,SHA256SUMS.txt,AGENT_TASK.txt.
+  Instructions use this actual executable and preserve both soak reports;
+  production/validation commands overwrite the same default report.
+- Share folder F:/networkshare/upp-render-ui-2026-10-23-wakeup. Independent
+  readback verification is recorded in the investigation manifest when complete.
+- KlickCaro DESKTOP-ASUSPN6,Render project-ED940563C935,
+  C:/GitHub/upp_render. Current build/run and older candidate exe absent.
+- Runtime runtime-314D887CC5B0:build/run/*.exe,max600000ms. No compiler/SDK needed.
+- Robocopy file-transfer-8B6A91A31C5F saved805d720d...,installed84abbd32...
+  was rejected EXECUTABLE_CHANGED. Owner must review/save changed identity.
+  Do not auto-refresh hashes or bypass the rejected executable.
+- UNC \\\\DESKTOP-GFX1\\networkshare maps Curt F:/networkshare; no F: on Caro.
+  No current Caro acceptance claimed. Do not reuse obsolete2026-10-04/22 tasks.
 
-## Sources, assembly and tools
+## Tools, source and next step
 
-- KlickCurt host DESKTOP-GFX1, Render project-028DDA9C9C89,workspace folder-D804EA49C6B4.
-- Committed Ui export build/qualified-ui-main-text (f88aab5),archive SHA4befa3631816a6c75833cc26f7bbcf8ce2c9d0e1a8802456a30fde025873a0c1;796 safe entries. Do not edit export.
-- Gallery nests:E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc. Tests replace examples with tests.
-- Method E:/apps/github/upp_render/CLANGx64_Vulkan.bm;cache build/cache-qualified-main-text;-r +GUI,GPUUI,CFONTS. Focused Debug uses existing cache-directwrite-text-debug and original Ui nest; its foreign working edits are disclosed in evidence.
-- One Execute per project. Hash actual exe before tool-7A0B237BB3E4. Recover lost starts from retained jobs; never blindly replay.
-- No // comments in .upp. No uses(GPUUI)RenderCore in Ui.upp:inactive uses still break native assemblies without renderer nests.
-- Existing pre-diagnostic ZIP build/upp-render-ui-2026-10-22.zip SHA f969d30872fecdbfb40ce547bcc9cfeac5d4b3c579787942d0140d1010c0687f is a comparison artifact, NOT the current diagnostic handoff. Do not issue obsolete2026-10-04 ZIP instructions.
+KlickCurt DESKTOP-GFX1:Render project-028DDA9C9C89,workspace folder-D804EA49C6B4.
+Patch for mutations,Execute for builds/runs/Git. One Execute per project.
+Hash actual exe before runtime. Recover lost starts from retained jobs,never replay.
+Keep main only; local commits with description, no push or publication.
 
-## Caro
+Gallery nests:E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,
+E:/apps/github/upp_render/build/qualified-ui-main-text,
+E:/apps/github/upp_animation,E:/upp-18468/uppsrc (one comma-separated argument).
+Tests replace examples with tests.
+Method E:/apps/github/upp_render/CLANGx64_Vulkan.bm.
+Release cache build/cache-qualified-main-text,-r +GUI,GPUUI,CFONTS.
+Lifecycle Release used +GUI,CFONTS; Debug cache-directwrite-text-debug
++GUI,GPUUI,CFONTS (Debug default,non-BLITZ).
 
-KlickCaro host DESKTOP-ASUSPN6,Render project-ED940563C935,root C:/GitHub/upp_render.
-Runtime runtime-314D887CC5B0 covers build/run/*.exe,max600s. No compiler/SDK needed.
-Robocopy file-transfer-8B6A91A31C5F saved805d720d...,installed
-84abbd32d074881164b8cf6b30593828e53f368c3854854aefe5b3cf06d3e356.
-Owner must review/save changed identity. UNC share \\\\DESKTOP-GFX1\\networkshare
-maps approved Curt F:/networkshare; F: does not exist on Caro. Native ZIP/copy grants
-are ordinary programs, not Patch transactions. Validate trusted archives, avoid
-overwriting unknown targets, independently hash delivered files.
-
-## Preserve
-
-Foreign Ui/UiThemeOlive.h,Ui/UiTitleCard.cpp/.h,Utilities/UiThemeTests/ThemeSurface.cpp,
-docs/01_UI_CONTROLS_GUIDE.md,docs/02_UI_THEME_GUIDE.md,docs/ACTIVE_WORK.md and
-Snapshot_FileBrowser.jpg. Read fresh status; stage only owned paths.
-WebGPU,Metal,Linux,OCIO and asynchronous video remain later work. Do not claim
-particle tests resolve the preserved CineView4K callback outlier.
+Finish physical/current-runtime acceptance. If new latency occurs,retain exact
+binary/report/interaction,inspect wake vs queue vs callback CPU separately.
+Do not weaken gates or blame computer use without evidence.
+No // comments in .upp; no inactive uses(GPUUI)RenderCore in Ui.upp.
+WebGPU/Metal/Linux and OCIO/async video remain subsequent work.

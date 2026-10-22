@@ -26,6 +26,12 @@ struct GpuPresentationStats {
 	// Maxima include warmup and span the owning window lifetime.
 	double record_ms = 0, record_max_ms = 0;
 	double enqueue_ms = 0, enqueue_max_ms = 0;
+	// Host wake vs. UI queue wait and callback work; zero without a root clock.
+	// Lifetime maxima include warmup; samples are not synchronized with GPU timings.
+	double clock_wake_ms = 0, clock_wake_max_ms = 0;
+	double clock_queue_ms = 0, clock_queue_max_ms = 0;
+	double frame_callback_ms = 0, frame_callback_max_ms = 0;
+	double timer_callback_ms = 0, timer_callback_max_ms = 0;
 	double acquire_ms = 0;
 	double replay_ms = 0;
 	double present_ms = 0;
