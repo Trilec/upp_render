@@ -3,7 +3,7 @@
 ## Current authoritative checkpoint
 
 - Main base1d85294 plus exact11 source hashes in current_candidate of
-  WINDOWS_VULKAN_CARO_QUALIFICATION.json. Commit all16 owned files after checks.
+  WINDOWS_VULKAN_CARO_QUALIFICATION.json. Source/evidence commit7fc8e6a4ee61da43625e3e0ea05b48dd9f8711b9.
 - Final Release build/GpuUiGalleryWindowsV1Final.exe,8,911,872B,
   SHA65f771f7f1d2f7a1b4b7c451cce9bebec5ce9945bc842c44d17125bc703c683e.
 - Release UI exec-097220385C651C781847A814B923CBDE PASS15.375s.
@@ -53,7 +53,7 @@ Current Release/Debug/Caro fullUI,current Caro compute,final RTX300s and deliver
 all PASS. Final archive/runtime paths and full hashes below. No test running.
 Keep strict80%:physical AA/input/IME/monitorDPI not inferred from automation.
 Caro visible300s remains unqualified; do not repeat minimized runs automatically.
-Commit16 owned source/evidence files locally on main; no push/publish.
+Source/evidence commit7fc8e6a4ee61da43625e3e0ea05b48dd9f8711b9 is complete on main; no push/publish.
 
 Build nests:
 E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc

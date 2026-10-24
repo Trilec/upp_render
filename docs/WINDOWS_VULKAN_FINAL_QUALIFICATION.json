@@ -1626,6 +1626,7 @@
       "files_scanned": 1,
       "bytes_scanned": 1048576,
       "bytes_hashed": 3884676
-    }
+    },
+    "renderer_source_commit": "7fc8e6a4ee61da43625e3e0ea05b48dd9f8711b9"
   }
 }
