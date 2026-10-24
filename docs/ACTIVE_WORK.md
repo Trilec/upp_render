@@ -1,45 +1,48 @@
 # Active Work
 
-## Current Windows / Vulkan checkpoint — 2026-10-23
+## Current Windows/Vulkan checkpoint — 2026-10-24
 
-**8 of10 current acceptance gates pass (80%):1,2,3,4,5,6,8,9.**
-This counts complete acceptance criteria, not coding effort.
+**8/10 strict acceptance gates (80%); native text7/8 (87.5%).**
+Current automated functional checks pass; physical AA/input/OS IME/monitor DPI
+acceptance remains distinct from generated input. Owner confirms inspector,
+workspace and animation worked and closed normally.
 
-A renderer-owned Windows wakeup race is reproduced and fixed. A coalesced
-PostMessage pulse could become old input after PeekMessage and leave
-MsgWaitForMultipleObjects waiting for new input. Independent regression:
-202ms timeout before;2.2ms next wake after SendNotifyMessage. One pending pulse,
-generation protection and stop/join remain; separate callback guards prevent
-nested reentry. Core and Animation remain read-only.
+Final Release: build/GpuUiGalleryWindowsV1Final.exe,8,911,872B,
+SHA65f771f7f1d2f7a1b4b7c451cce9bebec5ce9945bc842c44d17125bc703c683e.
+FullUI Release validation15.375s, Debug validation20.375s and Caro production
+13.078s PASS. Actual inspector colour accept/cancel is now included, along with
+three workspace/compute cycles, browser, full/micro pickers and text composition.
+All current reports show GDI0/fallback0/final native ownershipZERO.
 
-Release/Debug lifecycle and current whole-Ui automation pass, including browser,
-full/micro pickers, native composition, three workspace and three compute cycles.
-Current five-minute512/grid soaks both pass:120distinctHz; validation timer
-max19.20ms, production18.95ms; memory growth below32MiB; no warm CPU glyph/vector
-rasters, GDI font requests or fallback; final ownership ZERO.
-4K compute20s retest119.99FPS, callback max25.45ms; no historical-cause claim.
+Corrected renderer-owned timer starvation and invalid demo timer IDs. Found an
+additional real drawing gap: Sizeable().Zoomable() editor dialogs loseWS_POPUP
+and escaped the transient GPU hook. Actual inspector activation reproduced
+surface1 and242 GDI requests; corrected owned-TopWindow inheritance gives two
+surfaces/one device and GDI0. Default nonmaximizable dialog probe had passed and
+was not representative; that history remains explicit. Core/Animation untouched.
 
-Exact sources, binaries, jobs, before/after and reports:
+Current Release/Debug nested standard-dialog regressions pass. Embedded filtered
+timer delivery and callback destruction pass Release/Debug. Root test frame-wait
+budget now restarts after independently timed modal stages; performance limits
+were not changed.
+
+Current Caro compute20s:60.02FPS,CPU4.36/6.58ms,callbackmax21.68ms,
+privatepeak161329152B,one pipeline/image build,resource/memory/finalZERO PASS.
+Prior Caro five-minute attempts were minimized or user-closed; one visible
+changing-workload stress failed latency/memory/GDI. Preserve those failures.
+Do not infer a successful Caro visible soak. Current final Curt production300s PASS119.99distinctHz/122.84FPS,timermax22.22ms,
+0events>50ms,privategrowth1661952B,one reused pool,GDI0/finalZERO.
+
+Authoritative evidence:
+[WINDOWS_VULKAN_CARO_QUALIFICATION.json](WINDOWS_VULKAN_CARO_QUALIFICATION.json).
+[Current summary](VULKAN_UI_FINISHING.md).
+Historical wakeup race and earlier RTX300s passes:
 [WINDOWS_VULKAN_LATENCY_INVESTIGATION.json](WINDOWS_VULKAN_LATENCY_INVESTIGATION.json).
-[Qualification summary](VULKAN_UI_FINISHING.md).
-Original361/404ms failures are retained in
-[WINDOWS_VULKAN_FINAL_QUALIFICATION.json](WINDOWS_VULKAN_FINAL_QUALIFICATION.json);
-their missing trace prevents attributing every old event to the reproduced bug.
 
-Current runtime build/upp-render-ui-2026-10-23-wakeup.zip contains the tested exe,
-README,SHA256SUMS and a matching AGENT_TASK. Share folder:
-F:/networkshare/upp-render-ui-2026-10-23-wakeup.
-Current Caro transfer/run remains unqualified; changed Robocopy identity still
-needs owner review. No compiler or Vulkan SDK installation is needed there.
-
-Gates7/10 remain:physical keyboard/mouse/AA, actual OS IME candidates and monitor
-DPI100/150/200%. Existing automated input/doubled units are not those checks.
-Text implementation checklist remains7/8 (87.5%) pending actual IME/input/DPI.
-
-Candidate uses pinned Ui main f88aab5. Independent Ui main dc789c1 theme/gallery
-work is clean and preserved, not silently substituted into the tested binary.
-Work on main; local commits only. WebGPU/Metal/Linux and OCIO/video follow this
-Windows milestone. Recover from [WINDOWS_VULKAN_RESTART.md](WINDOWS_VULKAN_RESTART.md).
+New package staging build/upp-render-ui-2026-10-24-final contains65f7...exe,
+matching instructions/checksums and current reports. Older qualified8058 and
+c510 intermediate packets are superseded. Final archive/runtime delivery is independently verified on Caro. Pinned Ui exportf88aab5; independent dc789c1 worktree
+has a substantial active refactor, preserved. Main only, local commits, no push.
 
 The material below preserves earlier checkpoints; later current evidence above
 supersedes earlier statuses while retaining their historical results.
@@ -154,3 +157,9 @@ Record actual source/dependency/artifact hashes, build/run jobs and test scope.
 Tests, visual review and platform delivery are separate evidence.
 FPS is not latency. CPU elapsed time is not GPU timestamp time.
 Never count software fallback as required-GPU success or an incomplete soak as PASS.
+
+Final ZIP:build/upp-render-ui-2026-10-24-final.zip,3884676B,
+SHA4b08f8942347ab6ff4a5c981331bde564d5d46638423cba6dd35edf2bb21c5b4.
+Share:F:/networkshare/upp-render-ui-2026-10-24-final.zip and extracted final folder.
+Caro:C:/GitHub/upp_render/build/runtime-2026-10-24-final/GpuUiGallery.exe.
+Original ZIP and executable independently hash-identical on Caro; no test running.

@@ -1,90 +1,70 @@
-# Windows / Vulkan continuation — 2026-10-23
+# Windows/Vulkan continuation — 2026-10-24
 
-## Current qualified checkpoint
+## Current authoritative checkpoint
 
-- Strict acceptance8/10 (80%):1,2,3,4,5,6,8,9. Remaining7/10 require physical
-  controls/AA, OS IME candidate interaction and physical monitor DPI.
-- Renderer main base993fedfb3a20102797b19dd15a058446af803a11 plus exact file hashes
-  in WINDOWS_VULKAN_LATENCY_INVESTIGATION.json. Local commit only; no push/publish.
-- Ui tested export build/qualified-ui-main-text:f88aab5150ca7f375b8c4a61a01da57832c82e03.
-  Independent Ui main advanced to dc789c1 (theme/title-card/gallery), clean.
-  Do not silently substitute it into the qualified candidate.
-- External E:/upp-18468/uppsrc and E:/apps/github/upp_animation READ ONLY.
-- Proven lost wake:PostMessage pulse became old input after PeekMessage; ordinary
-  MsgWaitForMultipleObjects ignored it, while one-pending coalescing suppressed
-  fresh messages. Regression timed out202ms before fix; next wake2.2ms after.
-- Fix:SendNotifyMessageW (different clock/UI threads), scalar generation, one
-  pending notification, stop/join before HWND destruction; separate frame/timer
-  callback guards. No external Core/Animation changes.
-- Release exec-BDC9D3621E89C07554982FFAD282D8F7 and Debug
-  exec-905445ADAA581DDE64B9AA6CC31E9D6C PASS lifecycle/regression, nested pumps,
-  callback deletion and final native ZERO.
-- Current build/GpuUiGalleryWakeFixed.exe:8,904,192B,
-  SHA2d45c0120f073d6d26d71d1bcff5910b570a5fccdfd951ef56cf8d1467a9f813.
-- Whole-Ui exec-3A030AFB66F69785AB31411F4DAED26A PASS browser/full/micro/text,
-  three workspace/three compute cycles, shared device, GDI/fallback0, finalZERO.
-- Current300s validation exec-07B46409F9D4E84F06A867A3D13461CF:
-  120distinctHz,118.85presentedFPS,CPU6.14/13.74ms,timermax19.20ms,
-  peak224542720B,early/late223115264/220366848B.
-- Current300s production exec-2458C1E479F51F7E8FE1FDB20BDB5895:
-  120distinctHz,123.85presentedFPS,CPU3.75/8.36ms,timermax18.95ms,
-  peak208199680B,early/late193324032/203960320B.
-- Both PASS unchanged thresholds,zero measured >50ms events,warm CPU rasters/
-  GDI/fallback0,one reused pool,finalZERO. No timed benchmark currently running.
--4K compute20s exec-2E5BB82C49B69ED6ECF5BAF7AB742E8F PASS119.99FPS,
-  CPU2.96/4.96ms,callbackmax25.45ms. Compute root does not use new clock;
-  a short pass does not prove every historical outlier fixed.
-- Fresh Vulkan root/dialog light/dark readback PASS; images inspected. This is
-  offscreen replay, not physical scanout/keyboard/DPI acceptance.
+- Main base1d85294 plus exact11 source hashes in current_candidate of
+  WINDOWS_VULKAN_CARO_QUALIFICATION.json. Commit all16 owned files after checks.
+- Final Release build/GpuUiGalleryWindowsV1Final.exe,8,911,872B,
+  SHA65f771f7f1d2f7a1b4b7c451cce9bebec5ce9945bc842c44d17125bc703c683e.
+- Release UI exec-097220385C651C781847A814B923CBDE PASS15.375s.
+  Debug UI exec-C5015D2B10FF074C71BA167BA32C0BB6 PASS20.375s.
+  Caro UI exec-BB1F98010C9F0820F241FC82D605D779 PASS13.078s.
+- Actual inspector swatch keyboard activation/accept/cancel included; three
+  workspace/compute cycles,browser/full/micro/text,GDI0,fallback0,finalZERO.
+- Fixed maximizable ordinary editor dialogs:WS_POPUP disappears withZoomable.
+  Before actual inspector:owner=true,surface1,242GDI. After:surface2/device1/GDI0.
+  Default standard-dialog probe initially passed because its style was popup;
+  speculative expansion was reverted, then correct maximizable case proved fix.
+- Root lifecycle Release11.640s,Debug pass; embedded timer/lifetime Release2.797s,
+  Debug3.547s pass. Source contains correct tests for resizable/nested dialogs.
+- Root frame-wait budget resets on returning from independently timed modal
+  stages. This fixed a Debug63.375s all-stages-pass/final-budget failure.
+  Benchmark thresholds unchanged.
+- Current Caro compute exec-1E4B0ADE50FF4B43EAF32DA64DD955C6 PASS60.02FPS,
+  CPU4.36/6.58ms,callbackmax21.68ms,peak161329152B,one shader/image build.
+- Current Curt production300s exec-B1714C77AD892BC8704C48EE6B2F0A6E PASS:
+  119.99distinctHz/122.84FPS,timermax22.22ms,0events>50,privategrowth1661952B,
+  onepool reused37269,GDI0/fallback0/finalZERO. No benchmark running.
+- Prior Caro minimized/user-closed attempts cannot qualify visible cadence.
+  Unminimized changing-workload test2CDB failed latency/memory/GDI; preserve.
+  Original8058/c510 packets are PRE-FINAL, do not distribute as current.
+- Strict8/10 (80%), text7/8 (87.5%); physical AA/input/OS IME/DPI still distinct.
+  Owner manual inspector/workspace/animation pass recorded with exact scope.
 
-## Evidence and limits
+## Access and immutable dependencies
 
-- WINDOWS_VULKAN_LATENCY_INVESTIGATION.json contains exact before/after jobs,
-  binaries/sources,reports,native-menu/tooltip probes and runtime metadata.
-- WINDOWS_VULKAN_FINAL_QUALIFICATION.json preserves older361/404ms FAILED soaks.
-  They lacked clock tracing; do not retroactively claim all had the same cause.
-- Earlier user-closed soak is INCOMPLETE,not a crash/pass.
-- Seven baseline regressions,224 standard/224 doubled-unit catalogue and full
-  native text Release/Debug matrix remain preserved. Text checklist7/8 (87.5%).
-- Colour fonts:COLRv0/embedded bitmap supported; SVG glyphs/COLRv1 excluded.
-- Cache payloads are not total COM/driver/process memory or VRAM measurements.
+KlickCurt DESKTOP-GFX1, project-028DDA9C9C89, E:/apps/github/upp_render.
+Patch for writes; Execute for builds/runs/Git. One Execute per project.
+KlickCaro DESKTOP-ASUSPN6, project-ED940563C935, C:/GitHub/upp_render.
+Policy30, runtime-314D887CC5B0 nested*.exe,max1200000,args enabled.
+Robocopy file-transfer-8B6A91A31C5F approved84abbd32...; codes0..7 accepted.
+Share Curt F:/networkshare is UNC \\\\DESKTOP-GFX1\\networkshare on Caro.
+Caro current exe build/runtime-2026-10-24-qualified/GpuUiGalleryWindowsV1Final.exe
+matches65f7... . Runtime needs driver Vulkan, not compiler/SDK. --validation on
+Caro correctly fails because optional developer layer is absent; omit it there.
 
-## Runtime delivery and Caro
+Core E:/upp-18468/uppsrc and Animation E:/apps/github/upp_animation READ ONLY.
+Ui export build/qualified-ui-main-text pinnedf88aab5150ca7f375b8c4a61a01da57832c82e03.
+Independent Ui dc789c1 dirty refactor is preserved and excluded. Do not edit it.
 
-- Current ZIP build/upp-render-ui-2026-10-23-wakeup.zip:3,875,443B,
-  SHA798ce03a6109a709b91a0058eb8f5d8acaa782d2d7fab3d7536501f38340e096.
-- Four files:GpuUiGallery.exe,README.txt,SHA256SUMS.txt,AGENT_TASK.txt.
-  Instructions use this actual executable and preserve both soak reports;
-  production/validation commands overwrite the same default report.
-- Share folder F:/networkshare/upp-render-ui-2026-10-23-wakeup. Independent
-  readback verification is recorded in the investigation manifest when complete.
-- KlickCaro DESKTOP-ASUSPN6,Render project-ED940563C935,
-  C:/GitHub/upp_render. Current build/run and older candidate exe absent.
-- Runtime runtime-314D887CC5B0:build/run/*.exe,max600000ms. No compiler/SDK needed.
-- Robocopy file-transfer-8B6A91A31C5F saved805d720d...,installed84abbd32...
-  was rejected EXECUTABLE_CHANGED. Owner must review/save changed identity.
-  Do not auto-refresh hashes or bypass the rejected executable.
-- UNC \\\\DESKTOP-GFX1\\networkshare maps Curt F:/networkshare; no F: on Caro.
-  No current Caro acceptance claimed. Do not reuse obsolete2026-10-04/22 tasks.
+## Completed handoff
 
-## Tools, source and next step
+Current Release/Debug/Caro fullUI,current Caro compute,final RTX300s and delivery
+all PASS. Final archive/runtime paths and full hashes below. No test running.
+Keep strict80%:physical AA/input/IME/monitorDPI not inferred from automation.
+Caro visible300s remains unqualified; do not repeat minimized runs automatically.
+Commit16 owned source/evidence files locally on main; no push/publish.
 
-KlickCurt DESKTOP-GFX1:Render project-028DDA9C9C89,workspace folder-D804EA49C6B4.
-Patch for mutations,Execute for builds/runs/Git. One Execute per project.
-Hash actual exe before runtime. Recover lost starts from retained jobs,never replay.
-Keep main only; local commits with description, no push or publication.
-
-Gallery nests:E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,
-E:/apps/github/upp_render/build/qualified-ui-main-text,
-E:/apps/github/upp_animation,E:/upp-18468/uppsrc (one comma-separated argument).
-Tests replace examples with tests.
+Build nests:
+E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc
 Method E:/apps/github/upp_render/CLANGx64_Vulkan.bm.
-Release cache build/cache-qualified-main-text,-r +GUI,GPUUI,CFONTS.
-Lifecycle Release used +GUI,CFONTS; Debug cache-directwrite-text-debug
-+GUI,GPUUI,CFONTS (Debug default,non-BLITZ).
+Release --out-dir build/cache-qualified-main-text -r +GUI,GPUUI,CFONTS.
+Debug --out-dir build/cache-directwrite-text-debug +GUI,GPUUI,CFONTS.
+Tests replace examples with tests,+GUI,CFONTS. No // in.upp.
+WebGPU/Metal/Linux,OCIO/async streaming remain later scope.
 
-Finish physical/current-runtime acceptance. If new latency occurs,retain exact
-binary/report/interaction,inspect wake vs queue vs callback CPU separately.
-Do not weaken gates or blame computer use without evidence.
-No // comments in .upp; no inactive uses(GPUUI)RenderCore in Ui.upp.
-WebGPU/Metal/Linux and OCIO/async video remain subsequent work.
+Final ZIP:build/upp-render-ui-2026-10-24-final.zip,3884676B,
+SHA4b08f8942347ab6ff4a5c981331bde564d5d46638423cba6dd35edf2bb21c5b4.
+Share:F:/networkshare/upp-render-ui-2026-10-24-final.zip and extracted final folder.
+Caro:C:/GitHub/upp_render/build/runtime-2026-10-24-final/GpuUiGallery.exe.
+Original ZIP and executable independently hash-identical on Caro; no test running.

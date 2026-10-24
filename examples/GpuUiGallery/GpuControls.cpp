@@ -70,7 +70,7 @@ GpuControlsDialog::GpuControlsDialog(bool validation)
 }
 GpuControlsDialog::~GpuControlsDialog()
 {
-	KillTimeCallback(993);
+	qualification_clock.Kill();
 	if(theme_changed) { UiTheme::Set(original_theme); Ctrl::SwapDarkLight(); }
 }
 void GpuControlsDialog::Layout()
@@ -94,7 +94,7 @@ void GpuControlsDialog::StartQualification(String& output)
 	if(!PNGEncoder().SaveFile(GetExeDirFile("GpuUi-browser-preview.png"),Image(fixture))) {
 		Finish(false,"cannot write test preview"); return;
 	}
-	browser.SetFolder(GetFileFolder(GetExeFilePath())); SetTimeCallback(-100,[=] { Tick(); },993);
+	browser.SetFolder(GetFileFolder(GetExeFilePath())); qualification_clock.Set(-100,[=] { Tick(); });
 }
 void GpuControlsDialog::Finish(bool ok,const String& detail)
 {
@@ -106,11 +106,17 @@ void GpuControlsDialog::Finish(bool ok,const String& detail)
 	if(theme_changed) {
 		UiTheme::Set(original_theme); Ctrl::SwapDarkLight(); theme_changed=false;
 	}
-	KillTimeCallback(993); Close();
+	qualification_clock.Kill(); Close();
 }
 void GpuControlsDialog::Tick()
 {
-	if(ControlsNow()-started>30000 || !GetGpuError().IsEmpty() || GetSoftwareFallbackCount()) {
+	// Debug readback/PNG and unoptimized control recording need a larger test budget.
+#ifdef _DEBUG
+	const int timeout_ms=120000;
+#else
+	const int timeout_ms=30000;
+#endif
+	if(ControlsNow()-started>timeout_ms || !GetGpuError().IsEmpty() || GetSoftwareFallbackCount()) {
 		Finish(false,"GPU/timeout at step "+AsString(step)); return;
 	}
 	const auto stats=GetGpuStats();

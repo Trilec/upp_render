@@ -14,6 +14,7 @@ public:
 	void ShowTextPage() { tabs.SetActiveTab(3); }
 	bool QualificationPassed() const { return passed; }
 private:
+	TimeCallback qualification_clock;
 	void Tick();
 	void Finish(bool ok,const String& detail);
 	UiFileBrowser browser;

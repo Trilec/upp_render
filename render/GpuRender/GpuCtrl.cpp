@@ -30,7 +30,21 @@ struct GpuCtrl::Impl {
 	public:
 		Host(){NoWantFocus();} void Attach(Impl *p){impl=p;}
 		void State(int reason) override { if(reason==CLOSE){if(impl)impl->OnHostState(reason);DHCtrl::State(reason);return;} DHCtrl::State(reason);if(impl)impl->OnHostState(reason); }
-		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){if(impl&&impl->clock.Consume(wParam)&&IsWindowVisible(GetHWND())&&!IsIconic(GetAncestor(GetHWND(),GA_ROOT)))Refresh();return 0;} if(message==WM_ERASEBKGND)return 1; if(message==WM_PAINT){PAINTSTRUCT ps;HWND hwnd=GetHWND();HDC dc=BeginPaint(hwnd,&ps);bool gpu_painted=impl&&impl->OnHostPaint();if(!gpu_painted)FillRect(dc,&ps.rcPaint,GetSysColorBrush(COLOR_WINDOW));EndPaint(hwnd,&ps);return 0;} return DHCtrl::WindowProc(message,wParam,lParam); }
+		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){
+			if(impl&&impl->clock.Consume(wParam)) {
+				Ptr<Host> alive(this);
+				// Continuous paint can starve low-priority WM_TIMER on a vsynced surface.
+				// Service ordinary U++ timers before invalidating again, as GpuTopWindow does.
+				if(!impl->timer_callback_active) {
+					impl->timer_callback_active=true;
+					TimerProc(msecs());
+					if(alive&&alive->impl) alive->impl->timer_callback_active=false;
+				}
+				if(alive&&alive->impl&&IsWindowVisible(alive->GetHWND())&&
+				   !IsIconic(GetAncestor(alive->GetHWND(),GA_ROOT))) alive->Refresh();
+			}
+			return 0;
+		} if(message==WM_ERASEBKGND)return 1; if(message==WM_PAINT){PAINTSTRUCT ps;HWND hwnd=GetHWND();HDC dc=BeginPaint(hwnd,&ps);bool gpu_painted=impl&&impl->OnHostPaint();if(!gpu_painted)FillRect(dc,&ps.rcPaint,GetSysColorBrush(COLOR_WINDOW));EndPaint(hwnd,&ps);return 0;} return DHCtrl::WindowProc(message,wParam,lParam); }
 	private: Impl *impl=nullptr;
 	};
 	Impl(GpuCtrl& o):owner(&o){host.Attach(this);} ~Impl(){destroying=true;StopGpuSession();}
@@ -77,7 +91,7 @@ struct GpuCtrl::Impl {
 	}
 	Win32GpuFrameClock clock;
 	int continuous_fps = 0;
-	bool custom_content = false;
+	bool custom_content = false, timer_callback_active = false;
 	GpuCtrl *owner=nullptr; Host host; GpuDisplayPresenter presenter; GpuBackendKind backend_kind=GpuBackendKind::Vulkan; String api_error,session_error,presentation_error; Size last_host_size=Size(-1,-1); bool validation_requested=false,host_ready=false,gpu_ready=false,init_attempted=false,destroying=false;
 };
 

@@ -1,7 +1,7 @@
 {
   "schema": "windows-vulkan-current-ui-qualification-v1",
-  "recorded_at": "2026-10-23",
-  "status": "Current wakeup fix qualified: Release/Debug lifecycle, whole-UI, normal/probes and both300s soaks PASS. Strict80% (8/10); physical controls/IME/DPI and current Caro pending. Historical361/404ms failures retained without attributing every event to the proven wakeup race.",
+  "recorded_at": "2026-10-24",
+  "status": "Final65f7...Release/Debug/Caro fullUI,current Caro compute,current RTX300s production PASS. Inspector242GDI->0,memorygrowth1.6MiB,timermax22.22ms,noevents>50,GDI0/finalZERO. Strict80% physical acceptance remains; all prior failures retained.",
   "renderer_commit": "c1eb86f733dcf250ee14797fba0191aa732e825a",
   "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
   "ui_source_export": {
@@ -1502,6 +1502,130 @@
       "path": "build/upp-render-ui-2026-10-23-wakeup.zip",
       "sha256": "798ce03a6109a709b91a0058eb8f5d8acaa782d2d7fab3d7536501f38340e096",
       "size": 3875443
+    }
+  },
+  "current_checkpoint": {
+    "evidence": "docs/WINDOWS_VULKAN_CARO_QUALIFICATION.json",
+    "renderer_base": "1d85294ba5e00f19082c9e39ef6bfca27dfe2932",
+    "binary": {
+      "op": "stat",
+      "path": "build/GpuUiGalleryWindowsV1Final.exe",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-24T13:48:43",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "5c7d679d36f50f54746ffed959083f4470c2e2fd567aa17157bb2d55d932df56",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 8911872,
+      "sha256": "65f771f7f1d2f7a1b4b7c451cce9bebec5ce9945bc842c44d17125bc703c683e",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 8911872
+    },
+    "source_files": [
+      {
+        "path": "examples/GpuUiGallery/GpuCapture.cpp",
+        "sha256": "7c20e7d04e2d54ac6d0524f30eed7f1533832f42d69b7616e6993140b5717307"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuComputeScene.cpp",
+        "sha256": "2470a8550e8193c8c3231572c55c8849b76c5aecef1cf2e42833b03dfb870acd"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuComputeScene.h",
+        "sha256": "eb50cd5bec9572a3e2e3f3b8ba99a21a915afbd5e5d02d18394caf778c66cb2d"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuControls.cpp",
+        "sha256": "d1d8ac709f8ebe608f1b4dd8bb75928fd24dda8127caa940a2bd80524476af7c"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuControls.h",
+        "sha256": "629b48e5fef9979259b58d9b86d3eab5af658599a3be843716c759b23b45254a"
+      },
+      {
+        "path": "examples/GpuUiGallery/main.cpp",
+        "sha256": "63a9911f6966127855719bfbfee14032286f8935af9c0ed8175ee349419c0dbc"
+      },
+      {
+        "path": "render/GpuRender/GpuCtrl.cpp",
+        "sha256": "ebf8c51e5fa1c24e45796fe52ea659b1597e7e06cbf05b1aa1d544d8127fe5df"
+      },
+      {
+        "path": "tests/GpuCtrlPresentationTest/main.cpp",
+        "sha256": "2e8556be472daf124fa2f7633aabeb22c03986b14aafd4585a6179efcaa5a2e0"
+      },
+      {
+        "path": "render/GpuRender/GpuTransientWindows.cpp",
+        "sha256": "719b5c2f0c58d3329713a8644e814bb0ed93c359aa8d466790dbadcf7a1ee58d"
+      },
+      {
+        "path": "render/GpuRender/GpuTransientWindows.h",
+        "sha256": "bcfec51e9b03c07e565aaf9b453533cf88d42bf78103af3f8f10aadf2f2c157a"
+      },
+      {
+        "path": "tests/GpuTopWindowPresentationTest/main.cpp",
+        "sha256": "9d1a879ee3ec3b0bd4a0920ed3d3c1317f79bfbd64917900810714a6877a49c6"
+      }
+    ],
+    "ui_commit": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
+    "curt_ui_job": "exec-097220385C651C781847A814B923CBDE",
+    "debug_ui_job": "exec-C5015D2B10FF074C71BA167BA32C0BB6",
+    "caro_ui_job": "exec-BB1F98010C9F0820F241FC82D605D779",
+    "caro_compute_job": "exec-1E4B0ADE50FF4B43EAF32DA64DD955C6",
+    "curt_production_soak": {
+      "job": "exec-B1714C77AD892BC8704C48EE6B2F0A6E",
+      "status": "PASS300s",
+      "report_manifest": "docs/WINDOWS_VULKAN_CARO_QUALIFICATION.json#current_candidate.curt_production_soak"
+    },
+    "runtime_package": {
+      "op": "stat",
+      "path": "build/upp-render-ui-2026-10-24-final.zip",
+      "ok": true,
+      "kind": "file",
+      "identity_scope": "approved_workspace_relative_path",
+      "modified": "2026-10-24T13:59:27",
+      "modified_timezone": "local_wall_time",
+      "mime_type": "application/octet-stream",
+      "mime_basis": "filename_extension_not_content_sniffing",
+      "writable": "unknown",
+      "writable_basis": "grant_allows_OS_access_not_proven",
+      "observation": "f824dc94c5b436ea0528990269bdfa68e6e9bb800dd5761fdd35ba24fb2ed025",
+      "total_lines": null,
+      "encoding": "unknown",
+      "newline": "unknown",
+      "bom": "none",
+      "size": 3884676,
+      "sha256": "4b08f8942347ab6ff4a5c981331bde564d5d46638423cba6dd35edf2bb21c5b4",
+      "hash_scope": "complete_file_at_read",
+      "hash_available": true,
+      "hash_budget_scope": "project_filesystem_limits",
+      "encoding_validated": false,
+      "metadata_scan_complete": false,
+      "truncated": true,
+      "limit_reasons": [
+        "metadata_scan_budget"
+      ],
+      "files_scanned": 1,
+      "bytes_scanned": 1048576,
+      "bytes_hashed": 3884676
     }
   }
 }

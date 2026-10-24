@@ -27,6 +27,11 @@ class ComputeSceneContent : public GpuSurfaceContent {
 public:
     explicit ComputeSceneContent(std::shared_ptr<ComputeSceneState> state) : state(std::move(state)) {}
     bool Render(GpuDevice& device, const GpuFrameInfo& frame, String& error) override {
+        const bool trace_first = state->trace_qualification && state->dispatches == 0;
+        auto trace = [&](const char *phase) {
+            if(trace_first) SaveFile(GetExeDirFile("GpuUiGallery-compute-progress.txt"), String(phase) + "\n");
+        };
+        trace("content_render_enter");
         auto fail = [&](const String& message) { error = message + ": " + device.GetLastError(); return false; };
         if(!pipeline.IsValid()) {
             GpuComputeCapabilities caps;
@@ -35,6 +40,7 @@ public:
             desc.code = String(reinterpret_cast<const char *>(IMAGE_SCENE_SPIRV), sizeof(IMAGE_SCENE_SPIRV));
             if(device.CreateShader(desc, shader) != GpuResult::Ok) return fail("Compute shader");
             GpuComputePipelineDesc program; program.shader = shader; program.storage_buffer_count = 1; program.parameter_bytes = 32;
+            trace("create_compute_pipeline");
             if(device.CreateComputePipeline(program, pipeline) != GpuResult::Ok) return fail("Compute pipeline");
             renderer.reset(new UiRenderer2D(device));
             ++state->program_builds;
@@ -63,6 +69,7 @@ public:
         Params params{(uint32_t)size.cx, (uint32_t)size.cy, (uint32_t)state->mode, (uint32_t)state->dither,
                       (float)state->phase, state->exposure, state->seed, 0};
         GpuCommandListId commands;
+        trace("begin_commands");
         if(device.BeginCommands(commands) != GpuResult::Ok) return fail("Compute BeginCommands");
         auto retire = [&] { if(device.EndCommands(commands) == GpuResult::Ok) device.Submit(commands); };
         GpuTextureWriteDesc region; region.size = size; region.row_pitch = (int64)size.cx * 4;
@@ -73,14 +80,17 @@ public:
            device.CopyBufferToTexture(commands, output, 0, texture, region) != GpuResult::Ok) {
             String detail = device.GetLastError(); retire(); error = "Compute/copy recording: " + detail; return false;
         }
+        trace("submit_compute_copy");
         if(device.EndCommands(commands) != GpuResult::Ok || device.Submit(commands) != GpuResult::Ok)
             return fail("Compute/copy submission");
         state->compute_copy_cpu_ms = NowMs() - now;
         ++state->dispatches;
+        trace("render_texture_frame");
         if(!renderer->RenderTextureFrame(texture, frame)) { error = renderer->GetError(); return false; }
         device.GetComputeStats(state->compute_stats);
         device.GetSamplingStats(state->sampling_stats);
         if(state->measuring && state->frame_cpu_ms.GetCount() < 72000) state->frame_cpu_ms.Add(NowMs() - now);
+        trace("content_render_complete");
         error.Clear(); return true;
     }
     void Close(GpuDevice& device) override {
@@ -127,9 +137,9 @@ ComputeSceneDialog::ComputeSceneDialog(bool validation, Size work_size)
     Add(title); Add(description); Add(image); Add(pause); Add(randomize); Add(close);
     Add(dither); Add(mode); Add(exposure_label); Add(exposure); Add(status);
     started = NowMs();
-    SetTimeCallback(-100, [=] { Tick(); }, 994);
+    tick_clock.Set(-100, [=] { Tick(); });
 }
-ComputeSceneDialog::~ComputeSceneDialog() { KillTimeCallback(994); }
+ComputeSceneDialog::~ComputeSceneDialog() { tick_clock.Kill(); }
 void ComputeSceneDialog::Layout()
 {
     GpuTopWindow::Layout();
@@ -146,7 +156,7 @@ void ComputeSceneDialog::Layout()
     image.SetRect(margin, y, max(1, size.cx - 2 * margin), max(1, size.cy - y - margin - DPI(48)));
     status.SetRect(margin, size.cy - margin - DPI(42), size.cx - 2 * margin, DPI(42));
 }
-void ComputeSceneDialog::StartQualification(String& report) { qualification_report = &report; started = NowMs(); }
+void ComputeSceneDialog::StartQualification(String& report) { state->trace_qualification = true; qualification_report = &report; started = NowMs(); }
 void ComputeSceneDialog::StartBenchmark(int seconds, String& report)
 {
     benchmark_report = &report; benchmark_seconds = seconds; started = NowMs();
@@ -204,7 +214,7 @@ void ComputeSceneDialog::BenchmarkTick(double now)
         << " resource_reuse=" << (resources ? "PASS" : "FAIL") << "\n"
         << "benchmark_status=" << (responsive && plateau && resources ? "PASS" : "FAIL") << "\n";
     SaveFile(GetExeDirFile("GpuUiGallery-compute.txt"), *benchmark_report);
-    KillTimeCallback(994); Close();
+    tick_clock.Kill(); Close();
 }
 void ComputeSceneDialog::Finish(bool pass, const String& reason)
 {
@@ -219,7 +229,7 @@ void ComputeSceneDialog::Finish(bool pass, const String& reason)
         *benchmark_report = "benchmark_status=FAIL\nerror=" + reason + "\n";
         SaveFile(GetExeDirFile("GpuUiGallery-compute.txt"), *benchmark_report);
     }
-    KillTimeCallback(994); Close();
+    tick_clock.Kill(); Close();
 }
 void ComputeSceneDialog::Tick()
 {

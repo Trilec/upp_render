@@ -221,7 +221,9 @@ static bool AttachTransientWindow(Ctrl *ctrl)
 		return false;
 
 	LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-	if(!(style & WS_POPUP))
+	// Resizable/maximizable owned dialogs use WS_OVERLAPPED rather than WS_POPUP.
+	// Their GPU ancestor is still required; unrelated application windows are excluded.
+	if(!(style & WS_POPUP) && !dynamic_cast<TopWindow *>(ctrl))
 		return false;
 
 	GpuTopWindow *owner = FindGpuOwner(ctrl);

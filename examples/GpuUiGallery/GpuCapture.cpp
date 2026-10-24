@@ -13,7 +13,7 @@ bool CaptureGpuUiClient(GpuTopWindow& window,const String& name,String& evidence
 	VulkanSurfaceSession session;
 	GpuNativeWindowDesc native; native.kind=GpuNativeWindowKind::Win32;
 	native.handle=(uintptr_t)window.GetHWND();
-	if(ok) ok=session.Open(true,native) && session.IsReady();
+	if(ok) ok=session.Open(window.IsValidationRequested(),native) && session.IsReady();
 	if(ok) {
 		VulkanGpuDevice device(session);
 		GpuTextureDesc desc; desc.size=window.GetSize(); desc.format=GpuFormat::RGBA8Srgb;

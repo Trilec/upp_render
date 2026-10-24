@@ -294,7 +294,7 @@ public:
 	void StartQualification(String& report)
 	{
 		qualification_report_ = &report;
-		SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
+		qualification_clock_.Set(-100, [=] { QualificationTick(); });
 	}
 	bool QualificationPassed() const { return qualification_passed_; }
 
@@ -359,7 +359,7 @@ private:
 	{
 		qualification_passed_ = pass;
 		if(qualification_report_) *qualification_report_ << "workspace=" << (pass ? "PASS " : "FAIL ") << detail << "\n";
-		KillTimeCallback(990);
+		qualification_clock_.Kill();
 		Close();
 	}
 
@@ -374,6 +374,7 @@ private:
 	UiTable table_;
 	UiMultiEdit notes_;
 	UiButton close_;
+	TimeCallback qualification_clock_;
 };
 
 class GpuUiGallery : public GpuTopWindow {
@@ -455,6 +456,8 @@ public:
 
 	~GpuUiGallery() override
 	{
+		qualification_clock_.Kill(); benchmark_clock_.Kill(); startup_clock_.Kill();
+		tooltip_open_clock_.Kill(); tooltip_close_clock_.Kill(); capture_clock_.Kill();
 		if(benchmark_native_thread_.joinable()) {
 			GuiUnlock unlock;
 			benchmark_native_thread_.join();
@@ -466,12 +469,12 @@ public:
 		scene_.ShowGrid(grid);
 		SyncAllControlsFromScene();
 	}
-	void OpenComputeOnStart() { SetTimeCallback(100, [=] { OpenComputeDialog(); }, 991); }
+	void OpenComputeOnStart() { startup_clock_.Set(100, [=] { OpenComputeDialog(); }); }
 	void StartQualification()
 	{
 		qualification_started_ = NowMs();
 		SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), "qualification=RUNNING\n");
-		SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
+		qualification_clock_.Set(-100, [=] { QualificationTick(); });
 	}
 	void StartBenchmark(bool heavy, bool soak = false, int seconds = 300, bool native_menu_probe = false, bool tooltip_probe = false)
 	{
@@ -485,8 +488,8 @@ public:
 		SaveFile(BenchmarkReportPath(heavy, soak, IsGpuRequired()), "benchmark_status=RUNNING\n");
 		benchmark_started_ = NowMs();
 		benchmark_due_ = benchmark_started_ + 16;
-		SetTimeCallback(-16, [=] { BenchmarkTick(); }, 987);
-		if(tooltip_probe) SetTimeCallback(8000, [=] { OpenTooltipProbe(); }, 994);
+		benchmark_clock_.Set(-16, [=] { BenchmarkTick(); });
+		if(tooltip_probe) tooltip_open_clock_.Set(8000, [=] { OpenTooltipProbe(); });
 	}
 
 	void Layout() override
@@ -772,7 +775,7 @@ public:
 			bool pass=CaptureGpuUiClient(*this,"GpuUi-root-light",evidence);
 			UiThemeContext original=UiTheme::GetContext();
 			GalleryDialog dialog;
-			dialog.SetRequireGpu().SetValidation().SetAsyncPresentation();
+			dialog.SetRequireGpu().SetValidation(IsValidationRequested()).SetAsyncPresentation();
 			TimeCallback timer;
 			timer.Set(400,[&] {
 				pass &= CaptureGpuUiClient(dialog,"GpuUi-dialog-light",evidence);
@@ -833,27 +836,41 @@ private:
 			property_model_.SetValue("particle_count", 512, false);
 			properties_.WhenCommit("particle_count", 512); ok &= scene_.GetParticleCount() == 512;
 			if(!ok) { FinishQualification(false, "root control callbacks"); return; }
-			KillTimeCallback(990); // Modal Run pumps timers; prevent root test re-entry.
+			qualification_clock_.Kill(); // Modal Run pumps timers; prevent root test re-entry.
+			if(!QualifyInspectorColourDialogs()) { FinishQualification(false, "inspector colour dialogs"); return; }
 			for(int i = 0; i < 3; ++i) {
 				GalleryDialog dlg;
 				dlg.SetRequireGpu().SetValidation(IsValidationRequested()).SetAsyncPresentation();
+				qualification_report_ << "modal_cycle_start=" << i+1 << "\n";
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				dlg.StartQualification(qualification_report_); dlg.Run();
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				if(!dlg.QualificationPassed()) { FinishQualification(false, "workspace"); return; }
 			}
 			qualification_report_ << "workspace_open_edit_close_cycles=3\n";
 			for(int i = 0; i < 3; ++i) {
+				qualification_report_ << "compute_cycle_start=" << i+1 << "\n";
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				ComputeSceneDialog dlg(IsValidationRequested());
+				qualification_report_ << "compute_constructed=1\n";
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				dlg.StartQualification(qualification_report_); dlg.Run();
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				if(!dlg.QualificationPassed()) { FinishQualification(false, "compute dialog"); return; }
 			}
 			qualification_report_ << "compute_open_edit_close_cycles=3\n";
 			{
 				GpuControlsDialog dialog(IsValidationRequested());
+				qualification_report_ << "extended_controls_start=1\n";
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				dialog.StartQualification(qualification_report_); dialog.Run();
+				SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 				if(!dialog.QualificationPassed()) { FinishQualification(false,"extended controls"); return; }
 			}
+			// Nested stages own their deadlines; start a fresh root frame-wait budget.
+			qualification_started_ = NowMs();
 			qualification_frame_ = GetGpuStats().presented_frames;
-			SetTimeCallback(-100, [=] { QualificationTick(); }, 990);
+			qualification_clock_.Set(-100, [=] { QualificationTick(); });
 			RequestGpuRefresh();
 			return;
 		}
@@ -870,7 +887,52 @@ private:
 		                      << "qualification=" << (pass ? "PASS" : "FAIL") << "\n";
 		SaveFile(GetExeDirFile("GpuUiGallery-qualification.txt"), qualification_report_);
 		if(!pass) SetExitCode(1);
-		KillTimeCallback(990); Close();
+		qualification_clock_.Kill(); Close();
+	}
+
+	bool QualifyInspectorColourDialogs()
+	{
+		const Color original = scene_.GetPrimaryColor();
+		for(bool accept : {true, false}) {
+			if(!properties_.SelectProperty("primary", true)) return false;
+			Ctrl *focus = Ctrl::GetFocusCtrl(); bool inside = false;
+			for(Ctrl *p = focus; p; p = p->GetParent()) if(p == &properties_) inside = true;
+			if(!inside) return false;
+			bool seen = false, gpu = false; int attempts = 0;
+			TimeCallback close;
+			close.Set(-100, [&] {
+				auto find_picker = [&](auto&& self, Ctrl *node) -> UiColorPicker * {
+					if(auto picker = dynamic_cast<UiColorPicker *>(node)) return picker;
+					for(Ctrl *child = node->GetFirstChild(); child; child = child->GetNext())
+						if(auto picker = self(self, child)) return picker;
+					return nullptr;
+				};
+				for(Ctrl *top : Ctrl::GetTopWindows()) {
+					if(top == this) continue;
+					if(auto picker = find_picker(find_picker, top)) {
+						const auto native = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+						gpu = native.surface_live_count >= 2 && native.device_live_count == 1;
+						qualification_report_ << "inspector_modal surfaces=" << native.surface_live_count
+						    << " devices=" << native.device_live_count << " direct_owner=" << (top->GetOwner() == this)
+						    << " has_owner=" << (top->GetOwner() != nullptr) << "\n";
+						seen = true; close.Kill();
+						picker->SetSlotColor(0, accept ? original : Color(180, 60, 90), false);
+						if(accept) picker->WhenAccept(); else picker->WhenCancel();
+						return;
+					}
+				}
+				if(++attempts >= 30) {
+					close.Kill();
+					for(Ctrl *top : Ctrl::GetTopWindows())
+						if(top != this) if(auto window = dynamic_cast<TopWindow *>(top)) window->Close();
+				}
+			});
+			focus->Key(K_SPACE, 1);
+			close.Kill();
+			if(!seen || !gpu || scene_.GetPrimaryColor() != original) return false;
+		}
+		qualification_report_ << "inspector_colour_dialogs=PASS actual swatch keyboard activation/accept/cancel/shared GPU\n";
+		return true;
 	}
 
 	String qualification_report_;
@@ -964,11 +1026,11 @@ private:
 		benchmark_tooltip_.PopUp(this, GetScreenRect().TopLeft() + Point(120, 200), true);
 		benchmark_tooltip_seen_ = benchmark_tooltip_.IsOpen();
 		ObserveBenchmarkWork("tooltip_open", benchmark_tooltip_started_, benchmark_tooltip_open_ms_);
-		SetTimeCallback(1000, [=] {
+		tooltip_close_clock_.Set(1000, [=] {
 			const double started = NowMs();
 			benchmark_tooltip_.Close();
 			ObserveBenchmarkWork("tooltip_close", started, benchmark_tooltip_close_ms_);
-		}, 995);
+		});
 	}
 	void BenchmarkTick()
 	{
@@ -1011,6 +1073,11 @@ private:
 		benchmark_process_cpu_ms_ = process_cpu;
 		benchmark_ui_cpu_ms_ = ui_cpu;
 		if(duration >= 4000) {
+#ifdef PLATFORM_WIN32
+			if(IsIconic(GetHWND())) ++benchmark_minimized_ticks_;
+			else if(!IsWindowVisible(GetHWND())) ++benchmark_hidden_ticks_;
+			else ++benchmark_visible_ticks_;
+#endif
 			const double delay = max(0.0, now - benchmark_due_);
 			benchmark_delays_.Add(delay);
 			const double stats_started = NowMs();
@@ -1062,7 +1129,7 @@ private:
 		}
 		benchmark_due_ = now + 16;
 		if(duration < (benchmark_soak_ ? benchmark_seconds_ * 1000 + 4000 : 24000)) return;
-		KillTimeCallback(987);
+		benchmark_clock_.Kill();
 		const GpuPresentationStats stats = GetGpuStats();
 		const double p99 = Percentile(benchmark_delays_, 0.99);
 		const double worst = Percentile(benchmark_delays_, 1.0);
@@ -1095,6 +1162,8 @@ private:
 		       << "animation_callback_hz=" << Format("%.2f", (scene_.GetAnimationUpdates() - benchmark_start_updates_) * 1000.0 / max(1.0, now - benchmark_measure_started_))
 		       << " distinct_animation_hz=" << Format("%.2f", (scene_.GetDistinctUpdates() - benchmark_start_distinct_) * 1000.0 / max(1.0, now - benchmark_measure_started_))
 		       << " scene_record_hz=" << Format("%.2f", (scene_.GetPaintCount() - benchmark_start_paints_) * 1000.0 / max(1.0, now - benchmark_measure_started_)) << "\n"
+		       << "benchmark_window_samples visible=" << benchmark_visible_ticks_
+		       << " minimized=" << benchmark_minimized_ticks_ << " hidden=" << benchmark_hidden_ticks_ << "\n"
 		       << "adapter=" << stats.adapter_name << "\n"
 		       << "cold_first_successful_frame_cpu_ms=" << Format("%.2f", stats.first_frame_cpu_ms) << "\n"
 		       << "cold_texture_uploads=" << stats.first_renderer.texture_upload_count
@@ -1200,7 +1269,8 @@ private:
 	Vector<uint64> benchmark_heap_;
 	double benchmark_next_memory_ = 30000;
 	Vector<uint64> benchmark_memory_;
-	TimeCallback capture_clock_;
+	TimeCallback capture_clock_, qualification_clock_, benchmark_clock_;
+	TimeCallback startup_clock_, tooltip_open_clock_, tooltip_close_clock_;
 	double next_animation_frame_ = 0;
 	double live_fps_epoch_ = 0, live_fps_ = 0;
 	uint64 live_fps_frames_ = 0;
@@ -1214,6 +1284,7 @@ private:
 	int benchmark_image_entries_ = 0;
 	int64 benchmark_image_peak_ = 0;
 	int64 benchmark_vector_peak_ = 0;
+	int benchmark_visible_ticks_ = 0, benchmark_minimized_ticks_ = 0, benchmark_hidden_ticks_ = 0;
 	Vector<double> benchmark_delays_;
 	Vector<double> benchmark_replays_;
 	// Benchmark-only bounded diagnostics; no per-frame event file I/O.

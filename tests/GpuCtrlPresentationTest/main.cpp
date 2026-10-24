@@ -42,6 +42,37 @@ GUI_APP_MAIN
 		ok &= Check(active.swapchain_live_count == 2, "two Vulkan swapchains should be live while the window is open");
 		ok &= Check(active.surface_live_count == 2, "two Vulkan controls should retain independent surfaces");
 		ok &= Check(active.device_create_count == 1 && active.device_live_count == 1, "compatible Vulkan controls should share one logical device");
+		// Exclude WM_TIMER to reproduce starvation by continuously pending paint.
+		// Nonqueued frame notifications must still service ordinary U++ callbacks.
+		int ticks = 0;
+		TimeCallback timer;
+		timer.Set(-20, [&] { ++ticks; });
+		DWORD deadline = GetTickCount() + 250;
+		while((LONG)(GetTickCount() - deadline) < 0) {
+			MSG message {};
+			if(PeekMessageW(&message, nullptr, WM_PAINT, WM_PAINT, PM_REMOVE))
+				DispatchMessageW(&message);
+			Sleep(1);
+		}
+		timer.Kill();
+		ok &= Check(ticks >= 3, "embedded frame clock services timers when WM_TIMER is starved");
+		win.first.SetContinuousRefresh(0);
+		One<GpuCtrl> transient;
+		transient.Create().SetValidation(true).SetContinuousRefresh(120);
+		win.Add(transient->LeftPos(0, 80).TopPos(0, 60));
+		timer.Set(10, [&] { transient.Clear(); });
+		deadline = GetTickCount() + 250;
+		while(transient && (LONG)(GetTickCount() - deadline) < 0) {
+			MSG message {};
+			if(PeekMessageW(&message, nullptr, WM_PAINT, WM_PAINT, PM_REMOVE))
+				DispatchMessageW(&message);
+			Sleep(1);
+		}
+		timer.Kill();
+		ok &= Check(!transient, "timer may destroy an embedded host during its frame notification");
+		transient.Clear();
+		win.first.SetContinuousRefresh(120);
+		active = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		uint64_t stable_swapchain_creates = active.swapchain_create_count;
 		uint64_t stable_device_creates = active.device_create_count;
 		PumpEvents(100);

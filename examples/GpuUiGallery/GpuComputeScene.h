@@ -6,6 +6,7 @@
 namespace Upp {
 struct ComputeSceneState {
     bool paused = false, dither = true;
+    bool trace_qualification = false;
     Size work_size = Size(0,0), image_size = Size(0,0);
     int mode = 0;
     uint32 seed = 1;
@@ -32,6 +33,7 @@ public:
     void StartBenchmark(int seconds, String& report);
     bool QualificationPassed() const { return qualification_passed; }
 private:
+    TimeCallback tick_clock;
     void Tick();
     void Finish(bool pass, const String& reason);
     void BenchmarkTick(double now);

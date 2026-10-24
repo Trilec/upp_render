@@ -4,6 +4,9 @@
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
 #include <chrono>
 #include <thread>
+#ifdef flagCFONTS
+#include <RenderFontWin32/RenderFontWin32.h>
+#endif
 
 using namespace Upp;
 
@@ -147,6 +150,50 @@ private:
 	bool saw_recorded_geometry = false;
 };
 
+static bool CheckOwnedStandardDialogs()
+{
+	bool ok = true;
+	RootPresentationWindow root;
+	root.SetRequireGpu();
+	root.Open();
+	PumpEvents(20);
+#ifdef flagCFONTS
+	const uint64 gdi_before = GetRenderFontWin32Stats().legacy_gdi_font_requests;
+#endif
+	TopWindow dialog;
+	ProbeCtrl content;
+	dialog.Title("Owned standard editor dialog").SetRect(180, 180, 420, 240);
+	dialog.Sizeable().Zoomable();
+	dialog.Add(content.SizePos());
+	dialog.Open(&root);
+	PumpEvents(30);
+	auto state = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+	ok &= Check(state.surface_live_count == 2 && state.swapchain_live_count == 2 &&
+	            state.device_live_count == 1, "owned standard dialog must inherit Vulkan presentation");
+	TopWindow nested;
+	ProbeCtrl nested_content;
+	nested.Title("Nested standard editor dialog").SetRect(220, 220, 320, 180);
+	nested.Sizeable().Zoomable();
+	nested.Add(nested_content.SizePos());
+	nested.Open(&dialog);
+	PumpEvents(20);
+	state = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
+	ok &= Check(state.surface_live_count == 3 && state.device_live_count == 1,
+	            "nested standard dialog must inherit its Vulkan ancestor");
+	nested.Close();
+	dialog.SetRect(180, 180, 480, 280);
+	PumpEvents(20);
+#ifdef flagCFONTS
+	ok &= Check(GetRenderFontWin32Stats().legacy_gdi_font_requests == gdi_before,
+	            "owned standard dialog text must not request native GDI fonts");
+#endif
+	ok &= Check(root.GetGpuError().IsEmpty(), "owned standard dialogs must remain GPU-clean");
+	dialog.Close();
+	root.Close();
+	PumpEvents(10);
+	return ok;
+}
+
 class FallbackPresentationWindow : public GpuTopWindow {
 public:
 	FallbackPresentationWindow()
@@ -212,6 +259,7 @@ GUI_APP_MAIN
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics();
 	bool ok = true;
 	ok &= CheckObservedInputWake();
+	ok &= CheckOwnedStandardDialogs();
 
 	{
 		RootPresentationWindow win;
