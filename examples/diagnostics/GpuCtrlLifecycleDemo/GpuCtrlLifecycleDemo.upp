@@ -1,9 +1,0 @@
-uses
-	Core,
-	GpuRender;
-
-file
-	main.cpp;
-
-mainconfig
-	"" = "GUI";

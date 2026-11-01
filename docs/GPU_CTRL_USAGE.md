@@ -109,7 +109,7 @@ The option is currently on GpuTopWindow. Embedded GpuCtrl, custom GpuWindow and 
 
 UiRenderer2D defaults to 64 MiB/4096 images of pixel payload, 32 MiB/4096 vector rasters and 16 MiB/8192 glyph entries. It evicts image/vector entries unused by the current frame. Exhausted glyph atlases reset between frames. Content that cannot fit in one active frame fails with a diagnostic; the normal root fallback policy applies.
 
-These are pixel payload and entry limits, not total driver VRAM limits. Native allocation alignment, vertex buffers, swapchains, pipelines, transient upload staging and driver storage are separate. Backend diagnostics count explicit native allocations; process private bytes are a separate host metric. See [Windows/Vulkan v1 evidence](WINDOWS_VULKAN_V1.md).
+These are pixel payload and entry limits, not total driver VRAM limits. Native allocation alignment, vertex buffers, swapchains, pipelines, transient upload staging and driver storage are separate. Backend diagnostics count explicit native allocations; process private bytes are a separate host metric. See [historical Windows/Vulkan v1 evidence](qualification/history-2026-11-01.zip).
 
 ## Colour contract
 
@@ -130,7 +130,7 @@ to TopWindow software painting, not CPU rasterization or total GDI use.
 GpuUiGallery --require-gpu --benchmark exercises this mode and writes gpu_required
 and software_fallback_count in its report. Required runs write the separate
 GpuUiGallery-required-normal/load/soak.txt reports. This mode still uses Windows hosting
-and font APIs. See [UI2 drawing audit](UI2_DRAWING_AUDIT.md) for remaining portability work.
+and font APIs. See [archived UI2 drawing audit](qualification/history-2026-11-01.zip) for remaining portability work.
 
 ## Image crops, colour masks and opacity
 

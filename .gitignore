@@ -70,3 +70,9 @@ Testing/
 /out
 .klick-patch.lock
 /.klick-patch
+
+# Local release output and workstation configuration
+/bin/
+/CLANGx64_Vulkan.bm
+/GitHubOut.var
+__pycache__/

@@ -47,7 +47,7 @@ The recorder implementation has moved unchanged out of GpuRender into
 RenderCtrlBridge. Its dependencies are CtrlCore and RenderCanvas; the old include
 forwards to it. The native wgpu proof is isolated in RenderWgpuNativeTest and
 passes Windows C ABI/device/surface checks. It is not yet the RenderWgpu replay
-implementation. Evidence and reuse boundary: WGPU_NATIVE_PROOF.md.
+implementation. Evidence and reuse boundary: qualification/history-2026-11-01.zip (entry docs/WGPU_NATIVE_PROOF.md).
 
 ## Ownership, scheduling and shutdown
 
@@ -142,4 +142,4 @@ References:
 - GPU_IMAGE_PIPELINE.md
 - CINEVIEW_RENDERER_HANDOFF.md
 - WGPU_IMPLEMENTATION_PLAN.md
-- WGPU_RECOVERY.md
+- qualification/history-2026-11-01.zip (entry docs/WGPU_RECOVERY.md)

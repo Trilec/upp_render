@@ -16,6 +16,10 @@ uses(CFONTS)
 
 file
 	main.cpp,
+	GpuMetrics.h,
+	GpuMetrics.cpp,
+	GpuWidgets.h,
+	GpuWidgets.cpp,
 	GpuComputeScene.h,
 	GpuComputeScene.cpp,
 	GpuCapture.h,

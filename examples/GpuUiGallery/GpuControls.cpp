@@ -6,6 +6,39 @@
 
 namespace Upp {
 namespace {
+// Qualification reads the public control tree and minimum-size contract.
+// No private picker coordinates or production styling are copied into the test.
+bool PickerFieldBounds(Ctrl& root, String& report)
+{
+	bool ok = true;
+	int drops = 0, toggles = 0, edits = 0;
+	bool active_page_accent = false;
+	auto visit = [&](auto&& self, Ctrl& control) -> void {
+		if(!control.IsVisible() || control.GetSize().IsEmpty()) return;
+		if(auto *button = dynamic_cast<UiButton *>(&control))
+			if(button->GetText() == "Image")
+				active_page_accent = button->GetStyle().underline &&
+				    button->GetStyle().palette.ink[ST_NORMAL] == UiTheme::GetOliveTokens(UiTheme::GetMode()).accent;
+		const char *kind = nullptr;
+		bool width_required = false;
+		if(dynamic_cast<UiDropdown *>(&control)) { ++drops; kind = "dropdown"; }
+		else if(dynamic_cast<UiToggle *>(&control)) { ++toggles; kind = "toggle"; width_required = true; }
+		else if(dynamic_cast<UiBaseEdit *>(&control)) { ++edits; kind = "edit"; }
+		if(kind) {
+			const Size size = control.GetSize(), need = control.GetMinSize();
+			if(size.cy + 1 < need.cy || (width_required && size.cx + 1 < need.cx)) {
+				ok = false; report << "clipped_picker_field kind=" << kind << " size=" << size << " minimum=" << need << "\n";
+			}
+		}
+		for(Ctrl *child = control.GetFirstChild(); child; child = child->GetNext()) self(self, *child);
+	};
+	visit(visit, root);
+	report << "picker_field_bounds=" << (ok ? "PASS" : "FAIL")
+	       << " dropdowns=" << drops << " toggles=" << toggles << " edits=" << edits << "\n";
+	report << "picker_active_page_accent=" << (active_page_accent ? "PASS" : "FAIL") << "\n";
+	return ok && drops >= 3 && toggles >= 3 && edits >= 3 && active_page_accent;
+}
+
 double ControlsNow() {
 	return std::chrono::duration<double,std::milli>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -64,10 +97,25 @@ GpuControlsDialog::GpuControlsDialog(bool validation)
 	sample.Cat("\nColour emoji: "); sample.Cat(0x1f600);
 	text_entry.SetText(WString("Type or paste here")); text_document.SetText(ToUtf8(sample));
 	text_page.Add(text_help); text_page.Add(text_entry); text_page.Add(text_document); tabs.Add(text_page,"Text & IME");
+	tabs.Add(widgets,"Controls");
+	ApplyTabStyle();
 
 	micro.WhenLayoutChange=[=] { Layout(); };
 	Add(heading); Add(tabs); Add(status); Add(close);
 }
+void GpuControlsDialog::ApplyTabStyle()
+{
+	// These are the app's page tabs, not the colour picker's internal navigation.
+	// Resolve a fresh palette per mode, then apply the authored compact geometry.
+	tabs.SetVisual(UITAB_UNDERLINE);
+	UiTab::Style style = UiTheme::ResolveTab(UITAB_UNDERLINE);
+	style.tab_extent = DPI(32);
+	style.metrics.content_margin = Rect(0, 0, 0, 0);
+	style.strip_inset = Rect(DPI(8), 0, DPI(8), 0);
+	style.body_gap = DPI(6);
+	tabs.SetCustomStyle(style);
+}
+
 GpuControlsDialog::~GpuControlsDialog()
 {
 	qualification_clock.Kill();
@@ -182,6 +230,7 @@ void GpuControlsDialog::Tick()
 		*report<<evidence; if(!ok) { Finish(false,"micro capture"); return; }
 		UiThemeContext dark=original_theme; dark.mode=original_theme.mode==UiThemeMode::Dark?UiThemeMode::Light:UiThemeMode::Dark;
 		UiTheme::Set(dark); Ctrl::SwapDarkLight(); theme_changed=true;
+		ApplyTabStyle();
 		SetRect(GetRect().TopLeft().x,GetRect().TopLeft().y,1000,720); ++step; return;
 	}
 	if(step==23) {
@@ -221,6 +270,26 @@ void GpuControlsDialog::Tick()
 		if(!text_entry.CommitGpuComposition(value) || text_entry.GetText()!=value) { Finish(false,"text composition commit"); return; }
 		++step; return;
 	}
+	if(step==29) {
+		String evidence; bool ok=tabs.GetVisual()==UITAB_UNDERLINE && tabs.GetStyle().tab_extent==DPI(32) &&
+		    !tabs.GetStyle().tab_metrics.frame_enabled && CaptureGpuUiClient(*this,"GpuUi-controls",evidence);
+		*report<<evidence; if(!ok) { Finish(false,"compact underline controls tab"); return; }
+		tabs.SetActiveTab(1); picker.SetPageMode(UiColorPicker::PAGE_IMAGE); ++step; return;
+	}
+	if(step==30 || step==31) {
+		String evidence; bool ok=PickerFieldBounds(picker,evidence);
+		ok &= CaptureGpuUiClient(*this,step==30?"GpuUi-picker-image-first-mode":"GpuUi-picker-image-second-mode",evidence);
+		*report<<evidence; if(!ok) { Finish(false,"picker Image page field bounds"); return; }
+		if(step==30) {
+			UiThemeContext other=UiTheme::GetContext();
+			other.mode=other.mode==UiThemeMode::Dark?UiThemeMode::Light:UiThemeMode::Dark;
+			UiTheme::Set(other); Ctrl::SwapDarkLight(); ApplyTabStyle();
+			// Refresh the picker's own mode-dependent child recipes.
+			picker.SetPageMode(UiColorPicker::PAGE_COLOR); picker.SetPageMode(UiColorPicker::PAGE_IMAGE);
+			++step; return;
+		}
+		Finish(true,"browser/full/micro/text/controls and Image-page field bounds in both themes"); return;
+	}
 	*report<<"text_document_shown="<<text_document.IsShown()<<" size="<<text_document.GetSize()
 	       <<" text_length="<<text_document.GetTextW().GetCount()<<" active_tab="<<tabs.GetActiveTab()<<"\n";
 	String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-text-committed",evidence); *report<<evidence;
@@ -239,7 +308,8 @@ void GpuControlsDialog::Tick()
 	}
 	*report<<"text_unchanged_document_pixels="<<changed<<" baseline_ink_pixels="<<ink_pixels<<"\n";
 	ok &= changed==0 && ink_pixels>50;
-	Finish(ok,"scan/preview/selection/accept/cancel/nested micro/16 picker states/themes/resize/text composition overlay/cancel/commit");
+	if(!ok) { Finish(false,"text document preservation"); return; }
+	tabs.SetActiveTab(4); step=29;
 
 }
 }

@@ -1,142 +1,88 @@
 # upp_render
 
-`upp_render` is a backend-neutral GPU rendering layer for Ultimate++.
+GPU drawing and native Ultimate++ controls, with Windows/Vulkan as the current
+qualified backend. Application code uses **GpuRender**; it does not manage Vulkan
+instances, swapchains or command buffers.
 
-The ordinary application entry point is **`GpuRender`**. Add that package and include:
+## Run the Windows demo
 
-```cpp
-#include <GpuRender/GpuRender.h>
-```
+The stable local executable is **[bin/win64/UppVulkanUiDemo.exe](bin/win64/UppVulkanUiDemo.exe)**.
+This directory contains only the current Release executable. Future qualified
+builds replace that same file; executables and compiler output are not committed.
 
-Application code does not need HWNDs, Vulkan handles, queue families, swapchains or command buffers.
+The demo opens in **Olive dark**, with an animated Vulkan scene, a live inspector,
+ring meters and a cache composition chart. Use:
 
-## Three ways to use it
+- **GPU dialog** for a second Vulkan window containing editable controls.
+- **Scene > Browser and colour pickers** for the file browser, full colour picker,
+  micro picker and multilingual text/IME editors.
+- **Scene > Image and compute** for GPU-generated images and a dithered ramp.
+- **View > Light / Dark** to compare the two theme modes.
 
-### 1. Embedded GPU surface
+The client area, controls and owned dialogs use Vulkan drawing. The application
+retains Windows windowing/input and DirectWrite text services. A compatible
+Windows x64 machine needs its graphics driver's Vulkan runtime, **not the Vulkan
+SDK, U++ or a compiler**. The optional `--validation` mode requires developer layers.
 
-Use `GpuCtrl` inside an ordinary U++ window:
+[Candidate identity and qualification](docs/qualification/windows-vulkan.json) records the
+exact executable hash, source/dependency pins and test results.
+[Demo behavior and metric definitions](examples/GpuUiGallery/README.md) explains
+what the rings measure.
 
-```cpp
-GpuCtrl view;
-view.SetGpuPaint([](GpuPainter& w) {
-    Size sz = w.GetSize();
-    w.Clear(Color(24, 31, 45));
-    w.FillRect(Rectf(20, 20, sz.cx - 20, sz.cy - 20), Color(62, 112, 214));
-    w.DrawText(Pointf(40, 42), "GPU content", SansSerif(24).Bold(), White());
-});
+## Use it in an application
 
-TopWindow win;
-win.Add(view.SizePos());
-win.Run();
-```
+Add the `GpuRender` package and include `<GpuRender/GpuRender.h>`.
 
-`GpuCtrl` owns the native embedded presentation surface. The rest of the window can remain ordinary U++/GDI controls.
+| Entry point | Application |
+| --- | --- |
+| `GpuCtrl` | An embedded GPU surface in an ordinary native UI |
+| `GpuWindow` | A custom GPU window |
+| `GpuTopWindow` | A control tree recorded and replayed through a root GPU surface |
 
-### 2. Whole custom GPU window
+Layout, focus, input and control state remain under U++/Ui authority. Compatible
+presenters share the expensive device/context resources while owning separate
+surfaces and swapchains. Images, glyphs, vectors and frame queues have explicit
+bounds; failures in required-GPU mode are reported rather than hidden by fallback.
 
-Subclass `GpuWindow` when the full client area is application-owned GPU content:
+[Usage](docs/GPU_CTRL_USAGE.md) · [Integration](docs/GPU_CTRL_INTEGRATION.md) ·
+[Package map](render/README.md) · [Examples](examples/README.md)
 
-```cpp
-class View : public GpuWindow {
-    void GpuPaint(GpuPainter& w) override {
-        w.Clear(Black());
-        w.DrawText(Pointf(30, 30), "Whole GPU window", SansSerif(28), White());
-    }
-};
-```
+## Build and repository layout
 
-### 3. GPU-composited U++ interface
+See [Windows build instructions](docs/BUILD_WINDOWS.md). Copy the
+`GitHubOut.var.example` and `CLANGx64_Vulkan.bm.example` templates into local
+configuration and set the dependency/toolchain paths. The qualified Ui revision
+is pinned in the candidate manifest; an unrelated Ui working tree is not a
+drop-in replacement for that snapshot.
 
-Use `GpuTopWindow` when U++ should keep control/layout/input/theme authority while the resolved control tree is recorded and replayed through one root GPU surface:
+| Directory | Contents |
+| --- | --- |
+| `bin/win64/` | One current runnable Windows showcase |
+| `build/` | Disposable outputs, the pinned dependency export and retained local evidence |
+| `render/` | Public integration and renderer/backend packages |
+| `examples/` | Three focused product demos |
+| `tests/` | Deterministic regression and load packages |
+| `shaders/` | Shader sources and checked-in generated SPIR-V |
+| `tools/` | Development utilities |
+| `docs/` | Guides, qualifications, dependency patches and compressed history |
 
-```cpp
-class MainWindow : public GpuTopWindow {
-public:
-    MainWindow() {
-        SetAsyncPresentation();
-        Add(button.LeftPos(20, 120).TopPos(20, 32));
-        button.SetLabel("Ordinary U++ button");
-    }
-private:
-    Button button;
-};
-```
+## Scope and release status
 
-## Current rendering capability
+Windows/Vulkan whole-UI automated qualification covers direct GPU vector/glyph
+drawing, images, owned dialogs, browser/pickers, complex text and bounded load.
+The earlier **24 October** build passed five-minute tests on both RTX 4070 Ti and
+SDK-free Iris Xe machines. Its frame pacing/memory results remain versioned
+evidence; the manifest distinguishes them from tests of the refreshed demo.
 
-The accepted/implemented stack includes:
+Strict whole-UI acceptance remains **8/10 gates (80%)**, with actual OS IME
+candidate interaction and physical AA/input/monitor-DPI review recorded separately.
+The host currently requests system DPI awareness; live per-monitor scaling is
+not qualified. [Release checklist](docs/RELEASE_CANDIDATE.md) lists the remaining
+public-release work. Documentation cleanup does not close acceptance gates.
 
-- immutable backend-neutral display lists;
-- software reference replay;
-- Vulkan 1.3 bootstrap, surfaces, swapchains and frame presentation;
-- filled/stroked/rounded geometry;
-- clipping, affine transforms, alpha/source-over and batching;
-- sampled images, including caller-owned GPU textures without CPU image copies;
-- optional bounded storage-buffer compute, device-local output and GPU buffer-to-image transfer;
-- shared native Ui text shaping/editing, glyph-ID snapshots and persistent GPU glyph atlases;
-- direct GPU convex fills/closed miter and straight strokes with antialiased coverage;
-- general paths, gradients, other strokes and SVG through the bounded U++ Painter reference path;
-- embedded `GpuCtrl` presentation;
-- full-window custom `GpuWindow` presentation;
-- U++ control-tree recording and `GpuTopWindow` root composition.
+WebGPU, Metal, Linux hosting, asynchronous video streaming and OCIO integration
+remain later scopes. GPU timestamps and total driver VRAM accounting are not
+available. [Documentation index](docs/README.md) · [Backend roadmap](docs/BACKEND_ROADMAP.md)
 
-Historical Stage-5/H1/UI1-C acceptance is retained. Current whole-UI completion is **5/10 gates (50%)**, with general vectors, glyph preparation and shared Ui raster helpers still open. Direct geometry uses single-sample antialiased coverage; complex vectors/SVG retain cached CPU coverage. See [current scope](docs/ACTIVE_WORK.md).
-
-## Shared application GPU context
-
-Ordinary presenters use `GpuContext::Default()`. Compatible Vulkan presenters now share the expensive application/device domain: runtime, instance, physical/logical-device ownership, selected queue handles, and one device-level pipeline cache. Each presenter still owns its own native surface, swapchain and frame lifecycle.
-
-Logical image/glyph handles and presentation state remain independent. Immutable images now share native allocations under stable identity and reference lifetimes. Image/vector/glyph retention has configured bounds; integer-moving vectors reuse their shape content. Mutable glyph atlases remain renderer-owned.
-
-The generic provider registry lives below the public façade in `RenderRhi`; the Vulkan provider registers itself from `RenderVulkan`. `GpuRender.upp` currently depends on `RenderVulkan` so a normal Windows/Vulkan application still gets the default provider simply by adding the one public package. That is build composition, not a Vulkan dependency in the public drawing or presentation API.
-
-## Packages
-
-Ordinary application developers should normally care about only:
-
-- **`GpuRender`** — public U++ integration façade.
-
-The remaining packages are deliberate renderer/backend layers:
-
-- `RenderCanvas` — neutral display list and `GpuPainter` recording;
-- `RenderCore` — backend-neutral value types;
-- `RenderGpu2D` — GPU 2D replay engine;
-- `RenderRhi` — backend contract and internal provider registry;
-- `RenderVulkan` — current Vulkan implementation/provider;
-- `RenderSoftware` — correctness/reference renderer;
-- `RenderVector` — vector/Painter authority;
-- `RenderNull` — headless validation backend;
-- `RenderPlatformWin32` — current native-window adapter.
-
-See `render/README.md` for the dependency map.
-
-## Examples
-
-The three product demonstrations are:
-
-- [GpuSurfaceDemo](examples/GpuSurfaceDemo/README.md) — adjustable embedded Vulkan surfaces in the Ui shell;
-- `examples/GpuUiGallery` — ordinary Ui controls in Vulkan root/dialog windows, including an embedded animated compute image, exposure, optional final quantization dithering and live FPS;
-- `examples/RendererShowcase` — rendering capabilities and software/GPU comparison.
-
-Three small source tutorials cover `GpuCtrl`, `GpuWindow` and `GpuTopWindow`; see [examples](examples/README.md). Historical bring-up and stock-control compatibility probes are indexed under [diagnostics](examples/diagnostics/README.md).
-
-## Version 1 preparation
-
-Windows/Vulkan finishing work now includes immutable image sharing, bounded content caches and an optional GpuTopWindow presentation worker. The whole-Ui gallery passes measured UI-delay targets under a 512-particle validation-enabled workload on the declared reference GPU. Shared Windows text layout now covers complex scripts, rich text, native IME composition and supported colour/bitmap fonts; [text contracts and limits](docs/WINDOWS_FONT_PROVIDER.md) and [current candidate qualification](docs/WINDOWS_VULKAN_FINAL_QUALIFICATION.json) record the exact scope. The Windows frame clock now avoids a reproduced old-input lost wake; current Release/Debug and two five-minute load tests pass. [Wakeup diagnosis and exact measurements](docs/WINDOWS_VULKAN_LATENCY_INVESTIGATION.json) retain before/after evidence. Strict Windows acceptance is 8/10 (80%); physical input/DPI/IME and current clean-machine release review are recorded separately. `GpuCtrl::SetGpuContent` now supplies an owned custom-content hook for precompiled shaders/compute through the device API. Shipped apps do not need the Vulkan SDK. See [compute contract and measured results](docs/VULKAN_COMPUTE.md); this does not establish async video streaming or an OCIO pipeline.
-
-See [release scope and gates](docs/RELEASE_CANDIDATE.md), [sustained RC1 qualification](docs/RC1_QUALIFICATION.md), [BGFX design review](docs/BGFX_REVIEW.md) and [current evidence](docs/ACTIVE_WORK.md).
-
-## Backend roadmap
-
-Vulkan is the currently validated backend. Metal and WebGPU are first-class planned backends and the public API is intentionally kept free of Vulkan types.
-
-- Metal: macOS first, while keeping the design viable for iOS/iPadOS presentation models.
-- WebGPU: native/browser backend, with a longer-term goal of allowing U++ rendering/control intent to run in a WebAssembly/browser host. This requires browser platform/event/input work in addition to the renderer backend itself.
-
-See `docs/BACKEND_ROADMAP.md`.
-
-## Build status
-
-Windows/Vulkan is the currently validated platform. Use the repository `CLANGx64_Vulkan.bm` environment/build method and a Vulkan SDK available to the local U++ toolchain. Platform-specific paths belong in local configuration, not application code.
-
-Productization/H1 and UI1-C have recorded Windows/Vulkan acceptance. Current Windows/Vulkan finishing evidence is in [WINDOWS_VULKAN_V1](docs/WINDOWS_VULKAN_V1.md). Broader resource convergence and future backends remain separate work. `GpuSurfaceDemo` demonstrates the embedded-control product goal with two adjustable surfaces; its focused checks do not replace the full historical regression matrix. For current validation boundaries, see `docs/ACTIVE_WORK.md`.
+Apache-2.0; see [LICENSE](LICENSE). Runtime distributions must include the applicable
+dependency notices described in the release checklist.

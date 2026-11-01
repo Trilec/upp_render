@@ -40,7 +40,7 @@ ReadTexturePixels now preserves native bytes for owned colour TransferSrc
 textures, with a 64 MiB output limit and restored image layout. It remains a
 synchronous Vulkan-only diagnostic. It is not the requested async export API.
 
-Native caller: examples/GpuImageSourceDemo. It queries RGBA32F, uploads negative
+Native caller: tests/GpuImageSourceTest. It queries RGBA32F, uploads negative
 and HDR RGB with fractional alpha, and verifies exact native bytes on readback.
 It does not yet draw a colour-adjustable embedded surface or qualify playback.
 Validation so far: real Vulkan precision tests PASS in Release and Debug/BLITZ,

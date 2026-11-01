@@ -14,7 +14,7 @@ Benchmark callbacks no longer force a repaint on every sample. Distinct progress
 
 ## Qualified baseline
 
-See VULKAN_UI_FINISH_QUALIFICATION.json for exact artifacts/jobs/reports.
+See qualification/history-2026-11-01.zip, entry docs/VULKAN_UI_FINISH_QUALIFICATION.json for exact artifacts/jobs/reports.
 
 |120FPS target|Distinct updates/s|Presented FPS|CPU acquire/replay/present median/p99|
 |---|---:|---:|---:|

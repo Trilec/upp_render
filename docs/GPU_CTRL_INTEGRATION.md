@@ -18,7 +18,7 @@ Top-level GPU windows bind presentation directly to the top-level native client 
 
 Compatible Vulkan presenters share one expensive backend/device domain: runtime, instance, logical device, queue handles and device-level pipeline cache. Every presenter still owns an independent native surface, swapchain and frame lifecycle.
 
-Logical image/glyph handles remain independent. Immutable Image allocations now share across compatible Vulkan presenters under stable identity and reference lifetimes; glyph atlases and vector metadata remain presenter-owned. Image/vector/glyph caches have bounded retention. GpuTopWindow offers opt-in worker replay with one replaceable pending immutable frame, while GUI-owned controls are recorded on their owning thread. Public presenter transactions serialize shared GPU queue/pipeline-cache access. See [current measured contract](WINDOWS_VULKAN_V1.md).
+Logical image/glyph handles remain independent. Immutable Image allocations now share across compatible Vulkan presenters under stable identity and reference lifetimes; glyph atlases and vector metadata remain presenter-owned. Image/vector/glyph caches have bounded retention. GpuTopWindow offers opt-in worker replay with one replaceable pending immutable frame, while GUI-owned controls are recorded on their owning thread. Public presenter transactions serialize shared GPU queue/pipeline-cache access. See [historical v1 contract](qualification/history-2026-11-01.zip).
 
 ## Backend provider boundary
 

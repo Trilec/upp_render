@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-01",
+  "status": "Local Windows/Vulkan showcase: automated UI PASS; complete refreshed soak waived by owner",
+  "artifact": {
+    "path": "bin/win64/UppVulkanUiDemo.exe",
+    "size": 8999936,
+    "sha256": "fa9e31d28aeb0cc0eaf11a03ee8141d66f6b65521f4b06f71c3a2c8432d0fa5b",
+    "platform": "Windows x64",
+    "configuration": "Release +GUI,GPUUI,CFONTS",
+    "package": "GpuUiGallery"
+  },
+  "source": {
+    "renderer_base": "b3a42b1ffe8830cb36c121add2b77d0e72fad465",
+    "renderer_delta": {
+      "path": "render/RenderGpu2D/RenderGpu2D.h",
+      "raw_sha256": "2a513d3f3d8b0ba7b46bf79969182b7de95bdeb247ac1d3bc63446dd533560e7",
+      "vector_entries": 256,
+      "vector_payload_bytes": 33554432
+    },
+    "showcase_hashes": "refresh-2026-11-01.json (qualified_showcase_sources)",
+    "ui_base": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
+    "ui_patch": "docs/dependencies/compact-color-picker.patch",
+    "ui_color_picker_raw_sha256": "39f7f261173943a6c85b5d0f4f49af6128049d397494aba5df67a1c6ccb3000d",
+    "animation": "4a01b6f4e2a9f122ea1a93457b62a4054d01f970",
+    "upp_version": 18468,
+    "concurrent_3d_changes_included": false
+  },
+  "qualification": {
+    "evidence": "refresh-2026-11-01.json",
+    "ui": {
+      "status": "PASS",
+      "job_id": "exec-41612799EC247D08D450C7C3FAA4665C",
+      "seconds": 16.875,
+      "validation": true,
+      "picker_image_modes": [
+        "Light",
+        "Dark"
+      ],
+      "picker_dropdowns": 4,
+      "picker_toggles": 3,
+      "picker_edits": 6,
+      "cpu_vector_rasters": 0,
+      "cpu_glyph_rasters": 0,
+      "legacy_gdi_font_requests": 0,
+      "software_fallback_count": 0,
+      "final_native_ownership": "ZERO"
+    },
+    "soak": {
+      "status": "INCOMPLETE_OWNER_SKIPPED_REPEAT",
+      "job_id": "exec-89FD74455C96A1BC33630A60A87187DA",
+      "finished_after_seconds": 225.843,
+      "measured_private_samples_bytes": [
+        197967872,
+        198025216,
+        198049792
+      ],
+      "observation_seconds": [
+        37.25,
+        105.75,
+        178.5
+      ],
+      "full_memory_gate": "NOT_ESTABLISHED",
+      "evidence": "Owner: No, don't worry about the five minutes. I think this is okay. Let's just keep continuing with everything else."
+    }
+  },
+  "acceptance": {
+    "strict_gates_passed": 8,
+    "strict_gates_total": 10,
+    "percent": 80,
+    "physical_review": "AA/control input, real OS IME candidate selection and physical monitor scaling remain unqualified for this hash",
+    "dpi_awareness": "system; live per-monitor transitions not qualified",
+    "os_native_choosers": "Outside automated client-area qualification. Owner-interacted interrupted run retained36 legacy GDI font requests; specific source not established. Controlled UI run had0.",
+    "human_olive_visual_review": "Owner approved earlier2458f9d graphical refresh; not a physical-input/IME/DPI acceptance of this hash",
+    "caro": "24 October65f771f7 build passed; refreshed binary not retested on Caro"
+  },
+  "runtime": {
+    "requires": [
+      "Windows x64",
+      "Graphics driver providing compatible Vulkan support"
+    ],
+    "does_not_require": [
+      "U++ development toolchain",
+      "Vulkan SDK"
+    ],
+    "optional_validation": "Developer validation layers required for --validation"
+  },
+  "publication": {
+    "pushed": false,
+    "published": false,
+    "public_archive_ready": false,
+    "notes": "Before public distribution complete physical acceptance and assemble dependency/runtime notices. Local bin intentionally contains only the executable."
+  }
+}

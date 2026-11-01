@@ -30,7 +30,7 @@ The productized Vulkan ownership model now provides:
 - queue-scoped per-surface teardown, with device-wide idle retained only for final device destruction;
 - explicit grouped-surface accounting and survivor/final-close tests.
 
-Logical image/glyph handles remain presenter-owned. Immutable Image allocations now share in compatible Vulkan device domains through stable identity/reference lifetimes; mutable glyph atlases and vector metadata remain local and bounded. General resource sharing and backend-specific memory policy remain future work. See [Windows/Vulkan v1 evidence](WINDOWS_VULKAN_V1.md).
+Logical image/glyph handles remain presenter-owned. Immutable Image allocations now share in compatible Vulkan device domains through stable identity/reference lifetimes; mutable glyph atlases and vector metadata remain local and bounded. General resource sharing and backend-specific memory policy remain future work. See [historical Windows/Vulkan v1 evidence](qualification/history-2026-11-01.zip).
 
 After the current consolidated Windows/Vulkan acceptance, Vulkan follow-up should focus on output parity/readback, device-loss policy and longer-running multi-surface stress rather than another ownership redesign.
 

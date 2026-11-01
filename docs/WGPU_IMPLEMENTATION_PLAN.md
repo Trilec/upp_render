@@ -1,7 +1,7 @@
 # wgpu implementation plan
 
 Design authority: WGPU_ARCHITECTURE.md.
-Preserved baseline and recovery: WGPU_RECOVERY.md.
+Preserved baseline and recovery: qualification/history-2026-11-01.zip (entry docs/WGPU_RECOVERY.md).
 Work on main; keep the existing Vulkan implementation intact until replacement
 qualifies. New wgpu builds are opt-in during the proof phase.
 
@@ -32,7 +32,7 @@ versus DLL choice, import library compatibility, distribution files, enabled
 backend features and SHA-256 hashes. Do not prescribe static linking as lighter
 without measuring final shipped size. Curl and tar are now approved and the matching official GNU DLL is acquired.
 The isolated native probe passes Release and non-BLITZ Debug; see
-WGPU_NATIVE_PROOF.md. Cargo source builds and static/import-library compatibility
+qualification/history-2026-11-01.zip (entry docs/WGPU_NATIVE_PROOF.md). Cargo source builds and static/import-library compatibility
 remain unqualified. Do not route an unapproved tool through Git or a helper.
 
 Build a minimal U++ console link/query programme, then a Win32 surface triangle.

@@ -76,7 +76,7 @@ Native validation and complete ownership cleanup are required by these tests.
 
 Current application: build/GpuUiGalleryFinish.exe. Exact artifact/job identities,
 source hashes, dependency state and raw reports are preserved in
-VULKAN_UI_FINISH_QUALIFICATION.json. Earlier evidence remains in the2026-10-15 manifest.
+qualification/history-2026-11-01.zip (entry docs/VULKAN_UI_FINISH_QUALIFICATION.json). Earlier evidence remains in the2026-10-15 manifest.
 See VULKAN_UI_FINISHING.md for the application measurements.
 
 ## Semantic Painter and composition

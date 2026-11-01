@@ -78,7 +78,7 @@ only the entry points it uses. There is no production import/static-library
 decision yet. This proof establishes dynamic C ABI compatibility with U++ clang;
 it does not establish static/import-library compatibility or a lean feature graph.
 
-Native tests and reproduction: WGPU_NATIVE_PROOF.md.
+Native tests and reproduction: qualification/history-2026-11-01.zip (entry docs/WGPU_NATIVE_PROOF.md).
 Artifact bytes are not measured process memory or deployed application size.
 
 ## Current execution tools

@@ -72,8 +72,8 @@ DirectWrite/COM, driver allocations or total process memory.
 
 Release and Debug pass64 Vulkan pixel,37 editor,36 styled,27 document,38 native
 IME and80 font-layer checks. See
-[exact text evidence](WINDOWS_VULKAN_TEXT_QUALIFICATION.json) and
-[final candidate evidence](WINDOWS_VULKAN_FINAL_QUALIFICATION.json).
+[exact text evidence](qualification/history-2026-11-01.zip) and
+[final candidate evidence](qualification/history-2026-11-01.zip).
 
 ## Legacy scalar DrawText path
 

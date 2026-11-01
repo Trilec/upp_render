@@ -28,7 +28,9 @@ struct UiRenderer2DCacheLimits {
 	int64 path_coverage_bytes = 1024 * 1024; // Optional GPU-rendered coverage atlas.
 	int64 geometry_bytes = 32 * 1024 * 1024; // Combined active vertex payload.
 	int64 vector_bytes = 32 * 1024 * 1024;
-	int vector_entries = 4096;
+	// Small raster textures still carry native allocation/view overhead.
+	// Bound their count as well as pixel payload during animated artwork.
+	int vector_entries = 256;
 	int64 glyph_bytes = 16 * 1024 * 1024;
 	int glyph_entries = 8192;
 };

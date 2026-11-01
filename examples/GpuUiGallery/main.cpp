@@ -2,6 +2,8 @@
 #include "GpuComputeScene.h"
 #include "GpuCapture.h"
 #include "GpuControls.h"
+#include "GpuMetrics.h"
+#include "GpuWidgets.h"
 #ifdef flagCFONTS
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
@@ -251,39 +253,9 @@ public:
 		notes_.SetTextUtf8("Vulkan UI notes\n\nSelect text, type, undo and scroll.\nThe scene and inspector retain their state when this window closes.");
 		close_.SetText("Close");
 		close_.WhenAction = [=] { Close(); };
-		{
-			UiTableModel& model = table_.Model();
-			UiModelUpdate update(model);
-			model.SetSize(2000, 3);
-			model.SetHeader(UITABLE_COLUMN_AXIS, 0, UiTableHeader("Item"));
-			model.SetHeader(UITABLE_COLUMN_AXIS, 1, UiTableHeader("State"));
-			model.SetHeader(UITABLE_COLUMN_AXIS, 2, UiTableHeader("Value"));
-			for(int r = 0; r < 2000; ++r) {
-				model.SetCellValue(r, 0, Format("Render item %04d", r + 1));
-				model.SetCellValue(r, 1, r % 3 ? "Ready" : "Review");
-				model.SetCellValue(r, 2, r * 7);
-			}
-		}
-		table_.EnableInternalMutation().SetActiveCell(0, 0);
-		table_.SetColumnWidth(0, DPI(220)); table_.SetColumnWidth(1, DPI(130));
-		{
-			UiTreeModel& model = tree_.Model();
-			UiModelUpdate update(model);
-			for(int group = 0; group < 4; ++group) {
-				UiTreeNodeRef parent = model.AddChild(model.Root(), UiModelItem(Format("Group %d", group + 1)));
-				for(int i = 0; i < 12; ++i) {
-					UiModelItem item(Format("Item %d.%d", group + 1, i + 1));
-					item.has_check = true; item.checked = i % 3 == 0; item.editable = true;
-					model.AddChild(parent, item);
-				}
-				tree_.Expand(parent);
-			}
-		}
-		tree_.EnableInternalMutation().EnableRenameOnDblClick();
 		Add(message_.HSizePos(DPI(20), DPI(20)).TopPos(DPI(18), DPI(30)));
 		Add(note_.HSizePos(DPI(20), DPI(20)).TopPos(DPI(57), DPI(32)));
-		Add(tree_.LeftPos(DPI(20), DPI(200)).VSizePos(DPI(108), DPI(210)));
-		Add(table_.HSizePos(DPI(236), DPI(20)).VSizePos(DPI(108), DPI(210)));
+		Add(widgets_.HSizePos(DPI(10), DPI(10)).VSizePos(DPI(100), DPI(210)));
 		Add(notes_.HSizePos(DPI(20), DPI(20)).BottomPos(DPI(64), DPI(130)));
 		Add(close_.RightPos(DPI(20), DPI(100)).BottomPos(DPI(18), DPI(32)));
 		SetTimeCallback(-250, [=] {
@@ -321,24 +293,24 @@ private:
 		case 1: {
 			notes_.SetFocus(); notes_.Key(K_CTRL_A, 1); notes_.Key('N', 1);
 			ok = notes_.HasFocus() && notes_.GetTextUtf8() == "N";
-			UiTreeNodeRef first = tree_.Model().GetChild(tree_.Model().Root(), 0);
-			tree_.SetCursor(first); tree_.SetFocus(); tree_.Key(K_DOWN, 1);
-			ok &= tree_.GetCursor().id != first.id;
-			table_.SetFocus(); table_.SetActiveCell(0, 0); table_.Key(K_RIGHT, 1);
-			ok &= table_.GetActiveCell().col == 1;
+			UiTreeNodeRef first = widgets_.tree.Model().GetChild(widgets_.tree.Model().Root(), 0);
+			widgets_.tree.SetCursor(first); widgets_.tree.SetFocus(); widgets_.tree.Key(K_DOWN, 1);
+			ok &= widgets_.tree.GetCursor().id != first.id;
+			widgets_.table.SetFocus(); widgets_.table.SetActiveCell(0, 0); widgets_.table.Key(K_RIGHT, 1);
+			ok &= widgets_.table.GetActiveCell().col == 1;
 			break;
 		}
 		case 2:
-			table_.BeginEdit(); ok = table_.IsEditing();
+			widgets_.table.BeginEdit(); ok = widgets_.table.IsEditing();
 			break;
 		case 3:
-			table_.CommitEditValue("GPU committed");
-			ok = !table_.IsEditing() && table_.Model().GetCellValue(0, 1) == Value("GPU committed");
-			table_.BeginEdit(); ok &= table_.IsEditing();
+			widgets_.table.CommitEditValue("GPU committed");
+			ok = !widgets_.table.IsEditing() && widgets_.table.Model().GetCellValue(0, 1) == Value("GPU committed");
+			widgets_.table.BeginEdit(); ok &= widgets_.table.IsEditing();
 			break;
 		case 4:
-			table_.CancelEdit();
-			ok = !table_.IsEditing() && table_.Model().GetCellValue(0, 1) == Value("GPU committed");
+			widgets_.table.CancelEdit();
+			ok = !widgets_.table.IsEditing() && widgets_.table.Model().GetCellValue(0, 1) == Value("GPU committed");
 			SetRect(Rect(GetRect().TopLeft(), Size(DPI(760), DPI(540))));
 			qualification_theme_ = UiTheme::GetContext();
 			{ UiThemeContext c = qualification_theme_;
@@ -370,8 +342,7 @@ private:
 	uint64 qualification_frame_ = 0;
 	UiLabel message_;
 	UiLineEdit note_;
-	UiTree tree_;
-	UiTable table_;
+	GpuWidgets widgets_;
 	UiMultiEdit notes_;
 	UiButton close_;
 	TimeCallback qualification_clock_;
@@ -392,7 +363,8 @@ public:
 			scene_.Advance(now);
 		};
 		Title("GpuRender - upp_Ui GPU Scene Inspector")
-		    .Sizeable().Zoomable().SetRect(0, 0, 1220, 760);
+		    .Sizeable().Zoomable().SetRect(0, 0, DPI(1220), DPI(820));
+		SetMinSize(Size(DPI(1080), DPI(720)));
 
 		RegisterPropertyEditorV1Editors(property_factory_);
 
@@ -426,6 +398,8 @@ public:
 		Add(properties_);
 		Add(status_);
 		Add(gpu_state_);
+		Add(metrics_);
+		Add(cache_chart_);
 
 		SetTimeCallback(-250, [=] {
 			const double status_started = NowMs();
@@ -439,9 +413,10 @@ public:
 				live_fps_ = (stats.presented_frames - live_fps_frames_) * 1000.0 / (now - live_fps_epoch_);
 				live_fps_epoch_ = now; live_fps_frames_ = stats.presented_frames;
 			}
-			if(IsGpuReady()) state << Format(" | %.1f FPS | replay %.2f ms | GPU paths %d | CPU rasters %d",
-			                                live_fps_, stats.replay_ms, stats.renderer.gpu_path_count,
-			                                stats.renderer.vector_raster_count);
+			if(IsGpuReady()) state << " | " << stats.adapter_name
+			                        << Format(" | CPU rasters %d", stats.renderer.vector_raster_count);
+			metrics_.Update(stats, live_fps_, scene_.GetSpeed(), scene_.IsPaused(), Animation::GetFPS());
+			cache_chart_.Update(stats.renderer);
 			gpu_state_.SetText(state);
 			if(benchmark_started_ > 0) ObserveBenchmarkWork("status_refresh", status_started, benchmark_status_max_ms_);
 			if(IsGpuRequired() && !e.IsEmpty()) {
@@ -452,6 +427,11 @@ public:
 		});
 
 		SyncAllControlsFromScene();
+	}
+
+	void Paint(Draw& w) override
+	{
+		w.DrawRect(GetSize(), UiTheme::GetOliveTokens(UiTheme::GetMode()).background);
 	}
 
 	~GpuUiGallery() override
@@ -482,6 +462,10 @@ public:
 		SyncAllControlsFromScene();
 		benchmark_heavy_ = heavy;
 		benchmark_soak_ = soak;
+		if(soak) {
+			Title(Format("AUTOMATED Vulkan soak (%d s) - leave open; closes itself", seconds));
+			SetStatus("Automatic five-minute qualification: leave open, unminimized and unchanged.");
+		}
 		benchmark_seconds_ = seconds;
 		benchmark_native_menu_ = native_menu_probe;
 		benchmark_tooltip_probe_ = tooltip_probe;
@@ -535,16 +519,22 @@ public:
 		open_dialog_.SetRect(bx + DPI(180), y, DPI(120), toolbar_h);
 
 		y += toolbar_h + gap;
-		const int bottom = r.GetHeight() - margin - status_h * 2 - DPI(8);
+		const int status_y = r.GetHeight() - margin - status_h * 2;
+		const int metrics_y = status_y - gap - DPI(96);
+		const int bottom = metrics_y - gap;
 		const int body_h = max(0, bottom - y);
 		const int scene_w = max(DPI(280), r.GetWidth() - 2 * margin - gap - inspector_w);
 
 		scene_.SetRect(margin, y, scene_w, body_h);
 		property_title_.SetRect(margin + scene_w + gap, y, inspector_w, DPI(28));
-		properties_.SetRect(margin + scene_w + gap, y + DPI(30), inspector_w, max(0, body_h - DPI(30)));
+		const int cache_h = DPI(104);
+		properties_.SetRect(margin + scene_w + gap, y + DPI(30), inspector_w,
+		                    max(0, body_h - DPI(30) - cache_h - gap));
+		cache_chart_.SetRect(margin + scene_w + gap, bottom - cache_h, inspector_w, cache_h);
+		metrics_.SetRect(margin, metrics_y, max(0, r.GetWidth() - 2 * margin), DPI(96));
 
-		status_.SetRect(margin, bottom + DPI(5), max(0, r.GetWidth() - 2 * margin), status_h);
-		gpu_state_.SetRect(margin, bottom + DPI(5) + status_h, max(0, r.GetWidth() - 2 * margin), status_h);
+		status_.SetRect(margin, status_y, max(0, r.GetWidth() - 2 * margin), status_h);
+		gpu_state_.SetRect(margin, status_y + status_h, max(0, r.GetWidth() - 2 * margin), status_h);
 	}
 
 private:
@@ -1319,12 +1309,17 @@ private:
 
 	UiLabel status_;
 	UiLabel gpu_state_;
+	GpuMetricsPanel metrics_;
+	GpuCacheChart cache_chart_;
 };
 
 } // namespace
 
 GUI_APP_MAIN
 {
+	// One Ui theme authority for the root, controls and owned dialogs.
+	UiTheme::Set(UiThemePreset::Olive, UiThemeMode::Dark);
+	if(!IsDarkTheme()) Ctrl::SwapDarkLight();
 	bool capture_scenes = false;
 	bool benchmark = false, native_menu_probe = false, tooltip_probe = false;
 	bool qualification = false;

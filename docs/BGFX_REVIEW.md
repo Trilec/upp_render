@@ -50,7 +50,7 @@ Remaining shader work:
 
 Prioritize resource identity, budgets and measurable responsiveness before adding backend breadth. Current images/glyphs/vectors remain presenter-owned; cached image entries persist until renderer close. Existing renderer counters cover several per-frame operations and buffer capacities, but not complete retained CPU/GPU allocation accounting or UI latency.
 
-Use [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md) for the proposed Windows/Vulkan version 1 gates and [DEMO_ROADMAP.md](DEMO_ROADMAP.md) for demo scope. The small compute/custom-surface baseline is qualified separately from general
+Use [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md) for the proposed Windows/Vulkan version 1 gates and [DEMO_ROADMAP.md](qualification/history-2026-11-01.zip) for demo scope. The small compute/custom-surface baseline is qualified separately from general
 image/OCIO shader support and video streaming. Build-time shaders and bounded
 completed-frame descriptor reuse apply the reviewed patterns; no BGFX dependency
 has been introduced, and the original fork review remains pinned to its stated commit.

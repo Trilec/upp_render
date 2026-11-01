@@ -1,6 +1,7 @@
 #pragma once
 #include <GpuRender/GpuRender.h>
 #include <Ui/Ui.h>
+#include "GpuWidgets.h"
 #include <Ui/UiFileBrowser/UiFileBrowser.h>
 
 namespace Upp {
@@ -16,6 +17,7 @@ public:
 private:
 	TimeCallback qualification_clock;
 	void Tick();
+	void ApplyTabStyle();
 	void Finish(bool ok,const String& detail);
 	UiFileBrowser browser;
 	UiColorPicker picker;
@@ -24,6 +26,7 @@ private:
 	UiLabel text_help;
 	UiLineEdit text_entry;
 	UiDoc text_document;
+	GpuWidgets widgets;
 	UiTab tabs;
 	UiLabel heading,status;
 	UiButton close;

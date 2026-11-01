@@ -1,29 +1,15 @@
 # Examples
 
-## Product demonstrations
+The primary showcase is [GpuUiGallery](GpuUiGallery/README.md), with a single
+stable executable at `bin/win64/UppVulkanUiDemo.exe`. Its Controls tab and GPU
+workspace share one lightweight three-column tree/table/image composition.
 
-| Package | Purpose |
-| --- | --- |
-| `GpuSurfaceDemo` | Embedded Vulkan controls in the Ui shell: adjustable size, randomized shapes, optional antialiasing, pause and second-surface lifetime. See its [README](GpuSurfaceDemo/README.md). |
-| `GpuUiGallery` | Whole-window GPU composition of ordinary Ui controls, animated Draw content, menus, dropdowns, tooltip and modal window. |
-| `RendererShowcase` | Rendering capabilities and software/GPU comparison. |
+Two focused examples remain: [GpuSurfaceDemo](GpuSurfaceDemo/README.md) for
+adjustable embedded surfaces and AA/lifetime comparison, and RendererShowcase
+for software/GPU drawing comparison. RendererShowcaseScene is shared scene data,
+not another application.
 
-These are the product demo set for version 1 preparation. They demonstrate different public use cases. The surface demo's current smoke is not a load benchmark; full current-source visual/regression acceptance remains in [ACTIVE_WORK](../docs/ACTIVE_WORK.md).
-
-## Minimal source tutorials
-
-| Package | Entry point |
-| --- | --- |
-| `GpuRenderEmbedded` | `GpuCtrl` inside an ordinary U++ layout |
-| `GpuRenderWindow` | `GpuWindow` for custom whole-window drawing |
-| `GpuRenderUiWindow` | `GpuTopWindow` for the root-composited control tree |
-
-Tutorials remain small copyable source examples, rather than additional showcase apps.
-
-## Development support
-
-`RendererShowcaseScene` is shared scene data used by both the showcase and `tests/RendererShowcaseTest`; retain it wherever either package is built.
-
-Older bring-up/lifecycle probes and the stock-control `GpuEmbeddedMotion` compatibility example are under [diagnostics](diagnostics/README.md). They are development tools, not product demos.
-
-A future shader mode belongs in `GpuSurfaceDemo` after the custom-render contract exists. Load testing belongs in a diagnostic harness with reproducible metrics. See [demo roadmap](../docs/DEMO_ROADMAP.md) and [release gates](../docs/RELEASE_CANDIDATE.md).
+The three minimal entry-point tutorials are now [source snippets](../docs/snippets/README.md),
+rather than extra demo projects. Six superseded bring-up/stock-GDI examples and
+their helper were retired. The raw precision-image caller moved to
+`tests/GpuImageSourceTest`; its source and coverage are retained.
