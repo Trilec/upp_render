@@ -1,0 +1,8 @@
+description "Bounded Vulkan mesh/depth/index/push-parameter regression tests";
+uses
+	Core,
+	RenderVulkan;
+file
+	main.cpp;
+mainconfig
+	"" = "CONSOLE";

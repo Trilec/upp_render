@@ -15,4 +15,4 @@ file
 	RenderGpu2DVector.cpp,
 	RenderGpu2DLayer.cpp,
 	GpuVectorRasterizer.h,
-	GpuVectorRasterizer.cpp;
+	GpuVectorRasterizer.cpp options(BUILDER_OPTION) NOBLITZ;

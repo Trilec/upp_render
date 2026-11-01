@@ -416,7 +416,7 @@ GpuResult VulkanGpuDevice::CopyBufferToTexture(GpuCommandListId list, GpuBufferI
 		impl->error = "GPU image copy requires an open command and mutable adapter-owned texture"; return GpuResult::InvalidState;
 	}
 	if(!(buffer.desc.usage & GpuBufferUsage_TransferSrc) || !(texture.desc.usage & GpuTextureUsage_TransferDst) ||
-	   texture.desc.format == GpuFormat::D24S8) {
+	   IsDepthFormat(texture.desc.format)) {
 		impl->error = "GPU image-copy usage/format is unsupported"; return GpuResult::InvalidArgument;
 	}
 	const int bpp = BytesPerPixel(texture.desc.format);

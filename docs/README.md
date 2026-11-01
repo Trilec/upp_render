@@ -20,6 +20,15 @@
 [Windows fonts](WINDOWS_FONT_PROVIDER.md) · [Frame pacing](WINDOWS_FRAME_PACING.md) ·
 [Compute](VULKAN_COMPUTE.md) · [BGFX lessons](BGFX_REVIEW.md)
 
+## Ui3DView control
+
+[Use the control](../render/Ui3DView/README.md) ·
+[Architecture and API contract](UI3DVIEW_ARCHITECTURE.md) ·
+[Build, tests and captures](UI3DVIEW_VALIDATION.md)
+
+The latest Release demo is `bin/win64/Ui3DViewDemo.exe`. This native 3D
+control has its own qualification record, separate from the whole-UI demo.
+
 ## Design and later work
 
 [Backend roadmap](BACKEND_ROADMAP.md) · [UI rendering](UI_GPU_RENDERING_ARCHITECTURE.md) ·

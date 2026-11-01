@@ -332,6 +332,9 @@ GpuResult NullGpuDevice::DestroyBuffer(GpuBufferId id)
 
 GpuResult NullGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureId& out)
 {
+	if(desc.format == GpuFormat::D32F || (desc.usage & GpuTextureUsage_DepthAttachment)) {
+		out = GpuTextureId(); Fail("CreateTexture reason=depth_not_implemented"); return GpuResult::Unsupported;
+	}
 	if(desc.size.cx <= 0 || desc.size.cy <= 0) {
 		Fail("CreateTexture size=" + AsString(desc.size.cx) + "x" + AsString(desc.size.cy) + " format=" + DumpGpuFormat(desc.format) + " reason=invalid_size");
 		out = GpuTextureId();
@@ -673,6 +676,11 @@ GpuResult NullGpuDevice::DestroyShader(GpuShaderId id)
 
 GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out)
 {
+	if(desc.depth_format != GpuFormat::Unknown || desc.depth_test || desc.depth_write ||
+	   desc.parameter_bytes != 0 || desc.cull_mode != GpuCullMode::None ||
+	   desc.front_face != GpuFrontFace::CounterClockwise || desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F) {
+		out = GpuPipelineId(); Fail("CreatePipeline reason=3d_not_implemented"); return GpuResult::Unsupported;
+	}
 	out = GpuPipelineId();
 	if(desc.color_format == GpuFormat::Unknown) {
 		Fail("CreatePipeline format=Unknown reason=invalid_format");
@@ -760,6 +768,9 @@ GpuResult NullGpuDevice::BeginCommands(GpuCommandListId& out)
 
 GpuResult NullGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc)
 {
+	if(desc.depth_target.IsValid() || desc.depth_format != GpuFormat::Unknown || !desc.flip_viewport_y) {
+		Fail("BeginRenderPass reason=3d_not_implemented"); return GpuResult::Unsupported;
+	}
 	const CommandState *state = nullptr;
 	String reason;
 	if(!CanUseCommandList(list, state, reason)) {

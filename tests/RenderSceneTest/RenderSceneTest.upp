@@ -1,0 +1,9 @@
+uses
+	Core,
+	RenderScene;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "CONSOLE";

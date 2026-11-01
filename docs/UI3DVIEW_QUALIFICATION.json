@@ -1,0 +1,539 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-11-01 01:21:22 UTC",
+  "project": "Ui3DView",
+  "workspace": "E:/apps/github/upp_render",
+  "source_baseline_head": "b3a42b1ffe8830cb36c121add2b77d0e72fad465",
+  "source_state": "Uncommitted working-tree implementation; unrelated staged gallery/documentation work preserved.",
+  "qualification": "passed bounded Windows functional gates; physical and additional hardware acceptance remain separate",
+  "environment": {
+    "host": "DESKTOP-GFX1",
+    "platform": "Windows x64",
+    "upp": "18468",
+    "umk": "E:/upp-18468/umk.exe",
+    "umk_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+    "method": "E:/apps/github/upp_render/CLANGx64_Vulkan.bm",
+    "vulkan_sdk": "C:/VulkanSDK/1.4.350.0",
+    "source_nests": "E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/tests,E:/apps/github/upp_render/tools,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc",
+    "ordinary_release_flags": "-rH4",
+    "ordinary_debug_flags": "-H4",
+    "blitz_debug_flags": "-bH4"
+  },
+  "demo": {
+    "path": "bin/win64/Ui3DViewDemo.exe",
+    "bytes": 6193664,
+    "sha256": "eafbcbdd8078459bb1a59796ac06eddf24a74409a1fb1fee37c2ea5d6e8cdfc2",
+    "build": {
+      "job_id": "exec-52D113694190802CB23F2D3AE396E3D9",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 6422,
+      "stdout": "Saving \r\n----- Ui3DView ( GUI CLANG WIN32 ) (1 / 23)\r\n----- Ui ( GUI CLANG WIN32 ) (2 / 23)\r\n----- plugin/png ( GUI CLANG WIN32 ) (3 / 23)\r\n----- Core ( GUI CLANG WIN32 ) (4 / 23)\r\n----- CtrlLib ( GUI CLANG WIN32 ) (5 / 23)\r\n----- GpuRender ( GUI CLANG WIN32 ) (6 / 23)\r\n----- RenderRhi ( GUI CLANG WIN32 ) (7 / 23)\r\n----- RenderCore ( GUI CLANG WIN32 ) (8 / 23)\r\n----- RenderScene ( GUI CLANG WIN32 ) (9 / 23)\r\n----- plugin/z ( GUI CLANG WIN32 ) (10 / 23)\r\n----- CtrlCore ( GUI CLANG WIN32 ) (11 / 23)\r\n----- Draw ( GUI CLANG WIN32 ) (12 / 23)\r\n----- plugin/bmp ( GUI CLANG WIN32 ) (13 / 23)\r\n----- RichText ( GUI CLANG WIN32 ) (14 / 23)\r\n----- Painter ( GUI CLANG WIN32 ) (15 / 23)\r\n----- RenderCanvas ( GUI CLANG WIN32 ) (16 / 23)\r\n----- RenderCtrlBridge ( GUI CLANG WIN32 ) (17 / 23)\r\n----- RenderGpu2D ( GUI CLANG WIN32 ) (18 / 23)\r\n----- RenderPlatformWin32 ( GUI CLANG WIN32 ) (19 / 23)\r\n----- RenderVulkan ( GUI CLANG WIN32 ) (20 / 23)\r\n----- RenderVector ( GUI CLANG WIN32 ) (21 / 23)\r\n----- Animation ( GUI CLANG WIN32 ) (22 / 23)\r\n----- Ui3DViewDemo ( GUI MAIN CLANG WIN32 ) (23 / 23)\r\nUi3DViewDemo.cpp\r\nmain.cpp\r\nUi3DViewDemo: 2 file(s) built in (0:05.22), 2611 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\Ui3DViewDemo.exe (6193664 B) linked in (0:00.20)\r\n\r\nOK. (0:06.28)\r\n",
+      "stderr": "",
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235"
+    },
+    "capture": {
+      "job_id": "exec-CC9B7C4E34CCD8A800A1EB80AD546426",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 3047,
+      "stdout": "Ui3DViewDemo PASS\r\nrendered_frames=4 mesh_uploads=2 resident_meshes=2 depth_rebuilds=1\r\nerror=\r\n",
+      "stderr": "",
+      "executable_sha256": "eafbcbdd8078459bb1a59796ac06eddf24a74409a1fb1fee37c2ea5d6e8cdfc2"
+    },
+    "stable_path_smoke": {
+      "job_id": "exec-AC0579A84361BE3610E01CE19FCA3A82",
+      "status": "succeeded",
+      "exit_code": 0,
+      "duration_ms": 1968,
+      "stdout": "Ui3DViewDemo PASS\r\nrendered_frames=1 mesh_uploads=2 resident_meshes=2 depth_rebuilds=1\r\nerror=\r\n",
+      "stderr": "",
+      "executable_sha256": "eafbcbdd8078459bb1a59796ac06eddf24a74409a1fb1fee37c2ea5d6e8cdfc2"
+    },
+    "promotion_transaction": "tran-fs-412D5056B3EE929758F091F94A3502DD",
+    "source_and_destination_hashes_identical": true
+  },
+  "tests": [
+    {
+      "key": "sceneFinalRelease",
+      "package": "RenderSceneTest",
+      "configuration": "Release",
+      "build": {
+        "job_id": "exec-C9B282AD0D20CA23ACE7F92F5746AB2F",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 7859
+      },
+      "run": {
+        "job_id": "exec-258FE4E4EDAD8A62576E7C23ADD2AF96",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 156,
+        "stdout": "RenderSceneTest: 84 checks, 0 failures\r\n"
+      },
+      "executable": {
+        "path": "build/RenderSceneTest.exe",
+        "sha256": "7b344ffa1f6ad57220d92c20cf54a5ec01cdc0eff6b2ee35e100ae87fa3c8406",
+        "bytes": 1481216
+      }
+    },
+    {
+      "key": "sceneDebug",
+      "package": "RenderSceneTest",
+      "configuration": "Debug + BLITZ",
+      "build": {
+        "job_id": "exec-A0E893473A43B285E7F130C32FD3E869",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 16657
+      },
+      "run": {
+        "job_id": "exec-B9F8666E43B4AC5030CE7CF80E2DEFC6",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 188,
+        "stdout": "RenderSceneTest: 84 checks, 0 failures\r\n"
+      },
+      "executable": {
+        "path": "build/RenderSceneTest-debug.exe",
+        "sha256": "9e82f2a3c6943dfcbf2fd765496a64b2cc09ee3aa6fa258b018f8dd2be3d5bb2",
+        "bytes": 2978304
+      }
+    },
+    {
+      "key": "vulkan3DRelease",
+      "package": "RenderVulkan3DTest",
+      "configuration": "Release",
+      "build": {
+        "job_id": "exec-7EC535A5119101AC4F11421EDB92226A",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 3860
+      },
+      "run": {
+        "job_id": "exec-87399590A9DCA2DBDE263FE7CA4414EB",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 610,
+        "stdout": "RenderVulkan3DTest: 221 checks, 1928 oracle pixels, 0 failures\r\n"
+      },
+      "executable": {
+        "path": "build/RenderVulkan3DTest.exe",
+        "sha256": "2a719c338968c200d26c643f672218f92ddceda9a336775b2f7681bee8c6b38e",
+        "bytes": 1918976
+      }
+    },
+    {
+      "key": "vulkan3DDebug",
+      "package": "RenderVulkan3DTest",
+      "configuration": "Debug + BLITZ",
+      "build": {
+        "job_id": "exec-18D6D7438AA5F4AF028253E621BEC442",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 8812
+      },
+      "run": {
+        "job_id": "exec-320392286B33F00E2D89E0A7C08B27A9",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 671,
+        "stdout": "RenderVulkan3DTest: 221 checks, 1928 oracle pixels, 0 failures\r\n"
+      },
+      "executable": {
+        "path": "build/RenderVulkan3DTest-debug.exe",
+        "sha256": "25ef518163d0a8d5eaa7922109403afcb68967fd0e90969d53a79632b597d92f",
+        "bytes": 3489280
+      }
+    },
+    {
+      "key": "nativeFinalRelease",
+      "package": "Ui3DViewTest",
+      "configuration": "Release",
+      "build": {
+        "job_id": "exec-00D0A5AE925C1F25EB94CA4EF46BE914",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 5860
+      },
+      "run": {
+        "job_id": "exec-97406850C0C8F7321209582BA8D4C454",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4469,
+        "stdout": "Ui3DViewTest PASS checks=116 failures=0\r\n"
+      },
+      "executable": {
+        "path": "build/Ui3DViewTest.exe",
+        "sha256": "49c556848bdcac79db84444c2706fdf22b2c8e70e5dcd204a2494be4e92349a3",
+        "bytes": 5442048
+      }
+    },
+    {
+      "key": "nativeDebug",
+      "package": "Ui3DViewTest",
+      "configuration": "Debug",
+      "build": {
+        "job_id": "exec-FEF89D2E27B7833628372B4361C8FDE3",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 5719
+      },
+      "run": {
+        "job_id": "exec-2710D73AFF0E367CEEE07ED16D4D3AA2",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4406,
+        "stdout": "Ui3DViewTest PASS checks=116 failures=0\r\n"
+      },
+      "executable": {
+        "path": "build/Ui3DViewTest-debug.exe",
+        "sha256": "ce129a9567a95d9c0d0b86df9d4c11543a57e2ac8e7a69c087c47a3a209707a3",
+        "bytes": 7756800
+      }
+    },
+    {
+      "key": "nativeDebugBlitz",
+      "package": "Ui3DViewTest",
+      "configuration": "Debug + BLITZ",
+      "build": {
+        "job_id": "exec-982810D129E36E9B9DF64B87A0E80502",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 5813
+      },
+      "run": {
+        "job_id": "exec-129E0965FB73A62086D652139EFC16A6",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 4718,
+        "stdout": "Ui3DViewTest PASS checks=116 failures=0\r\n"
+      },
+      "executable": {
+        "path": "build/Ui3DViewTest-debug-blitz.exe",
+        "sha256": "7c241db40c545d4793252e21821d632073447e62a2788543f323a640966721d6",
+        "bytes": 8636928
+      }
+    },
+    {
+      "key": "rhiFinalRelease",
+      "package": "RenderRhiTest",
+      "configuration": "Release",
+      "build": {
+        "job_id": "exec-038A8F85E0616747EFD9DA2A67019F9A",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 8844
+      },
+      "run": {
+        "job_id": "exec-951D186E2BB2E35E58B68209B1344770",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 62,
+        "stdout": "RenderRhiTest passed (193 checks)\r\n"
+      },
+      "executable": {
+        "path": "build/Ui3DRhiRegression.exe",
+        "sha256": "e064f58cc11377ae81376dbef470e2a9a3e0d5063dcda27e5c8c4cecec9ac1df",
+        "bytes": 2299392
+      }
+    },
+    {
+      "key": "graphicsFinalRelease",
+      "package": "RenderVulkanGraphicsTest",
+      "configuration": "Release",
+      "build": {
+        "job_id": "exec-3F816164304C8CA52021B4F8A4AE5BD9",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 812
+      },
+      "run": {
+        "job_id": "exec-2745A95CB6F6964254EF4307D7A8463C",
+        "status": "succeeded",
+        "exit_code": 0,
+        "duration_ms": 968,
+        "stdout": "RenderVulkanGraphicsTest passed\r\n"
+      },
+      "executable": {
+        "path": "build/Ui3DGraphicsRegression.exe",
+        "sha256": "8e5c7b1db3f050b7253700f8e536679c629319ed6f647645b83626cb4712c2cc",
+        "bytes": 1918464
+      }
+    }
+  ],
+  "earlier_attempts": [
+    {
+      "reason": "Initial native input regression exposed middle double/triple forwarding and movement-delivery test issues; fixed before final qualification.",
+      "job_id": "exec-15BAFFD5DBA82CE7573D18C879618731",
+      "exit_code": 1,
+      "checks": 107,
+      "failures": 11
+    },
+    {
+      "reason": "Initial BLITZ build found an existing RenderGpu2D unity collision; corrected with per-file NOBLITZ.",
+      "job_id": "exec-82151D598D9B359DE2D5029395F01DE2",
+      "status": "failed",
+      "exit_code": 1,
+      "duration_ms": 47625,
+      "stdout": "Saving \r\n----- Ui3DView ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (1 / 21)\r\nUi3DView.cpp\r\nUi3DViewContent.cpp\r\n----- RenderVulkan ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (2 / 21)\r\nBLITZ: RenderVulkan.cpp RenderVulkanFrame.cpp RenderVulkanClearFrame.cpp RenderVulkanPresentation.cpp\r\nRenderVulkanRhi.cpp\r\n----- Core ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (3 / 21)\r\nBLITZ: Cpu.cpp Mem.cpp SIMD.cpp Mt.cpp StringFind.cpp WString.cpp SplitMerge.cpp Utf.cpp UnicodeInfo.cpp Bom.cpp Path.cpp NetNode.cpp App.cpp Huge.cpp Stream.cpp BlockStream.cpp FilterStream.cpp FileMapping.cpp Log.cpp Debug.cpp Ini.cpp StringsStream.cpp Util.cpp mathutil.cpp Random.cpp Speller.cpp LocalProcess.cpp BinUndoRedo.cpp PackedData.cpp Vcont.cpp Index.cpp TimeDate.cpp Value.cpp ValueUtil.cpp Format.cpp Convert.cpp Color.cpp Gtypes.cpp t.cpp Lang.cpp LangInfo.cpp parser.cpp XML.cpp Xmlize.cpp JSON.cpp Uuid.cpp Ptr.cpp Topic.cpp CoWork.cpp ValueCache.cpp MD5.cpp SHA1.cpp SHA256.cpp xxHsh.cpp InetUtil.cpp MIME.cpp Socket.cpp WebSocket.cpp Dli.cpp Win32Util.cpp\r\nheaputil.cpp\r\nUi3DView: 2 file(s) built in (0:02.28), 1141 msecs / file\r\nhheap.cpp\r\nsheap.cpp\r\nRenderVulkan: 5 file(s) built in (0:02.46), 492 msecs / file\r\nlheap.cpp\r\nheap.cpp\r\nheapdbg.cpp\r\nString.cpp\r\nCharSet.cpp\r\nCvFlt.cpp\r\nz.cpp\r\nlz4.c\r\nxxhash.c\r\nHttp.cpp\r\n----- CtrlLib ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (4 / 21)\r\nBLITZ: CtrlLibInit.cpp SmartText.cpp LabelBase.cpp DisplayPopup.cpp Button.cpp Switch.cpp VirtualButtons.cpp EditField.cpp Text.cpp LineEdit.cpp DocEdit.cpp ScrollBar.cpp HeaderCtrl.cpp ArrayCtrl.cpp MultiButton.cpp PopupTable.cpp PopUpList.cpp DropList.cpp DropChoice.cpp Static.cpp Splitter.cpp FrameSplitter.cpp SliderCtrl.cpp ColumnList.cpp Progress.cpp AKeys.cpp RichTextView.cpp Prompt.cpp Help.cpp DateTimeCtrl.cpp SuggestCtrl.cpp Bar.cpp ToolButton.cpp ToolBar.cpp ToolTip.cpp StatusBar.cpp TabCtrl.cpp TreeCtrl.cpp DropTree.cpp DlgColor.cpp ColorPopup.cpp ColorPusher.cpp FileList.cpp FileSel.cpp FileSelUtil.cpp PrinterJob.cpp Windows.cpp Win32.cpp Gtk.cpp TrayIconWin32.cpp TrayIconX11.cpp TrayIconGtk.cpp Update.cpp CtrlUtil.cpp BeginnerInfo.cpp LNGCtrl.cpp Ch.cpp ChGtk3.cpp ChCoco.cpp\r\nMenuItem.cpp\r\nMenuBar.cpp\r\nChWin32.cpp\r\nCore: 73 file(s) built in (0:10.04), 137 msecs / file\r\n----- GpuRender ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (5 / 21)\r\nBLITZ: GpuTopWindow.cpp Win32GpuIme.cpp GpuTransientWindows.cpp GpuWindow.cpp RenderPresentation.cpp\r\nGpuCtrl.cpp\r\n----- RenderRhi ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (6 / 21)\r\nRenderRhi.cpp\r\nRenderRhiBackend.cpp\r\n----- RenderCore ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (7 / 21)\r\nBLITZ: GpuImeClient.cpp GpuTextLayout.cpp RenderCore.cpp\r\nGpuRender: 6 file(s) built in (0:02.22), 371 msecs / file\r\n----- RenderScene ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (8 / 21)\r\nScene3D.cpp\r\n----- plugin/z ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (9 / 21)\r\nadler32.c\r\nCtrlLib: 62 file(s) built in (0:05.43), 87 msecs / file\r\ncompress.c\r\ncrc32.c\r\ndeflate.c\r\nRenderRhi: 2 file(s) built in (0:01.83), 917 msecs / file\r\ninfback.c\r\ninffast.c\r\ninflate.c\r\ninftrees.c\r\ntrees.c\r\nuncompr.c\r\nzutil.c\r\n----- CtrlCore ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (10 / 21)\r\nBLITZ: SystemDraw.cpp Frame.cpp CtrlMt.cpp Ctrl.cpp CtrlAttr.cpp CtrlChild.cpp CtrlFrame.cpp CtrlPos.cpp CtrlDraw.cpp CtrlMouse.cpp CtrlKbd.cpp CtrlTimer.cpp CtrlClip.cpp LocalLoop.cpp Preedit.cpp CtrlCoreInit.cpp TopWindow.cpp DrawWin32.cpp DrawOpWin32.cpp DrawTextWin32.cpp ImageWin32.cpp MetaFile.cpp UtilWin32.cpp Win32Ctrl.cpp Win32Wnd.cpp Win32Clip.cpp Win32DnD.cpp Win32Proc.cpp TopWin32.cpp DHCtrl.cpp DrawX11.cpp DrawOpX11.cpp DrawTextX11.cpp ImageX11.cpp UtilX11.cpp X11Ctrl.cpp X11Wnd.cpp X11Proc.cpp X11Clip.cpp X11DnD.cpp X11Top.cpp X11ImgClip.cpp X11App.cpp X11DHCtrl.cpp GtkDrawOp.cpp GtkDrawText.cpp GtkDrawImage.cpp GdkImage.cpp GtkUtil.cpp GtkX11Util.cpp GtkCtrl.cpp GtkCapture.cpp GtkWnd.cpp GtkCreate.cpp GtkEvent.cpp GtkTop.cpp GtkCustomBar.cpp GtkClip.cpp GtkDnD.cpp GtkApp.cpp CocoCtrl.cpp CocoWnd.cpp CocoChSysInit.cpp ParseRTF.cpp EncodeRTF.cpp\r\n----- Draw ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (11 / 21)\r\nBLITZ: Font.cpp FontWin32.cpp FontFc.cpp FontCocoNOMM.cpp Draw.cpp DrawText.cpp DrawData.cpp Drawing.cpp ImageAnyDraw.cpp DrawUtil.cpp DrawTextUtil.cpp Display.cpp Image.cpp ImageBlit.cpp RasterFormat.cpp RasterWrite.cpp Palette.cpp Raster.cpp RasterEncoder.cpp ImageOp.cpp ImageChOp.cpp Mify.cpp ImageScale.cpp RescaleFilter.cpp MakeCache.cpp DrawRasterData.cpp Uhd.cpp Iml.cpp DDARasterizer.cpp SDrawClip.cpp SDrawPut.cpp SDrawText.cpp SDraw.cpp SImageDraw.cpp Cham.cpp SColors.cpp\r\nplugin/z: 11 file(s) built in (0:00.38), 34 msecs / file\r\nFontCR.cpp\r\nRenderCore: 3 file(s) built in (0:00.92), 308 msecs / file\r\n----- plugin/bmp ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (12 / 21)\r\nBLITZ: Bmp.cpp BmpWrite.cpp Icon.cpp BmpReg.icpp\r\nRenderScene: 1 file(s) built in (0:00.90), 905 msecs / file\r\n----- RichText ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (13 / 21)\r\nBLITZ: Object.cpp RichImage.cpp ParaData.cpp ParaType.cpp ParaPaint.cpp HeaderFooter.cpp TxtData.cpp TxtPaint.cpp TxtOp.cpp Format.cpp TableCell.cpp TableLayout.cpp TablePaint.cpp TableData.cpp TextPaint.cpp TextStyle.cpp TextData.cpp TextTable.cpp EncodeQtf.cpp ParseQtf.cpp EncodeHTML.cpp ParseHTML.cpp Util.cpp Diagram.cpp DiagramShape.cpp RichDiagram.cpp\r\n----- Painter ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (14 / 21)\r\nBLITZ: Painter.cpp SvgArc.cpp PainterPath.cpp DrawOp.cpp Painting.cpp PaintPainting.cpp Xform2D.cpp Approximate.cpp Stroker.cpp Dasher.cpp Transformer.cpp Rasterizer.cpp RasterizerClip.cpp RenderChar.cpp Fillers.cpp Context.cpp Path.cpp Render.cpp Image.cpp Mask.cpp Gradient.cpp RadialGradient.cpp OnPath.cpp\r\nDraw: 37 file(s) built in (0:02.12), 57 msecs / file\r\nplugin/bmp: 4 file(s) built in (0:00.81), 203 msecs / file\r\nSvgUtil.cpp\r\nSvgBounds.cpp\r\nCtrlCore: 65 file(s) built in (0:01.47), 22 msecs / file\r\nSvgStyle.cpp\r\nSvgParser.cpp\r\n----- plugin/png ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (15 / 21)\r\nRichText: 26 file(s) built in (0:01.27), 48 msecs / file\r\nBLITZ: pngupp.cpp pngreg.icpp\r\npnglib.c\r\n----- RenderCanvas ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (16 / 21)\r\nRenderCanvas.cpp\r\n----- RenderCtrlBridge ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (17 / 21)\r\nRenderCtrlBridge.cpp\r\n----- RenderGpu2D ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (18 / 21)\r\nBLITZ: RenderGpu2DPath.cpp RenderGpu2DImage.cpp RenderGpu2DText.cpp RenderGpu2DVector.cpp RenderGpu2DLayer.cpp GpuVectorRasterizer.cpp\r\nplugin/png: 3 file(s) built in (0:01.07), 356 msecs / file\r\nRenderGpu2D.cpp\r\nPainter: 27 file(s) built in (0:03.83), 141 msecs / file\r\n----- RenderPlatformWin32 ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (19 / 21)\r\nRenderPlatformWin32.cpp\r\nRenderCanvas: 1 file(s) built in (0:00.72), 722 msecs / file\r\n----- RenderVector ( GUI CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (20 / 21)\r\nBLITZ: RenderVector.cpp SemanticPainter.cpp\r\nRenderCtrlBridge: 1 file(s) built in (0:00.72), 728 msecs / file\r\n----- Ui3DViewTest ( GUI MAIN CLANG DEBUG DEBUG_FULL BLITZ WIN32 ) (21 / 21)\r\nIn file included from E:/apps/github/upp_render/build/cache-ui3d-debug/RenderGpu2D/CLANGx64_Vulkan.Debug.Debug_Full.Gui\\RenderGpu2D$blitz.cpp:35:\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\GpuVectorRasterizer.cpp:9:33: error: redefinition of 'MAX_POINTS'\r\n    9 | constexpr int MAX_EDGES = 8192, MAX_POINTS = 4096;\r\n      |                                 ^\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\RenderGpu2DPath.cpp:7:15: note: previous definition is here\r\n    7 | constexpr int MAX_POINTS = 512;\r\n      |               ^\r\nIn file included from E:/apps/github/upp_render/build/cache-ui3d-debug/RenderGpu2D/CLANGx64_Vulkan.Debug.Debug_Full.Gui\\RenderGpu2D$blitz.cpp:35:\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\GpuVectorRasterizer.cpp:10:18: error: redefinition of 'EPS'\r\n   10 | constexpr double EPS = 1e-10;\r\n      |                  ^\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\RenderGpu2DPath.cpp:10:18: note: previous definition is here\r\n   10 | constexpr double EPS = 1e-8;\r\n      |                  main.cpp\r\n^\r\nIn file included from E:/apps/github/upp_render/build/cache-ui3d-debug/RenderGpu2D/CLANGx64_Vulkan.Debug.Debug_Full.Gui\\RenderGpu2D$blitz.cpp:35:\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\GpuVectorRasterizer.cpp:11:6: error: redefinition of 'Finite'\r\n   11 | bool Finite(Pointf p) { return std::isfinite(p.x) && std::isfinite(p.y) && fabs(p.x)<=1e7 && fabs(p.y)<=1e7; }\r\n      |      ^\r\nE:\\apps\\github\\upp_render\\render\\RenderGpu2D\\RenderGpu2DPath.cpp:15:6: note: previous definition is here\r\n   15 | bool Finite(Pointf p) { return std::isfinite(p.x) && std::isfinite(p.y); }\r\n      |      ^\r\n3 errors generated.\r\nmain.rc\r\nRenderGpu2D: 7 file(s) built in (0:01.42), 204 msecs / file\r\nRenderPlatformWin32: 1 file(s) built in (0:00.77), 770 msecs / file\r\nRenderVector: 2 file(s) built in (0:01.06), 534 msecs / file\r\nUi3DViewTest: 2 file(s) built in (0:02.05), 1025 msecs / file\r\n\r\nThere were errors. (0:47.50)\r\n",
+      "stderr": "",
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235"
+    },
+    {
+      "reason": "Initial ordinary Debug run refused input because the native test window was not foreground.",
+      "job_id": "exec-D3F8F3F21F4CE6F8F12A23683CA687B0",
+      "status": "failed",
+      "exit_code": 1,
+      "duration_ms": 3985,
+      "stdout": "FAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native child forwards selection input once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native middle press begins captured orbit\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native move changes camera\r\nFAIL: Escape is consumed during navigation\r\nFAIL: cancel retains monotonic revision\r\nFAIL: cancel emitted exactly once\r\nFAIL: repeated capture cancellation is idempotent\r\nFAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: deliberate ReleaseCapture commits without spurious cancellation\r\nFAIL: commit retains new camera\r\nFAIL: test window foreground required before mouse input\r\nFAIL: external capture release cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: focus loss cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: disable cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: hide cancels navigation\r\nFAIL: test window foreground required before mouse input\r\nFAIL: outer camera setter detects callback rebind\r\nFAIL: callback camera is not silently overwritten\r\nFAIL: test window foreground required before mouse input\r\nFAIL: rebind cancellation retains originating gesture and scene\r\nFAIL: test window foreground required before mouse input\r\nFAIL: deferred cancel precedes a newer wheel action\r\nUi3DViewTest FAIL checks=108 failures=31\r\n",
+      "stderr": "",
+      "executable_sha256": "2e8abcd26643f182edd17ad91fdab5292512f85159a3be69053c051c45a99e99"
+    },
+    {
+      "reason": "Updated Release native test was also denied foreground access. Guard remained enabled; one bounded manual recheck passed.",
+      "job_id": "exec-ADBA68EED078346E6B5D99B37D416F04",
+      "status": "failed",
+      "exit_code": 1,
+      "duration_ms": 8110,
+      "stdout": "FAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native child forwards selection input once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native middle press begins captured orbit\r\nFAIL: test window foreground required before mouse input\r\nFAIL: native move changes camera\r\nFAIL: Escape is consumed during navigation\r\nFAIL: cancel retains monotonic revision\r\nFAIL: cancel emitted exactly once\r\nFAIL: repeated capture cancellation is idempotent\r\nFAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: test window foreground required before mouse input\r\nFAIL: deliberate ReleaseCapture commits without spurious cancellation\r\nFAIL: commit retains new camera\r\nFAIL: test window foreground required before mouse input\r\nFAIL: external capture release cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: focus loss cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: disable cancels once\r\nFAIL: test window foreground required before mouse input\r\nFAIL: hide cancels navigation\r\nFAIL: test window foreground required before mouse input\r\nFAIL: outer camera setter detects callback rebind\r\nFAIL: callback camera is not silently overwritten\r\nFAIL: test window foreground required before mouse input\r\nFAIL: rebind cancellation retains originating gesture and scene\r\nFAIL: test window foreground required before mouse input\r\nFAIL: deferred cancel precedes a newer wheel action\r\nUi3DViewTest FAIL checks=108 failures=31\r\n",
+      "stderr": "",
+      "executable_sha256": "49c556848bdcac79db84444c2706fdf22b2c8e70e5dcd204a2494be4e92349a3"
+    }
+  ],
+  "visual_captures": [
+    {
+      "path": "docs/ui3dview-captures/Ui3DView-dark.png",
+      "width": 1240,
+      "height": 780,
+      "bytes": 60561,
+      "sha256": "b2d198ac71b84fdb1a25725c9d141ceff449fcd37e34ea5f2f06090fc854a745",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/ui3dview-captures/Ui3DView-light.png",
+      "width": 1240,
+      "height": 780,
+      "bytes": 60418,
+      "sha256": "de4df48116d90756f434beb3f9b3a1ecf4f666cc9aef2fb333a2ca265e9f64ed",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/ui3dview-captures/Ui3DView-wireframe.png",
+      "width": 1240,
+      "height": 780,
+      "bytes": 67889,
+      "sha256": "3e831f6e6272bc9d8e0f77551b0b64c373edd8c445b1bba38f1d6311031c5692",
+      "visually_inspected": true
+    },
+    {
+      "path": "docs/ui3dview-captures/Ui3DView-orthographic.png",
+      "width": 1240,
+      "height": 780,
+      "bytes": 61318,
+      "sha256": "97525cef84f9fa24f601d7b5b655b853f72e9fc255c7ced70eeb22c12279f8cc",
+      "visually_inspected": true
+    }
+  ],
+  "source_files": [
+    {
+      "path": "render/GpuRender/GpuCtrl.cpp",
+      "sha256": "48e47829535bd68f77394351ee12666e1a4dc1de925d6077604bf9907b82fb70",
+      "bytes": 10973
+    },
+    {
+      "path": "render/RenderRhi/RenderRhi.h",
+      "sha256": "73c708a50be036a5a8964de9c6e307d13ba170f62e51209d01854dc462eb6f74",
+      "bytes": 16557
+    },
+    {
+      "path": "render/RenderRhi/RenderRhi.cpp",
+      "sha256": "0caef38d902424a4cecae97f2fcdca77a82d20581dcd6b7b2b6390904c32fca5",
+      "bytes": 7477
+    },
+    {
+      "path": "render/RenderNull/RenderNull.cpp",
+      "sha256": "49e1b616bae09b6ee4b235048528cd4cddc0df47e09b2ebb9a284d2c6e5b1c13",
+      "bytes": 40373
+    },
+    {
+      "path": "render/RenderVulkan/RenderVulkanRhi.h",
+      "sha256": "ddba5348b764a1ad3121262b459eb4a34228fd129d440d230579ade60329f386",
+      "bytes": 6766
+    },
+    {
+      "path": "render/RenderVulkan/RenderVulkanRhi.cpp",
+      "sha256": "a6fd67a1a9ac366948e78fbbb0b3e3491c8efd94a0d74dceb97adec188ec99fd",
+      "bytes": 34437
+    },
+    {
+      "path": "render/RenderVulkan/RenderVulkanRhiBase.inc",
+      "sha256": "ac47ef82353ca551c0ca1370b5a33f8f7b699f601c016502858c7dee01508c98",
+      "bytes": 103183
+    },
+    {
+      "path": "render/RenderVulkan/RenderVulkanCompute.inc",
+      "sha256": "1e8a557b21b1dc4fae6cbb5ff9899ef473ed6fa24a80502330b076565670f5fd",
+      "bytes": 27246
+    },
+    {
+      "path": "render/RenderScene/RenderScene.upp",
+      "sha256": "c2543567209439bd156cb18e6ccf4d326f2aac311fd31dfbf7dad448a747f454",
+      "bytes": 44
+    },
+    {
+      "path": "render/RenderScene/Scene3D.h",
+      "sha256": "9963f522a457c4dc5b21d65b327b691903e5aa8684eba3f901377d4fec8aa25f",
+      "bytes": 6662
+    },
+    {
+      "path": "render/RenderScene/Scene3D.cpp",
+      "sha256": "3caf530c7d81c5a8a66acf572c9e1e6a8f0d31a2989b04d9b939b9eeb3292c86",
+      "bytes": 21873
+    },
+    {
+      "path": "render/Ui3DView/Ui3DView.upp",
+      "sha256": "f113c791462f19821ae35a2a9349d4ef8c969a3601bfb33bad4a5726a9a4b805",
+      "bytes": 161
+    },
+    {
+      "path": "render/Ui3DView/Ui3DView.h",
+      "sha256": "6ddee2d5c2b5b138493e75d44b93c6facbc7e79031fc360f9165cfab05d85241",
+      "bytes": 6302
+    },
+    {
+      "path": "render/Ui3DView/Ui3DView.cpp",
+      "sha256": "a625de754b070b62e65c48b8c93aa17877a55da882fed54b63d389ccd5bc01e7",
+      "bytes": 15550
+    },
+    {
+      "path": "render/Ui3DView/Ui3DViewContent.h",
+      "sha256": "920d737379a3e4dbf47d535c01238bfd811b0434adcfe11ce96b376ee8b0749e",
+      "bytes": 471
+    },
+    {
+      "path": "render/Ui3DView/Ui3DViewContent.cpp",
+      "sha256": "47ff8e1e8b0d1209c1647d81e7cf694f2d397349dfaa9ad34163fa375abcc16b",
+      "bytes": 18124
+    },
+    {
+      "path": "shaders/Ui3DMesh.vert",
+      "sha256": "fe6189ee9bf8c600fce4823a48c61f14ef63aa37f537eaddc29a8509ce603c09",
+      "bytes": 753
+    },
+    {
+      "path": "shaders/Ui3DMesh.frag",
+      "sha256": "de664255774153d33699fdf3f77617d5dd53553d6ff0529c1415e8da4ac85e5f",
+      "bytes": 941
+    },
+    {
+      "path": "shaders/Ui3DMeshVertSpirv.h",
+      "sha256": "c499ecc122f00f0715e2820707e9fa25d3f47a7f9f610777ec76620bc5ac1e12",
+      "bytes": 5312
+    },
+    {
+      "path": "shaders/Ui3DMeshFragSpirv.h",
+      "sha256": "d46b1370ebb19f8038cc35ecf23966deffc535fe49393b221febeeb1bda7f663",
+      "bytes": 5962
+    },
+    {
+      "path": "examples/Ui3DViewDemo/Ui3DViewDemo.upp",
+      "sha256": "dd164bd978483c3ec0bc719ea0db1adcf138e5bc0eb8dfc8c289efe72924eebc",
+      "bytes": 112
+    },
+    {
+      "path": "examples/Ui3DViewDemo/Ui3DViewDemo.h",
+      "sha256": "d5f8d3568bec9ee12df8db4a8ba5e60fafe59169b62ce27995ca5a1ed78dac8b",
+      "bytes": 889
+    },
+    {
+      "path": "examples/Ui3DViewDemo/Ui3DViewDemo.cpp",
+      "sha256": "7cddbeccaffe1c3a836bc199d343e6d336dbf06c3e4357fd5835b2c7fcb08542",
+      "bytes": 10825
+    },
+    {
+      "path": "examples/Ui3DViewDemo/main.cpp",
+      "sha256": "61f0904cdce1ffa13e6d2edde5deeaf4f39aa9dc1daea27a900656fa3374816e",
+      "bytes": 2173
+    },
+    {
+      "path": "tests/RenderSceneTest/RenderSceneTest.upp",
+      "sha256": "0f8cfdc469cf04405872fb5e68df287c2a5959c073e328e0a54feb9f83c68ee2",
+      "bytes": 72
+    },
+    {
+      "path": "tests/RenderSceneTest/main.cpp",
+      "sha256": "3f633e379b78c3a1c5df60881913f406a46bbf49992059637cc1c80efc19569b",
+      "bytes": 17103
+    },
+    {
+      "path": "tests/RenderVulkan3DTest/RenderVulkan3DTest.upp",
+      "sha256": "36113067d92268e7c02f587e497e10be2334ad42d0c907383564f4fbcd5230dd",
+      "bytes": 150
+    },
+    {
+      "path": "tests/RenderVulkan3DTest/main.cpp",
+      "sha256": "39493e04b24f21e348db8a2d6ca56775de64db1d548d1c69618f4473d46bda02",
+      "bytes": 22091
+    },
+    {
+      "path": "tests/Ui3DViewTest/Ui3DViewTest.upp",
+      "sha256": "77d72cff6d93ad7c194d3227e91ad6d523369a08a74052ea925c9cd7cdd387bf",
+      "bytes": 73
+    },
+    {
+      "path": "tests/Ui3DViewTest/main.cpp",
+      "sha256": "3d8e32c56a50b4b93b59cddc0fc4ebe25589170659ee68c02ee8214da3d1a791",
+      "bytes": 20655
+    },
+    {
+      "path": "tests/RenderRhiTest/main.cpp",
+      "sha256": "8979068fabbde3d9fb10b02f74e6bc078b1735e6dc04182510128930a8dea11c",
+      "bytes": 35143
+    },
+    {
+      "path": "render/Ui3DView/README.md",
+      "sha256": "10cf956aa73fe540fed3fe5421d0af940cc51aa69c8d17dc993c799d343470cb",
+      "bytes": 10051
+    },
+    {
+      "path": "docs/UI3DVIEW_ARCHITECTURE.md",
+      "sha256": "f95782793b93b3d29cb388fa5676053cb250cb32a4911a93d0a3e54e41f86ee7",
+      "bytes": 12820
+    },
+    {
+      "path": "render/RenderGpu2D/RenderGpu2D.upp",
+      "sha256": "379631f590ed1bba1ba527efb0136fcfb20c5eb276cc86f3a252c75061ddcf72",
+      "bytes": 353
+    },
+    {
+      "path": "docs/README.md",
+      "sha256": "ea99ac701a1a0fe1b994310c1a0186f3eae0044f4a727c1f1fffd989cd1d5021",
+      "bytes": 1997
+    }
+  ],
+  "validation_contracts": {
+    "gpu_validation_layer_active_required": true,
+    "gpu_debug_messenger_live_required": true,
+    "zero_validation_warnings_and_errors": true,
+    "zero_final_vulkan_owned_resources": true,
+    "bounded_gpu_checks": true,
+    "physical_monitor_dpi_acceptance_claimed": false,
+    "performance_benchmark_claimed": false,
+    "driver_flush_failure_injected": false
+  },
+  "shared_diff_check": {
+    "job_id": "exec-B30BAAF9B23A14C5657CF11C1DBC6DBA",
+    "status": "succeeded",
+    "exit_code": 0,
+    "duration_ms": 125,
+    "stdout": "",
+    "stderr": "warning: in the working copy of 'docs/README.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'render/RenderVulkan/RenderVulkanCompute.inc', LF will be replaced by CRLF the next time Git touches it\n",
+    "executable_sha256": "7e2c87000d2b08a7e123bb1f9dcce6692f61b1884044fa52cb1bd47b5a70788d"
+  },
+  "review_notes": [
+    "Sculptor and Blender patterns independently implemented; no source code copied.",
+    "Reserved inherited custom-content seam, selection rebinding policy, group fit behavior and float32 GPU precision limits documented.",
+    "NOBLITZ affects one existing 2D translation unit; no rasterizer algorithm changed."
+  ]
+}

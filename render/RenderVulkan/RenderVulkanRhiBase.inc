@@ -1,6 +1,7 @@
 #include "RenderVulkanRhi.h"
 
 #include <cstring>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -19,6 +20,7 @@ static VkFormat ToVkFormat(GpuFormat format)
 	case GpuFormat::BGRA8Srgb: return VK_FORMAT_B8G8R8A8_SRGB;
 	case GpuFormat::R16F: return VK_FORMAT_R16_SFLOAT;
 	case GpuFormat::D24S8: return VK_FORMAT_D24_UNORM_S8_UINT;
+	case GpuFormat::D32F: return VK_FORMAT_D32_SFLOAT;
 	case GpuFormat::RGBA16: return VK_FORMAT_R16G16B16A16_UNORM;
 	case GpuFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
 	case GpuFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -37,12 +39,39 @@ static GpuFormat FromVkFormat(VkFormat format)
 	case VK_FORMAT_B8G8R8A8_SRGB: return GpuFormat::BGRA8Srgb;
 	case VK_FORMAT_R16_SFLOAT: return GpuFormat::R16F;
 	case VK_FORMAT_D24_UNORM_S8_UINT: return GpuFormat::D24S8;
+	case VK_FORMAT_D32_SFLOAT: return GpuFormat::D32F;
 	case VK_FORMAT_R16G16B16A16_UNORM: return GpuFormat::RGBA16;
 	case VK_FORMAT_R16G16B16A16_SFLOAT: return GpuFormat::RGBA16F;
 	case VK_FORMAT_R32G32B32A32_SFLOAT: return GpuFormat::RGBA32F;
 	case VK_FORMAT_R32_SFLOAT: return GpuFormat::R32F;
 	default: return GpuFormat::Unknown;
 	}
+}
+
+static bool IsDepthFormat(GpuFormat format)
+{
+	return format == GpuFormat::D24S8 || format == GpuFormat::D32F;
+}
+
+static int VertexStride(GpuVertexLayout layout)
+{
+	switch(layout) {
+	case GpuVertexLayout::Position2Color4F: return 24;
+	case GpuVertexLayout::Position2Uv2Color4F: return 32;
+	case GpuVertexLayout::Position3Normal3Uv2Color4F: return 48;
+	default: return 0;
+	}
+}
+
+static bool ValidDepthState(const GpuPipelineDesc& desc)
+{
+	if(desc.depth_format != GpuFormat::Unknown && desc.depth_format != GpuFormat::D32F) return false;
+	if((desc.depth_test || desc.depth_write) && desc.depth_format == GpuFormat::Unknown) return false;
+	if(desc.depth_write && !desc.depth_test) return false;
+	if((int)desc.depth_compare < 0 || (int)desc.depth_compare > (int)GpuCompareOp::Always) return false;
+	if((int)desc.cull_mode < 0 || (int)desc.cull_mode > (int)GpuCullMode::Back) return false;
+	if(desc.front_face != GpuFrontFace::Clockwise && desc.front_face != GpuFrontFace::CounterClockwise) return false;
+	return desc.parameter_bytes >= 0 && desc.parameter_bytes <= 128 && desc.parameter_bytes % 4 == 0;
 }
 
 static bool IsSwapchainColorFormat(GpuFormat format)
@@ -72,7 +101,8 @@ static VkBufferUsageFlags ToVkBufferUsage(int usage)
 
 static VkImageUsageFlags ToVkImageUsage(int usage)
 {
-	VkImageUsageFlags out = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	VkImageUsageFlags out = (usage & GpuTextureUsage_DepthAttachment) ? 0 : VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	if(usage & GpuTextureUsage_DepthAttachment) out |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	if(usage & GpuTextureUsage_ColorAttachment) out |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	if(usage & GpuTextureUsage_Sampled) out |= VK_IMAGE_USAGE_SAMPLED_BIT;
 	if(usage & GpuTextureUsage_TransferSrc) out |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -82,6 +112,8 @@ static VkImageUsageFlags ToVkImageUsage(int usage)
 
 static VkImageLayout FinalTextureLayout(int usage)
 {
+	if(usage & GpuTextureUsage_DepthAttachment)
+		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	if(usage & GpuTextureUsage_Sampled)
 		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	if(usage & GpuTextureUsage_ColorAttachment)
@@ -96,6 +128,7 @@ static VkPipelineStageFlags StageForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_PIPELINE_STAGE_TRANSFER_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	default: return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -109,6 +142,7 @@ static VkAccessFlags AccessForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_ACCESS_TRANSFER_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_ACCESS_SHADER_READ_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return 0;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
 	default: return VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
@@ -122,6 +156,7 @@ static VkPipelineStageFlags2 Stage2ForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_PIPELINE_STAGE_2_TRANSFER_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
 	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 	default: return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -135,6 +170,7 @@ static VkAccessFlags2 Access2ForLayout(VkImageLayout layout)
 	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return VK_ACCESS_2_TRANSFER_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return VK_ACCESS_2_SHADER_READ_BIT;
 	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return 0;
 	case VK_IMAGE_LAYOUT_GENERAL: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
 	default: return VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
@@ -176,9 +212,16 @@ struct VulkanGpuDevice::Impl {
 		VkMemoryPropertyFlags memory_flags = 0;
 	};
 
+	struct IndexRange : Moveable<IndexRange> {
+		int first = 0, count = 0, width = 0;
+		uint32 maximum = 0;
+	};
 	struct BufferState : Moveable<BufferState> {
 		GpuBufferDesc desc;
 		RawBuffer raw;
+		// Host-authored index data only; cached maxima make retained mesh draws O(1).
+		Vector<byte> index_bytes;
+		Vector<IndexRange> index_ranges; // At most 64 queried ranges per buffer.
 	};
 
 	struct ImmutableAllocation {
@@ -237,6 +280,13 @@ struct VulkanGpuDevice::Impl {
 		GpuTextureId target;
 		GpuPipelineId pipeline;
 		GpuBufferId vertex_buffer;
+		GpuBufferId index_buffer;
+		GpuIndexType index_type = GpuIndexType::UInt32;
+		GpuTextureId depth_target;
+		GpuFormat depth_format = GpuFormat::Unknown;
+		bool depth_store_result = false;
+		bool parameters_set = false;
+		bool submitted = false;
 		GpuFrameId frame;
 		GpuFormat color_format = GpuFormat::Unknown;
 		VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -336,6 +386,9 @@ struct VulkanGpuDevice::Impl {
 	PFN_vkCmdBindPipeline cmd_bind_pipeline = nullptr;
 	PFN_vkCmdBindVertexBuffers cmd_bind_vertex_buffers = nullptr;
 	PFN_vkCmdDraw cmd_draw = nullptr;
+	PFN_vkCmdBindIndexBuffer cmd_bind_index_buffer = nullptr;
+	PFN_vkCmdDrawIndexed cmd_draw_indexed = nullptr;
+	PFN_vkCmdPushConstants cmd_push_constants = nullptr;
 	PFN_vkCmdSetViewport cmd_set_viewport = nullptr;
 	PFN_vkCmdSetScissor cmd_set_scissor = nullptr;
 	PFN_vkQueueSubmit queue_submit = nullptr;
@@ -410,6 +463,9 @@ struct VulkanGpuDevice::Impl {
 		       Resolve(cmd_bind_pipeline, "vkCmdBindPipeline") &&
 		       Resolve(cmd_bind_vertex_buffers, "vkCmdBindVertexBuffers") &&
 		       Resolve(cmd_draw, "vkCmdDraw") &&
+		       Resolve(cmd_bind_index_buffer, "vkCmdBindIndexBuffer") &&
+		       Resolve(cmd_draw_indexed, "vkCmdDrawIndexed") &&
+		       Resolve(cmd_push_constants, "vkCmdPushConstants") &&
 		       Resolve(cmd_set_viewport, "vkCmdSetViewport") &&
 		       Resolve(cmd_set_scissor, "vkCmdSetScissor") &&
 		       Resolve(queue_submit, "vkQueueSubmit") &&
@@ -644,7 +700,7 @@ struct VulkanGpuDevice::Impl {
 	bool UploadTexture(TextureState& texture, const GpuTextureWriteDesc& desc, const void *data, int64 data_size)
 	{
 		const int bytes_per_pixel = BytesPerPixel(texture.desc.format);
-		if(bytes_per_pixel <= 0 || texture.desc.format == GpuFormat::D24S8) {
+		if(bytes_per_pixel <= 0 || IsDepthFormat(texture.desc.format)) {
 			error = "VulkanGpuDevice texture upload format is unsupported";
 			return false;
 		}
@@ -942,6 +998,11 @@ GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& 
 	if(desc.size <= 0 || (desc.memory != GpuBufferMemory::HostVisible && desc.memory != GpuBufferMemory::DeviceLocal)) {
 		impl->error = "CreateBuffer requires positive size and a valid memory policy"; return GpuResult::InvalidArgument;
 	}
+	if((desc.usage & GpuBufferUsage_Index) &&
+	   (desc.memory != GpuBufferMemory::HostVisible || (desc.usage & GpuBufferUsage_Storage) || desc.size > 64 * 1024 * 1024)) {
+		impl->error = "index buffers require host-visible non-storage memory and at most 64 MiB";
+		return GpuResult::Unsupported;
+	}
 	Impl::RawBuffer raw;
 	if(!impl->CreateRawBuffer((VkDeviceSize)desc.size, ToVkBufferUsage(desc.usage), raw, desc.memory)) return GpuResult::InvalidState;
 	GpuBufferId id; id.value = impl->next_buffer_id++;
@@ -961,7 +1022,24 @@ GpuResult VulkanGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void 
 	if(offset < 0 || size <= 0 || !data) { impl->error = "WriteBuffer received an invalid write range"; return GpuResult::InvalidArgument; }
 	const int64 buffer_size = impl->buffers[index].desc.size;
 	if(offset > buffer_size || size > buffer_size - offset) { impl->error = "WriteBuffer range exceeds the buffer"; return GpuResult::InvalidArgument; }
-	return impl->WriteRawBuffer(impl->buffers[index].raw, (VkDeviceSize)offset, data, (VkDeviceSize)size) ? GpuResult::Ok : GpuResult::InvalidState;
+	Impl::BufferState& buffer = impl->buffers[index];
+	const bool indices = (buffer.desc.usage & GpuBufferUsage_Index) != 0;
+	if(indices && impl->HasOpenCommands()) {
+		impl->error = "index buffer writes require no live command lists"; return GpuResult::InvalidState;
+	}
+	if(!impl->WriteRawBuffer(buffer.raw, (VkDeviceSize)offset, data, (VkDeviceSize)size)) {
+		// A non-coherent flush can fail after native memory changed. Old CPU index
+		// bounds must never authorize that data; require a complete successful upload.
+		if(indices) { buffer.index_bytes.Clear(); buffer.index_ranges.Clear(); }
+		return GpuResult::InvalidState;
+	}
+	if(indices) {
+		if(offset == 0 && size == buffer_size) buffer.index_bytes.SetCount((int)buffer_size);
+		if(buffer.index_bytes.GetCount() == buffer_size)
+			std::memcpy(buffer.index_bytes.Begin() + (int)offset, data, (size_t)size);
+		buffer.index_ranges.Clear();
+	}
+	return GpuResult::Ok;
 }
 
 GpuResult VulkanGpuDevice::DestroyBuffer(GpuBufferId id)
@@ -981,7 +1059,7 @@ bool VulkanGpuDevice::ReadTexturePixels(GpuTextureId id, Vector<byte>& pixels)
 	auto *texture = d.FindTexture(id);
 	if(!d.ready || !texture || texture->borrowed_swapchain || !texture->initialized ||
 	   d.HasOpenCommands() || !(texture->desc.usage & GpuTextureUsage_TransferSrc) ||
-	   BytesPerPixel(texture->desc.format) <= 0 || texture->desc.format == GpuFormat::D24S8) {
+	   BytesPerPixel(texture->desc.format) <= 0 || IsDepthFormat(texture->desc.format)) {
 		d.error = "readback requires initialized owned colour TransferSrc content and no open commands";
 		return false;
 	}
@@ -1099,8 +1177,17 @@ GpuResult VulkanGpuDevice::GetTextureCapabilities(GpuFormat format, int usage,
 	auto& d = *impl;
 	if(!d.CheckReady()) return GpuResult::InvalidState;
 	const int allowed = GpuTextureUsage_ColorAttachment | GpuTextureUsage_Sampled |
-	                    GpuTextureUsage_TransferSrc | GpuTextureUsage_TransferDst;
+	                    GpuTextureUsage_TransferSrc | GpuTextureUsage_TransferDst | GpuTextureUsage_DepthAttachment;
 	if(usage & ~allowed) { d.error = "unknown texture usage bits"; return GpuResult::InvalidArgument; }
+	if(IsDepthFormat(format)) {
+		if(format != GpuFormat::D32F || usage != GpuTextureUsage_DepthAttachment) {
+			d.error = "depth supports D32F attachment-only usage; sampling/upload/readback are not implemented";
+			return GpuResult::Unsupported;
+		}
+	}
+	else if(usage & GpuTextureUsage_DepthAttachment) {
+		d.error = "DepthAttachment requires a depth format"; return GpuResult::InvalidArgument;
+	}
 	const VkFormat native = ToVkFormat(format);
 	if(native == VK_FORMAT_UNDEFINED) {
 		d.error = "texture format is unsupported"; return GpuResult::Unsupported;
@@ -1131,9 +1218,15 @@ GpuResult VulkanGpuDevice::GetTextureCapabilities(GpuFormat format, int usage,
 	caps.sampled = (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
 	caps.linear_filter = caps.sampled && (flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
 	caps.color_attachment = (flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) != 0;
+	caps.depth_attachment = (flags & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
 	caps.color_blend = caps.color_attachment && (flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0;
 	caps.transfer_src = (flags & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0;
 	caps.transfer_dst = (flags & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
+	if(IsDepthFormat(format)) {
+		// Capabilities describe this backend's usable operations, not just hardware.
+		caps.sampled = caps.linear_filter = caps.color_attachment = caps.color_blend = false;
+		caps.transfer_src = caps.transfer_dst = false;
+	}
 	caps.max_size = Size((int)min<uint32_t>(image.maxExtent.width, INT_MAX),
 	                     (int)min<uint32_t>(image.maxExtent.height, INT_MAX));
 	caps.max_resource_bytes = image.maxResourceSize;
@@ -1152,6 +1245,9 @@ GpuResult VulkanGpuDevice::CreateTexture(const GpuTextureDesc& desc, GpuTextureI
 	GpuTextureCapabilities capabilities;
 	const auto supported = GetTextureCapabilities(desc.format, desc.usage, capabilities);
 	if(supported != GpuResult::Ok) return supported;
+	if((desc.usage & GpuTextureUsage_DepthAttachment) && !capabilities.depth_attachment) {
+		impl->error = "requested depth attachment format is unsupported"; return GpuResult::Unsupported;
+	}
 	if(desc.size.cx > capabilities.max_size.cx || desc.size.cy > capabilities.max_size.cy) {
 		impl->error = "CreateTexture exceeds device format dimensions"; return GpuResult::Unsupported;
 	}
@@ -1198,7 +1294,7 @@ GpuResult VulkanGpuDevice::AcquireImmutableTexture(uint64 identity, const GpuTex
 	uploaded = false;
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	const int bpp = BytesPerPixel(desc.format);
-	if(bpp <= 0 || desc.format == GpuFormat::D24S8) return GpuResult::Unsupported;
+	if(bpp <= 0 || IsDepthFormat(desc.format)) return GpuResult::Unsupported;
 	if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
 	   size / bpp / desc.size.cx < desc.size.cy)
 		return GpuResult::InvalidArgument;
@@ -1256,7 +1352,7 @@ GpuResult VulkanGpuDevice::WriteTexture(GpuTextureId id, const GpuTextureWriteDe
 	if(desc.size.cx > state.desc.size.cx || desc.size.cy > state.desc.size.cy || desc.origin.x > state.desc.size.cx - desc.size.cx || desc.origin.y > state.desc.size.cy - desc.size.cy) {
 		impl->error = "WriteTexture region exceeds the texture"; return GpuResult::InvalidArgument;
 	}
-	if(state.desc.format == GpuFormat::D24S8) { impl->error = "WriteTexture depth/stencil upload is deferred"; return GpuResult::Unsupported; }
+	if(IsDepthFormat(state.desc.format)) { impl->error = "WriteTexture depth/stencil upload is deferred"; return GpuResult::Unsupported; }
 	const int bytes_per_pixel = BytesPerPixel(state.desc.format);
 	const int64 tight_row = (int64)desc.size.cx * bytes_per_pixel;
 	if(desc.row_pitch < tight_row) { impl->error = "WriteTexture row pitch is too small"; return GpuResult::InvalidArgument; }
@@ -1550,29 +1646,51 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	int vi = impl->shaders.Find(desc.vertex_shader.value), fi = impl->shaders.Find(desc.fragment_shader.value);
 	if(!desc.vertex_shader.IsValid() || !desc.fragment_shader.IsValid() || vi < 0 || fi < 0) { impl->error = "CreatePipeline requires valid shader handles"; return GpuResult::InvalidHandle; }
 	if(impl->shaders[vi].desc.stage != GpuShaderStage::Vertex || impl->shaders[fi].desc.stage != GpuShaderStage::Fragment) { impl->error = "CreatePipeline shader stages do not match"; return GpuResult::InvalidArgument; }
-	if(desc.vertex_layout != GpuVertexLayout::Position2Color4F || ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || desc.color_format == GpuFormat::D24S8) {
-		impl->error = "CreatePipeline requires Position2Color4F and a supported color format"; return GpuResult::InvalidArgument;
+	if((desc.vertex_layout != GpuVertexLayout::Position2Color4F && desc.vertex_layout != GpuVertexLayout::Position3Normal3Uv2Color4F) ||
+	   ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || IsDepthFormat(desc.color_format) || !ValidDepthState(desc) ||
+	   (desc.topology != GpuPrimitiveTopology::TriangleList && desc.topology != GpuPrimitiveTopology::LineList)) {
+		impl->error = "CreatePipeline received invalid layout, format, topology, depth, cull or parameter state";
+		return GpuResult::InvalidArgument;
+	}
+	if(desc.depth_format != GpuFormat::Unknown) {
+		GpuTextureCapabilities caps;
+		GpuResult supported = GetTextureCapabilities(desc.depth_format, GpuTextureUsage_DepthAttachment, caps);
+		if(supported != GpuResult::Ok) return supported;
+		if(!caps.depth_attachment) return GpuResult::Unsupported;
 	}
 	if(desc.blend_mode != GpuBlendMode::Opaque && desc.blend_mode != GpuBlendMode::SourceOver &&
 	   desc.blend_mode != GpuBlendMode::DestinationInvert &&
 	   desc.blend_mode != GpuBlendMode::PremultipliedSourceOver) {
 		impl->error = "CreatePipeline received an unsupported blend mode"; return GpuResult::InvalidArgument;
 	}
+	VkPushConstantRange parameters {};
+	parameters.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	parameters.size = (uint32_t)desc.parameter_bytes;
 	VkPipelineLayoutCreateInfo lci {}; lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	if(desc.parameter_bytes) { lci.pushConstantRangeCount = 1; lci.pPushConstantRanges = &parameters; }
 	VkPipelineLayout layout = VK_NULL_HANDLE;
 	VkResult vr = impl->create_pipeline_layout(impl->device, &lci, nullptr, &layout);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreatePipelineLayout", vr); return GpuResult::InvalidState; }
 	VkPipelineShaderStageCreateInfo stages[2] {};
 	stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT; stages[0].module = impl->shaders[vi].module; stages[0].pName = impl->shaders[vi].desc.entry_point.Begin();
 	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = impl->shaders[fi].module; stages[1].pName = impl->shaders[fi].desc.entry_point.Begin();
-	VkVertexInputBindingDescription binding {}; binding.binding = 0; binding.stride = 6 * sizeof(float); binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	VkVertexInputAttributeDescription attrs[2] {};
-	attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32_SFLOAT; attrs[0].offset = 0;
-	attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[1].offset = 2 * sizeof(float);
-	VkPipelineVertexInputStateCreateInfo vertex {}; vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding; vertex.vertexAttributeDescriptionCount = 2; vertex.pVertexAttributeDescriptions = attrs;
+	VkVertexInputBindingDescription binding {}; binding.binding = 0; binding.stride = VertexStride(desc.vertex_layout); binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	const bool mesh = desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F;
+	VkVertexInputAttributeDescription attrs[4] {};
+	for(uint32_t i = 0; i < 4; ++i) { attrs[i].location = i; attrs[i].binding = 0; }
+	attrs[0].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32_SFLOAT;
+	attrs[1].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT;
+	attrs[1].offset = mesh ? 12 : 8;
+	attrs[2].format = VK_FORMAT_R32G32_SFLOAT; attrs[2].offset = 24;
+	attrs[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[3].offset = 32;
+	VkPipelineVertexInputStateCreateInfo vertex {}; vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding; vertex.vertexAttributeDescriptionCount = mesh ? 4 : 2; vertex.pVertexAttributeDescriptions = attrs;
 	VkPipelineInputAssemblyStateCreateInfo assembly {}; assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO; assembly.topology = ToVkTopology(desc.topology);
 	VkPipelineViewportStateCreateInfo viewport {}; viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO; viewport.viewportCount = 1; viewport.scissorCount = 1;
-	VkPipelineRasterizationStateCreateInfo raster {}; raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE; raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0f;
+	VkPipelineRasterizationStateCreateInfo raster {}; raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = desc.cull_mode == GpuCullMode::Back ? VK_CULL_MODE_BACK_BIT : desc.cull_mode == GpuCullMode::Front ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE; raster.frontFace = desc.front_face == GpuFrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0f;
+	VkPipelineDepthStencilStateCreateInfo depth {}; depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth.depthTestEnable = desc.depth_test; depth.depthWriteEnable = desc.depth_write;
+	depth.depthCompareOp = (VkCompareOp)desc.depth_compare; // Both enums follow Vulkan's documented order.
+	depth.minDepthBounds = 0.0f; depth.maxDepthBounds = 1.0f;
 	VkPipelineMultisampleStateCreateInfo ms {}; ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	VkPipelineColorBlendAttachmentState blend_attachment {};
 	blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1599,9 +1717,9 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	VkDynamicState dynamic_states[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 	VkPipelineDynamicStateCreateInfo dynamic {}; dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO; dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = dynamic_states;
 	VkFormat color_format = ToVkFormat(desc.color_format);
-	VkPipelineRenderingCreateInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO; rendering.colorAttachmentCount = 1; rendering.pColorAttachmentFormats = &color_format;
+	VkPipelineRenderingCreateInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO; rendering.colorAttachmentCount = 1; rendering.pColorAttachmentFormats = &color_format; rendering.depthAttachmentFormat = ToVkFormat(desc.depth_format);
 	VkGraphicsPipelineCreateInfo pci {}; pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO; pci.pNext = &rendering; pci.stageCount = 2; pci.pStages = stages;
-	pci.pVertexInputState = &vertex; pci.pInputAssemblyState = &assembly; pci.pViewportState = &viewport; pci.pRasterizationState = &raster; pci.pMultisampleState = &ms; pci.pColorBlendState = &blend; pci.pDynamicState = &dynamic; pci.layout = layout;
+	pci.pVertexInputState = &vertex; pci.pInputAssemblyState = &assembly; pci.pViewportState = &viewport; pci.pRasterizationState = &raster; pci.pMultisampleState = &ms; pci.pDepthStencilState = &depth; pci.pColorBlendState = &blend; pci.pDynamicState = &dynamic; pci.layout = layout;
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	vr = impl->create_graphics_pipelines(impl->device, impl->pipeline_cache, 1, &pci, nullptr, &pipeline);
 	if(vr != VK_SUCCESS) { impl->destroy_pipeline_layout(impl->device, layout, nullptr); impl->error = VkFailure("vkCreateGraphicsPipelines", vr); return GpuResult::InvalidState; }
@@ -1642,51 +1760,117 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	int ci = impl->commands.Find(list.value), ti = impl->textures.Find(desc.color_target.value);
 	if(!list.IsValid() || ci < 0) { impl->error = "BeginRenderPass received an unknown command list"; return GpuResult::InvalidHandle; }
 	if(!desc.color_target.IsValid() || ti < 0) { impl->error = "BeginRenderPass received an unknown color target"; return GpuResult::InvalidHandle; }
-	Impl::CommandState& command = impl->commands[ci]; Impl::TextureState& texture = impl->textures[ti];
+	Impl::CommandState& command = impl->commands[ci];
+	Impl::TextureState& texture = impl->textures[ti];
 	if(command.pass_active || command.ended) { impl->error = "BeginRenderPass command state is invalid"; return GpuResult::InvalidState; }
-	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format) { impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument; }
+	auto valid_load = [](GpuLoadOp op) { return op == GpuLoadOp::Load || op == GpuLoadOp::Clear || op == GpuLoadOp::DontCare; };
+	auto valid_store = [](GpuStoreOp op) { return op == GpuStoreOp::Store || op == GpuStoreOp::DontCare; };
+	if(!valid_load(desc.color_load) || !valid_store(desc.color_store) ||
+	   !std::isfinite(desc.clear_color.red) || !std::isfinite(desc.clear_color.green) ||
+	   !std::isfinite(desc.clear_color.blue) || !std::isfinite(desc.clear_color.alpha)) {
+		impl->error = "BeginRenderPass received invalid color operations/clear values"; return GpuResult::InvalidArgument;
+	}
+	if(!(texture.desc.usage & GpuTextureUsage_ColorAttachment) || desc.color_format != texture.desc.format || IsDepthFormat(desc.color_format)) {
+		impl->error = "BeginRenderPass color target usage/format mismatch"; return GpuResult::InvalidArgument;
+	}
 	GpuFrameId frame_binding;
 	if(texture.borrowed_swapchain) {
 		Impl::FrameState *frame = impl->FindFrame(texture.owner_frame);
 		Impl::SwapchainState *swapchain = impl->FindSwapchain(texture.owner_swapchain);
 		if(!texture.renderable || !texture.image || !frame || !frame->active || frame->presented || !swapchain || swapchain->active_frame != texture.owner_frame) {
-			impl->error = "BeginRenderPass borrowed swapchain backbuffer is not active";
-			return GpuResult::InvalidState;
+			impl->error = "BeginRenderPass borrowed swapchain backbuffer is not active"; return GpuResult::InvalidState;
 		}
 		if(command.frame.IsValid() && command.frame != texture.owner_frame) {
-			impl->error = "BeginRenderPass command list cannot target multiple active frames";
-			return GpuResult::InvalidState;
+			impl->error = "BeginRenderPass command list cannot target multiple active frames"; return GpuResult::InvalidState;
 		}
 		frame_binding = texture.owner_frame;
 	}
-	const int layout_index = command.texture_layouts.Find(desc.color_target.value);
-	const VkImageLayout current_layout = layout_index >= 0 ? command.texture_layouts[layout_index] : texture.layout;
-	const int initialized_index = command.texture_initialized.Find(desc.color_target.value);
-	const bool current_initialized = initialized_index >= 0 ? command.texture_initialized[initialized_index] : texture.initialized;
-	if(desc.color_load == GpuLoadOp::Load && !current_initialized) { impl->error = "BeginRenderPass cannot load an uninitialized target"; return GpuResult::InvalidState; }
-	VkImageViewCreateInfo vi {}; vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; vi.image = texture.image; vi.viewType = VK_IMAGE_VIEW_TYPE_2D; vi.format = ToVkFormat(texture.desc.format); vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; vi.subresourceRange.levelCount = 1; vi.subresourceRange.layerCount = 1;
-	VkImageView target_view = VK_NULL_HANDLE;
-	VkResult vr = impl->create_image_view(impl->device, &vi, nullptr, &target_view);
-	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return GpuResult::InvalidState; }
-	if(frame_binding.IsValid())
-		command.frame = frame_binding;
-	command.target_views.Add(target_view);
-	if(current_layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2; barrier.srcStageMask = Stage2ForLayout(current_layout); barrier.srcAccessMask = Access2ForLayout(current_layout); barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT; barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT; barrier.oldLayout = current_layout; barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.image = texture.image; barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; barrier.subresourceRange.levelCount = 1; barrier.subresourceRange.layerCount = 1;
-		VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO; dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier; impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	auto layout_of = [&](GpuTextureId id, const Impl::TextureState& t) {
+		const int i = command.texture_layouts.Find(id.value);
+		return i >= 0 ? command.texture_layouts[i] : t.layout;
+	};
+	auto initialized = [&](GpuTextureId id, const Impl::TextureState& t) {
+		const int i = command.texture_initialized.Find(id.value);
+		return i >= 0 ? command.texture_initialized[i] : t.initialized;
+	};
+	if(desc.color_load == GpuLoadOp::Load && !initialized(desc.color_target, texture)) {
+		impl->error = "BeginRenderPass cannot load an uninitialized color target"; return GpuResult::InvalidState;
 	}
-	VkClearValue clear {}; clear.color.float32[0] = desc.clear_color.red; clear.color.float32[1] = desc.clear_color.green; clear.color.float32[2] = desc.clear_color.blue; clear.color.float32[3] = desc.clear_color.alpha;
-	VkRenderingAttachmentInfo attachment {}; attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO; attachment.imageView = target_view; attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; attachment.loadOp = ToVkLoadOp(desc.color_load); attachment.storeOp = ToVkStoreOp(desc.color_store); attachment.clearValue = clear;
-	VkRenderingInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO; rendering.renderArea.extent = { (uint32_t)texture.desc.size.cx, (uint32_t)texture.desc.size.cy }; rendering.layerCount = 1; rendering.colorAttachmentCount = 1; rendering.pColorAttachments = &attachment;
+	Impl::TextureState *depth = nullptr;
+	if(desc.depth_target.IsValid()) {
+		int di = impl->textures.Find(desc.depth_target.value);
+		if(di < 0) { impl->error = "BeginRenderPass received an unknown depth target"; return GpuResult::InvalidHandle; }
+		depth = &impl->textures[di];
+		if(desc.depth_format != GpuFormat::D32F || depth->desc.format != desc.depth_format ||
+		   !(depth->desc.usage & GpuTextureUsage_DepthAttachment) || depth->desc.size != texture.desc.size ||
+		   !valid_load(desc.depth_load) || !valid_store(desc.depth_store) || !std::isfinite(desc.clear_depth) ||
+		   desc.clear_depth < 0 || desc.clear_depth > 1) {
+			impl->error = "BeginRenderPass depth format/usage/size/operations/clear mismatch"; return GpuResult::InvalidArgument;
+		}
+		if(desc.depth_load == GpuLoadOp::Load && !initialized(desc.depth_target, *depth)) {
+			impl->error = "BeginRenderPass cannot load an uninitialized depth target"; return GpuResult::InvalidState;
+		}
+	}
+	else if(desc.depth_format != GpuFormat::Unknown) {
+		impl->error = "BeginRenderPass depth format requires a target"; return GpuResult::InvalidArgument;
+	}
+	VkImageView color_view = VK_NULL_HANDLE, depth_view = VK_NULL_HANDLE;
+	auto create_view = [&](const Impl::TextureState& t, VkImageAspectFlags aspect, VkImageView& view) {
+		VkImageViewCreateInfo info {}; info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		info.image = t.image; info.viewType = VK_IMAGE_VIEW_TYPE_2D; info.format = ToVkFormat(t.desc.format);
+		info.subresourceRange.aspectMask = aspect; info.subresourceRange.levelCount = 1; info.subresourceRange.layerCount = 1;
+		const VkResult vr = impl->create_image_view(impl->device, &info, nullptr, &view);
+		if(vr != VK_SUCCESS) { impl->error = VkFailure("vkCreateImageView", vr); return false; }
+		return true;
+	};
+	if(!create_view(texture, VK_IMAGE_ASPECT_COLOR_BIT, color_view)) return GpuResult::InvalidState;
+	if(depth && !create_view(*depth, VK_IMAGE_ASPECT_DEPTH_BIT, depth_view)) {
+		impl->destroy_image_view(impl->device, color_view, nullptr); return GpuResult::InvalidState;
+	}
+	// Validation/allocation precede recording. A rejected pass changes no tracked state.
+	if(frame_binding.IsValid()) command.frame = frame_binding;
+	command.target_views.Add(color_view);
+	if(depth_view) command.target_views.Add(depth_view);
+	auto transition = [&](const Impl::TextureState& t, VkImageLayout old_layout,
+	                      VkImageLayout new_layout, VkImageAspectFlags aspect) {
+		VkImageMemoryBarrier2 barrier {}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+		barrier.srcStageMask = Stage2ForLayout(old_layout); barrier.srcAccessMask = Access2ForLayout(old_layout);
+		barrier.dstStageMask = Stage2ForLayout(new_layout); barrier.dstAccessMask = Access2ForLayout(new_layout);
+		barrier.oldLayout = old_layout; barrier.newLayout = new_layout;
+		barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = t.image; barrier.subresourceRange.aspectMask = aspect;
+		barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+		VkDependencyInfo dep {}; dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		dep.imageMemoryBarrierCount = 1; dep.pImageMemoryBarriers = &barrier;
+		impl->cmd_pipeline_barrier_2(command.buffer, &dep);
+	};
+	// Even identical layouts need a dependency between consecutive attachment writes.
+	transition(texture, layout_of(desc.color_target, texture), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+	if(depth) transition(*depth, layout_of(desc.depth_target, *depth), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VkRenderingAttachmentInfo color {}; color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	color.imageView = color_view; color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	color.loadOp = ToVkLoadOp(desc.color_load); color.storeOp = ToVkStoreOp(desc.color_store);
+	color.clearValue.color.float32[0] = desc.clear_color.red; color.clearValue.color.float32[1] = desc.clear_color.green;
+	color.clearValue.color.float32[2] = desc.clear_color.blue; color.clearValue.color.float32[3] = desc.clear_color.alpha;
+	VkRenderingAttachmentInfo depth_attachment {}; depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	depth_attachment.imageView = depth_view; depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_attachment.loadOp = ToVkLoadOp(desc.depth_load); depth_attachment.storeOp = ToVkStoreOp(desc.depth_store);
+	depth_attachment.clearValue.depthStencil.depth = desc.clear_depth;
+	VkRenderingInfo rendering {}; rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	rendering.renderArea.extent = { (uint32_t)texture.desc.size.cx, (uint32_t)texture.desc.size.cy };
+	rendering.layerCount = 1; rendering.colorAttachmentCount = 1; rendering.pColorAttachments = &color;
+	rendering.pDepthAttachment = depth ? &depth_attachment : nullptr;
 	impl->cmd_begin_rendering(command.buffer, &rendering);
-	VkViewport vp {}; vp.width = (float)texture.desc.size.cx; vp.height = (float)texture.desc.size.cy; vp.minDepth = 0.0f; vp.maxDepth = 1.0f; impl->cmd_set_viewport(command.buffer, 0, 1, &vp);
-	VkRect2D sc {}; sc.extent = rendering.renderArea.extent; impl->cmd_set_scissor(command.buffer, 0, 1, &sc);
-	command.target = desc.color_target;
-	command.pipeline = GpuPipelineId();
-	command.vertex_buffer = GpuBufferId();
-	command.color_format = desc.color_format;
+	VkViewport viewport {}; viewport.width = (float)texture.desc.size.cx; viewport.height = (float)texture.desc.size.cy;
+	viewport.minDepth = 0; viewport.maxDepth = 1;
+	impl->cmd_set_viewport(command.buffer, 0, 1, &viewport);
+	VkRect2D scissor {}; scissor.extent = rendering.renderArea.extent; impl->cmd_set_scissor(command.buffer, 0, 1, &scissor);
+	command.target = desc.color_target; command.depth_target = desc.depth_target;
+	command.pipeline = GpuPipelineId(); command.vertex_buffer = GpuBufferId(); command.index_buffer = GpuBufferId();
+	command.parameters_set = false; command.color_format = desc.color_format; command.depth_format = desc.depth_format;
 	command.final_layout = texture.borrowed_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : FinalTextureLayout(texture.desc.usage);
 	command.store_result = desc.color_store == GpuStoreOp::Store;
+	command.depth_store_result = depth && desc.depth_store == GpuStoreOp::Store;
 	command.pass_active = true;
 	return GpuResult::Ok;
 }
@@ -1697,8 +1881,10 @@ GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipe
 	int ci = impl->commands.Find(list.value), pi = impl->pipelines.Find(pipeline.value);
 	if(!list.IsValid() || ci < 0 || !pipeline.IsValid() || pi < 0) { impl->error = "SetPipeline received an unknown handle"; return GpuResult::InvalidHandle; }
 	Impl::CommandState& command = impl->commands[ci];
-	if(!command.pass_active || command.ended || impl->pipelines[pi].desc.color_format != command.color_format) { impl->error = "SetPipeline command/pass state or format is invalid"; return GpuResult::InvalidState; }
-	impl->cmd_bind_pipeline(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, impl->pipelines[pi].pipeline); command.pipeline = pipeline;
+	if(!command.pass_active || command.ended || impl->pipelines[pi].desc.color_format != command.color_format ||
+	   impl->pipelines[pi].desc.depth_format != command.depth_format) { impl->error = "SetPipeline command/pass state or format is invalid"; return GpuResult::InvalidState; }
+	impl->cmd_bind_pipeline(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, impl->pipelines[pi].pipeline);
+	command.pipeline = pipeline; command.parameters_set = impl->pipelines[pi].desc.parameter_bytes == 0;
 	return GpuResult::Ok;
 }
 
@@ -1721,6 +1907,12 @@ GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int fir
 	Impl::CommandState& command = impl->commands[ci];
 	if(vertex_count <= 0 || first_vertex < 0) { impl->error = "Draw received an invalid vertex range"; return GpuResult::InvalidArgument; }
 	if(!command.pass_active || !command.pipeline.IsValid() || !command.vertex_buffer.IsValid()) { impl->error = "Draw requires an active pass, pipeline, and vertex buffer"; return GpuResult::InvalidState; }
+	const int pi = impl->pipelines.Find(command.pipeline.value), bi = impl->buffers.Find(command.vertex_buffer.value);
+	if(pi < 0 || bi < 0 || !command.parameters_set) { impl->error = "Draw requires initialized graphics parameters"; return GpuResult::InvalidState; }
+	const int stride = VertexStride(impl->pipelines[pi].desc.vertex_layout);
+	if(stride <= 0 || (int64)first_vertex + vertex_count > impl->buffers[bi].desc.size / stride) {
+		impl->error = "Draw vertex range exceeds bound buffer"; return GpuResult::InvalidArgument;
+	}
 	impl->cmd_draw(command.buffer, (uint32_t)vertex_count, 1, (uint32_t)first_vertex, 0);
 	return GpuResult::Ok;
 }
@@ -1750,6 +1942,16 @@ GpuResult VulkanGpuDevice::EndRenderPass(GpuCommandListId list)
 		command.texture_initialized[initialized_index] = command.store_result;
 	else
 		command.texture_initialized.Add(command.target.value, command.store_result);
+	if(command.depth_target.IsValid()) {
+		int di = command.texture_layouts.Find(command.depth_target.value);
+		if(di >= 0) command.texture_layouts[di] = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		else command.texture_layouts.Add(command.depth_target.value, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		di = command.texture_initialized.Find(command.depth_target.value);
+		if(di >= 0) command.texture_initialized[di] = command.depth_store_result;
+		else command.texture_initialized.Add(command.depth_target.value, command.depth_store_result);
+	}
+	command.depth_target = GpuTextureId(); command.depth_format = GpuFormat::Unknown;
+	command.depth_store_result = false; command.index_buffer = GpuBufferId(); command.parameters_set = false;
 	command.target = GpuTextureId();
 	command.pipeline = GpuPipelineId();
 	command.vertex_buffer = GpuBufferId();
@@ -1779,7 +1981,7 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 	int ci = impl->commands.Find(list.value);
 	if(!list.IsValid() || ci < 0) { impl->error = "Submit received an unknown command list"; return GpuResult::InvalidHandle; }
 	Impl::CommandState& command = impl->commands[ci];
-	if(!command.ended || command.pass_active) { impl->error = "Submit requires an ended command list"; return GpuResult::InvalidState; }
+	if(!command.ended || command.pass_active || command.submitted) { impl->error = "Submit requires an ended, never-submitted command list"; return GpuResult::InvalidState; }
 	Impl::FrameState *frame = nullptr;
 	if(command.frame.IsValid()) {
 		frame = impl->FindFrame(command.frame);
@@ -1787,7 +1989,7 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 	}
 	VkSubmitInfo submit {}; submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO; submit.commandBufferCount = 1; submit.pCommandBuffers = &command.buffer;
 	VkResult vr = impl->queue_submit(impl->graphics_queue, 1, &submit, VK_NULL_HANDLE);
-	if(vr == VK_SUCCESS) vr = impl->queue_wait_idle(impl->graphics_queue);
+	if(vr == VK_SUCCESS) { command.submitted = true; vr = impl->queue_wait_idle(impl->graphics_queue); }
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("Vulkan command submission", vr); return GpuResult::InvalidState; }
 	for(int i = 0; i < command.texture_layouts.GetCount(); ++i) {
 		int ti = impl->textures.Find(command.texture_layouts.GetKey(i));

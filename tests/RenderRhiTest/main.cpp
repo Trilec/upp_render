@@ -5,8 +5,11 @@
 
 using namespace Upp;
 
+static int check_count = 0;
+
 static bool Check(bool cond, const char *msg)
 {
+	++check_count;
 	if(!cond)
 		Cout() << "FAIL: " << msg << EOL;
 	return cond;
@@ -541,6 +544,51 @@ static bool TestStage1Independence()
 	return true;
 }
 
+static bool TestUnsupported3DContract()
+{
+	NullGpuDevice device;
+	GpuDevice& api = device;
+	bool ok = true;
+	GpuTextureCapabilities caps;
+	caps.depth_attachment = true;
+	ok &= Check(api.GetTextureCapabilities(GpuFormat::D32F, GpuTextureUsage_DepthAttachment, caps) ==
+	            GpuResult::Unsupported && !caps.depth_attachment,
+	            "unimplemented depth query clears capabilities instead of advertising support");
+	GpuTextureDesc depth;
+	depth.size = Size(8, 8); depth.format = GpuFormat::D32F;
+	depth.usage = GpuTextureUsage_DepthAttachment;
+	GpuTextureId texture; texture.value = 123;
+	ok &= Check(device.CreateTexture(depth, texture) == GpuResult::Unsupported && !texture.IsValid(),
+	            "Null cannot report a successful depth allocation");
+	GpuPipelineDesc pipeline;
+	ok &= Check(pipeline.depth_format == GpuFormat::Unknown && !pipeline.depth_test &&
+	            !pipeline.depth_write && pipeline.parameter_bytes == 0 &&
+	            pipeline.cull_mode == GpuCullMode::None,
+	            "new pipeline defaults preserve color-only callers");
+	pipeline.vertex_layout = GpuVertexLayout::Position3Normal3Uv2Color4F;
+	GpuPipelineId out; out.value = 123;
+	ok &= Check(device.CreatePipeline(pipeline, out) == GpuResult::Unsupported && !out.IsValid(),
+	            "Null rejects new mesh pipelines explicitly");
+	GpuRenderPassDesc pass;
+	ok &= Check(!pass.depth_target.IsValid() && pass.depth_format == GpuFormat::Unknown &&
+	            pass.flip_viewport_y, "new pass defaults preserve existing UI orientation");
+	pass.depth_format = GpuFormat::D32F;
+	ok &= Check(device.BeginRenderPass(GpuCommandListId(), pass) == GpuResult::Unsupported,
+	            "Null rejects an unimplemented depth pass");
+	ok &= Check(api.SetIndexBuffer(GpuCommandListId(), GpuBufferId(), GpuIndexType::UInt32) ==
+	            GpuResult::Unsupported, "default indexed binding cannot report false success");
+	ok &= Check(api.SetGraphicsParameters(GpuCommandListId(), nullptr, 128) ==
+	            GpuResult::Unsupported, "default graphics parameters cannot report false success");
+	ok &= Check(api.DrawIndexed(GpuCommandListId(), 3) == GpuResult::Unsupported,
+	            "default indexed draw cannot report false success");
+	ok &= Check(api.DiscardCommands(GpuCommandListId()) == GpuResult::Unsupported,
+	            "default discard is explicitly unsupported");
+	ok &= Check(GpuFormatBytesPerPixel(GpuFormat::D32F) == 4 &&
+	            DumpGpuFormat(GpuFormat::D32F) == "D32F",
+	            "neutral depth format metadata is stable");
+	return ok;
+}
+
 CONSOLE_APP_MAIN
 {
 	bool ok = true;
@@ -560,9 +608,11 @@ CONSOLE_APP_MAIN
 	ok &= TestRecordingGuards(device);
 	ok &= TestDeterministicLog();
 	ok &= TestStage1Independence();
+	ok &= TestUnsupported3DContract();
+	ok &= Check(check_count > 0, "test checks actually executed");
 	if(!ok) {
 		SetExitCode(1);
 		return;
 	}
-	Cout() << "RenderRhiTest passed" << EOL;
+	Cout() << "RenderRhiTest passed (" << check_count << " checks)" << EOL;
 }

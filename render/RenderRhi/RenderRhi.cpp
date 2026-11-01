@@ -69,6 +69,7 @@ String DumpGpuFormat(GpuFormat format)
 	case GpuFormat::BGRA8Srgb: return "BGRA8Srgb";
 	case GpuFormat::R16F: return "R16F";
 	case GpuFormat::D24S8: return "D24S8";
+	case GpuFormat::D32F: return "D32F";
 	case GpuFormat::RGBA16: return "RGBA16";
 	case GpuFormat::RGBA16F: return "RGBA16F";
 	case GpuFormat::RGBA32F: return "RGBA32F";
@@ -82,7 +83,7 @@ int GpuFormatBytesPerPixel(GpuFormat format)
 	switch(format) {
 	case GpuFormat::RGBA8: case GpuFormat::BGRA8:
 	case GpuFormat::RGBA8Srgb: case GpuFormat::BGRA8Srgb:
-	case GpuFormat::D24S8: case GpuFormat::R32F: return 4;
+	case GpuFormat::D24S8: case GpuFormat::D32F: case GpuFormat::R32F: return 4;
 	case GpuFormat::R16F: return 2;
 	case GpuFormat::RGBA16: case GpuFormat::RGBA16F: return 8;
 	case GpuFormat::RGBA32F: return 16;
@@ -117,10 +118,10 @@ String DumpGpuBufferUsage(int usage)
 
 String DumpGpuTextureUsage(int usage)
 {
-	static const char *const names[] = { "ColorAttachment", "Sampled", "TransferSrc", "TransferDst" };
+	static const char *const names[] = { "ColorAttachment", "Sampled", "TransferSrc", "TransferDst", "DepthAttachment" };
 	static const int bits[] = { GpuTextureUsage_ColorAttachment, GpuTextureUsage_Sampled,
-		GpuTextureUsage_TransferSrc, GpuTextureUsage_TransferDst };
-	return DumpFlags(usage, names, bits, 4);
+		GpuTextureUsage_TransferSrc, GpuTextureUsage_TransferDst, GpuTextureUsage_DepthAttachment };
+	return DumpFlags(usage, names, bits, 5);
 }
 
 String DumpGpuLoadOp(GpuLoadOp op)
@@ -177,6 +178,7 @@ String DumpGpuVertexLayout(GpuVertexLayout layout)
 	case GpuVertexLayout::Unknown: return "Unknown";
 	case GpuVertexLayout::Position2Color4F: return "Position2Color4F";
 	case GpuVertexLayout::Position2Uv2Color4F: return "Position2Uv2Color4F";
+	case GpuVertexLayout::Position3Normal3Uv2Color4F: return "Position3Normal3Uv2Color4F";
 	}
 	return String("Unknown(") + AsString((int)layout) + ")";
 }

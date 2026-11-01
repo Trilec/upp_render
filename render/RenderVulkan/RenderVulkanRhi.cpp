@@ -307,6 +307,10 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		return CreatePipelineBase(desc, out);
 	if(!impl->CheckReady())
 		return GpuResult::InvalidState;
+	if(desc.depth_format != GpuFormat::Unknown || desc.depth_test || desc.depth_write ||
+	   desc.parameter_bytes != 0 || desc.cull_mode != GpuCullMode::None || desc.front_face != GpuFrontFace::CounterClockwise) {
+		impl->error = "sampled pipelines do not implement depth, culling or graphics parameters"; return GpuResult::Unsupported;
+	}
 	if(desc.sampled_texture_count != 1 || desc.vertex_layout != GpuVertexLayout::Position2Uv2Color4F) {
 		impl->error = "sampled Vulkan pipeline requires one texture and Position2Uv2Color4F";
 		return GpuResult::InvalidArgument;
@@ -329,7 +333,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		impl->error = "sampled Vulkan pipeline shader stages do not match";
 		return GpuResult::InvalidArgument;
 	}
-	if(ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || desc.color_format == GpuFormat::D24S8) {
+	if(ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || IsDepthFormat(desc.color_format)) {
 		impl->error = "sampled Vulkan pipeline requires a supported color format";
 		return GpuResult::InvalidArgument;
 	}
@@ -526,7 +530,7 @@ GpuResult VulkanGpuDevice::BeginRenderPass(GpuCommandListId list, const GpuRende
 	// than teaching images, text, SVG or neutral display-list code about Vulkan.
 	const int ci = impl->commands.Find(list.value);
 	const int ti = impl->textures.Find(desc.color_target.value);
-	if(ci >= 0 && ti >= 0) {
+	if(desc.flip_viewport_y && ci >= 0 && ti >= 0) {
 		const Size size = impl->textures[ti].desc.size;
 		VkViewport viewport {};
 		viewport.y = (float)size.cy;
@@ -568,12 +572,12 @@ GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipe
 		return GpuResult::InvalidHandle;
 	}
 	Impl::CommandState& command = impl->commands[ci];
-	if(!command.pass_active || command.ended || sampled_pipeline->desc.color_format != command.color_format) {
+	if(!command.pass_active || command.ended || sampled_pipeline->desc.color_format != command.color_format || command.depth_format != GpuFormat::Unknown) {
 		impl->error = "SetPipeline command/pass state or format is invalid";
 		return GpuResult::InvalidState;
 	}
 	impl->cmd_bind_pipeline(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, sampled_pipeline->pipeline);
-	command.pipeline = pipeline;
+	command.pipeline = pipeline; command.parameters_set = true;
 	SampledImpl::CommandState& sampled_command = Sampled().GetCommand(list);
 	sampled_command.pipeline = pipeline;
 	sampled_command.bound_texture = GpuTextureId();
@@ -708,6 +712,107 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 		CompleteComputeCommands(list);
 	}
 	return result;
+}
+
+GpuResult VulkanGpuDevice::SetIndexBuffer(GpuCommandListId list, GpuBufferId buffer, GpuIndexType type)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value), bi = impl->buffers.Find(buffer.value);
+	if(!list.IsValid() || ci < 0 || !buffer.IsValid() || bi < 0) {
+		impl->error = "SetIndexBuffer received an unknown handle"; return GpuResult::InvalidHandle;
+	}
+	if(type != GpuIndexType::UInt16 && type != GpuIndexType::UInt32) {
+		impl->error = "SetIndexBuffer requires UInt16 or UInt32"; return GpuResult::InvalidArgument;
+	}
+	auto& command = impl->commands[ci]; const auto& indices = impl->buffers[bi];
+	if(!command.pass_active || command.ended || !(indices.desc.usage & GpuBufferUsage_Index) ||
+	   indices.index_bytes.GetCount() != indices.desc.size) {
+		impl->error = "SetIndexBuffer requires an active pass and fully host-written index buffer"; return GpuResult::InvalidState;
+	}
+	impl->cmd_bind_index_buffer(command.buffer, indices.raw.buffer, 0,
+	                           type == GpuIndexType::UInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	command.index_buffer = buffer; command.index_type = type;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::SetGraphicsParameters(GpuCommandListId list, const void *data, int size)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "SetGraphicsParameters received an unknown command list"; return GpuResult::InvalidHandle; }
+	auto& command = impl->commands[ci];
+	const int pi = impl->pipelines.Find(command.pipeline.value);
+	if(!command.pass_active || command.ended || pi < 0) {
+		impl->error = "SetGraphicsParameters requires an active unsampled graphics pipeline"; return GpuResult::InvalidState;
+	}
+	const auto& pipeline = impl->pipelines[pi];
+	if(!data || size <= 0 || size != pipeline.desc.parameter_bytes || size % 4) {
+		impl->error = "SetGraphicsParameters must match the complete declared payload"; return GpuResult::InvalidArgument;
+	}
+	impl->cmd_push_constants(command.buffer, pipeline.layout,
+	                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, (uint32_t)size, data);
+	command.parameters_set = true;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DrawIndexed(GpuCommandListId list, int index_count, int first_index)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "DrawIndexed received an unknown command list"; return GpuResult::InvalidHandle; }
+	auto& command = impl->commands[ci];
+	if(index_count <= 0 || first_index < 0) { impl->error = "DrawIndexed received an invalid index range"; return GpuResult::InvalidArgument; }
+	const int pi = impl->pipelines.Find(command.pipeline.value);
+	const int vi = impl->buffers.Find(command.vertex_buffer.value), ii = impl->buffers.Find(command.index_buffer.value);
+	if(!command.pass_active || command.ended || pi < 0 || vi < 0 || ii < 0 || !command.parameters_set) {
+		impl->error = "DrawIndexed requires an active unsampled pipeline, parameters, vertices and indices"; return GpuResult::InvalidState;
+	}
+	auto& indices = impl->buffers[ii];
+	const int width = command.index_type == GpuIndexType::UInt16 ? 2 : 4;
+	if((int64)first_index + index_count > indices.desc.size / width || indices.index_bytes.GetCount() != indices.desc.size) {
+		impl->error = "DrawIndexed range exceeds initialized index buffer"; return GpuResult::InvalidArgument;
+	}
+	const int stride = VertexStride(impl->pipelines[pi].desc.vertex_layout);
+	if(stride <= 0) return GpuResult::InvalidState;
+	uint32 maximum = 0; bool cached = false;
+	for(const auto& range : indices.index_ranges)
+		if(range.first == first_index && range.count == index_count && range.width == width) {
+			maximum = range.maximum; cached = true; break;
+		}
+	if(!cached) {
+		const byte *data = indices.index_bytes.Begin() + (int64)first_index * width;
+		for(int i = 0; i < index_count; ++i) {
+			uint32 value = 0;
+			if(width == 2) { uint16 small; std::memcpy(&small, data + (int64)i * width, 2); value = small; }
+			else std::memcpy(&value, data + (int64)i * width, 4);
+			maximum = max(maximum, value);
+		}
+		if(indices.index_ranges.GetCount() == 64) indices.index_ranges.Remove(0);
+		auto& range = indices.index_ranges.Add(); range.first = first_index; range.count = index_count;
+		range.width = width; range.maximum = maximum;
+	}
+	if((uint64)maximum >= (uint64)(impl->buffers[vi].desc.size / stride)) {
+		impl->error = "DrawIndexed index exceeds bound vertex buffer"; return GpuResult::InvalidArgument;
+	}
+	impl->cmd_draw_indexed(command.buffer, (uint32_t)index_count, 1, (uint32_t)first_index, 0, 0);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DiscardCommands(GpuCommandListId list)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value);
+	if(!list.IsValid() || ci < 0) { impl->error = "DiscardCommands received an unknown command list"; return GpuResult::InvalidHandle; }
+	auto& command = impl->commands[ci];
+	if(command.submitted) {
+		impl->error = "DiscardCommands cannot free work with uncertain GPU completion"; return GpuResult::InvalidState;
+	}
+	// Destroy recording commands first, then their descriptor references. Pending
+	// layout/initialization maps intentionally never reach persistent textures.
+	impl->DestroyCommandState(command); impl->commands.Remove(ci);
+	if(sampled_impl) sampled_impl->DestroyCommand(list.value);
+	if(compute_impl) compute_impl->DestroyCommand(list.value);
+	return GpuResult::Ok;
 }
 
 }

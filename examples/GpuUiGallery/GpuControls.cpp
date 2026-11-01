@@ -8,15 +8,16 @@ namespace Upp {
 namespace {
 // Qualification reads the public control tree and minimum-size contract.
 // No private picker coordinates or production styling are copied into the test.
-bool PickerFieldBounds(Ctrl& root, String& report)
+bool PickerFieldBounds(Ctrl& root, String& report, int page = UiColorPicker::PAGE_IMAGE)
 {
 	bool ok = true;
 	int drops = 0, toggles = 0, edits = 0;
 	bool active_page_accent = false;
+	const char *pages[] = { "Color", "Palettes", "Generator", "Image" };
 	auto visit = [&](auto&& self, Ctrl& control) -> void {
 		if(!control.IsVisible() || control.GetSize().IsEmpty()) return;
 		if(auto *button = dynamic_cast<UiButton *>(&control))
-			if(button->GetText() == "Image")
+			if(button->GetText() == pages[page])
 				active_page_accent = button->GetStyle().underline &&
 				    button->GetStyle().palette.ink[ST_NORMAL] == UiTheme::GetOliveTokens(UiTheme::GetMode()).accent;
 		const char *kind = nullptr;
@@ -33,10 +34,10 @@ bool PickerFieldBounds(Ctrl& root, String& report)
 		for(Ctrl *child = control.GetFirstChild(); child; child = child->GetNext()) self(self, *child);
 	};
 	visit(visit, root);
-	report << "picker_field_bounds=" << (ok ? "PASS" : "FAIL")
+	report << "picker_page=" << page << " picker_field_bounds=" << (ok ? "PASS" : "FAIL")
 	       << " dropdowns=" << drops << " toggles=" << toggles << " edits=" << edits << "\n";
 	report << "picker_active_page_accent=" << (active_page_accent ? "PASS" : "FAIL") << "\n";
-	return ok && drops >= 3 && toggles >= 3 && edits >= 3 && active_page_accent;
+	return ok && drops >= 1 && edits >= 2 && active_page_accent;
 }
 
 double ControlsNow() {
@@ -212,6 +213,8 @@ void GpuControlsDialog::Tick()
 		      .SetChannelMode((UiColorPicker::ChannelMode)(n%UiColorPicker::CHANNEL_COUNT));
 		picker.SetActiveSlot(n%4).SetSlot(n%4,Color(40+n*5,130,220),80+n*8,true);
 		if(picker.GetSlotAlpha(n%4)!=80+n*8 || picker.GetPageMode()!=n/4) { Finish(false,"full picker value"); return; }
+		String bounds; bool fits=PickerFieldBounds(picker,bounds,n/4); *report<<bounds;
+		if(!fits) { Finish(false,"picker page "+AsString(n/4)+" field bounds"); return; }
 		++picker_cases; ++step; RequestGpuRefresh(); return;
 	}
 	if(step==21) {

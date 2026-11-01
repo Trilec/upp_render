@@ -1,0 +1,9 @@
+uses
+	Ui3DView,
+	RenderVulkan;
+
+file
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

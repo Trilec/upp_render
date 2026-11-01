@@ -1,0 +1,6 @@
+uses
+	Core;
+
+file
+	Scene3D.h,
+	Scene3D.cpp;

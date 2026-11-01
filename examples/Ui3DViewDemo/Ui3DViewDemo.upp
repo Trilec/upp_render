@@ -1,0 +1,12 @@
+uses
+	Ui3DView,
+	Ui,
+	plugin/png;
+
+file
+	Ui3DViewDemo.h,
+	Ui3DViewDemo.cpp,
+	main.cpp;
+
+mainconfig
+	"" = "GUI";

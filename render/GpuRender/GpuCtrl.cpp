@@ -29,6 +29,16 @@ struct GpuCtrl::Impl {
 	class Host : public DHCtrl {
 	public:
 		Host(){NoWantFocus();} void Attach(Impl *p){impl=p;}
+		Image MouseEvent(int event, Point p, int zdelta, dword keyflags) override
+		{
+			// DHCtrl owns the native child, but semantic input belongs to the
+			// public control. Forward once, including wheel/cursor events.
+			Ptr<GpuCtrl> target = impl ? impl->owner : nullptr;
+			if(!target) return DHCtrl::MouseEvent(event, p, zdelta, keyflags);
+			const Point offset = GetScreenView().TopLeft() - target->GetScreenView().TopLeft();
+			// The callback may destroy both target and this host. No access after it.
+			return target->MouseEvent(event, p + offset, zdelta, keyflags);
+		}
 		void State(int reason) override { if(reason==CLOSE){if(impl)impl->OnHostState(reason);DHCtrl::State(reason);return;} DHCtrl::State(reason);if(impl)impl->OnHostState(reason); }
 		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){
 			if(impl&&impl->clock.Consume(wParam)) {
@@ -80,7 +90,10 @@ struct GpuCtrl::Impl {
 	void SetValidation(bool validation){if(validation_requested==validation)return;if(IsGpuReady()){SetApiError("validation change while open is not supported");return;}validation_requested=validation;init_attempted=false;ClearError();if(host_ready&&!gpu_ready)StartGpuSession();}
 	void OnHostState(int reason){if(destroying)return;switch(reason){case OPEN:case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:host_ready=IsNativeHostReady();if(host_ready&&!gpu_ready&&!init_attempted){ClearError();StartGpuSession();}SyncHostBounds();if(reason==SHOW&&IsGpuReady()){StartClock();presentation_error.Clear();host.Refresh();}break;case CLOSE:StopGpuSession();host_ready=false;break;}}
 	void OnCtrlState(int reason){switch(reason){case CLOSE:StopGpuSession();host_ready=false;break;case SHOW:SyncHostBounds();if(IsGpuReady())StartClock();break;case ENABLE:case POSITION:case LAYOUTPOS:SyncHostBounds();break;}}
-	void SyncHostBounds(){Size sz=owner->GetSize();bool changed=sz!=last_host_size;if(changed)presentation_error.Clear();last_host_size=sz;host.SetRect(0,0,sz.cx,sz.cy);if(IsNativeHostReady())EnableWindow(host.GetHWND(),owner->IsEnabled());if(changed&&IsGpuReady()&&sz.cx>0&&sz.cy>0)host.Refresh();}
+	// Preserve DHCtrl's disabled native-child convention: native input reaches
+	// the top-level U++ dispatcher, which hit-tests this child and forwards once.
+	// Semantic enabled state is inherited through the Ctrl tree, not HWND input.
+	void SyncHostBounds(){Size sz=owner->GetSize();bool changed=sz!=last_host_size;if(changed)presentation_error.Clear();last_host_size=sz;host.SetRect(0,0,sz.cx,sz.cy);if(IsNativeHostReady())EnableWindow(host.GetHWND(),FALSE);if(changed&&IsGpuReady()&&sz.cx>0&&sz.cy>0)host.Refresh();}
 	void StartGpuSession(){if(destroying)return;init_attempted=true;if(backend_kind!=GpuBackendKind::Vulkan){gpu_ready=false;SetSessionError(backend_kind==GpuBackendKind::Unknown?"backend not selected":"backend not supported");return;}GpuNativeWindowDesc native_window;String native_error;if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(),native_window,native_error)){SetSessionError(native_error);return;}String open_error;if(!presenter.Open(backend_kind,validation_requested,native_window,open_error)){SetSessionError(open_error.IsEmpty()?presenter.GetError():open_error);return;}gpu_ready=presenter.IsReady();if(gpu_ready){ClearError();StartClock();host.Refresh();}else SetSessionError(presenter.GetError());}
 	void StopGpuSession(){clock.Stop();presenter.Close();ClearError();session_error.Clear();presentation_error.Clear();host_ready=false;gpu_ready=false;init_attempted=false;}
 	void SetApiError(const String& m){api_error=m;} void SetSessionError(const String& m){session_error=m;gpu_ready=false;} void ClearError(){api_error.Clear();session_error.Clear();presentation_error.Clear();}

@@ -31,6 +31,7 @@ enum class GpuFormat {
 	RGBA16F,
 	RGBA32F,
 	R32F,
+	D32F, // Single-channel depth attachment; normalized clip depth 0..1.
 };
 
 enum GpuBufferUsage {
@@ -49,6 +50,7 @@ enum GpuTextureUsage {
 	GpuTextureUsage_Sampled = 1 << 1,
 	GpuTextureUsage_TransferSrc = 1 << 2,
 	GpuTextureUsage_TransferDst = 1 << 3,
+	GpuTextureUsage_DepthAttachment = 1 << 4,
 };
 
 enum class GpuLoadOp {
@@ -83,7 +85,14 @@ enum class GpuVertexLayout {
 	Unknown,
 	Position2Color4F,
 	Position2Uv2Color4F,
+	// Packed float position3, normal3, uv2, linear color4 (48-byte stride).
+	Position3Normal3Uv2Color4F,
 };
+
+enum class GpuCompareOp { Never, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always };
+enum class GpuCullMode { None, Front, Back };
+enum class GpuFrontFace { CounterClockwise, Clockwise };
+enum class GpuIndexType { UInt16, UInt32 };
 
 enum class GpuBlendMode {
 	Opaque,
@@ -200,6 +209,7 @@ struct GpuTextureCapabilities : Moveable<GpuTextureCapabilities> {
 	bool sampled = false;
 	bool linear_filter = false;
 	bool color_attachment = false;
+	bool depth_attachment = false;
 	bool color_blend = false;
 	bool transfer_src = false;
 	bool transfer_dst = false;
@@ -258,6 +268,14 @@ struct GpuRenderPassDesc : Moveable<GpuRenderPassDesc> {
 	GpuLoadOp color_load = GpuLoadOp::Load;
 	GpuStoreOp color_store = GpuStoreOp::Store;
 	GpuClearColor clear_color;
+	// Optional matching-size D32F target; absence preserves color-only passes.
+	GpuTextureId depth_target;
+	GpuFormat depth_format = GpuFormat::Unknown;
+	GpuLoadOp depth_load = GpuLoadOp::Clear;
+	GpuStoreOp depth_store = GpuStoreOp::DontCare;
+	float clear_depth = 1.0f;
+	// Legacy UI uses NDC +Y up. False accepts an already Vulkan-flipped projection.
+	bool flip_viewport_y = true;
 	String label;
 };
 
@@ -268,6 +286,13 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	GpuShaderId fragment_shader;
 	GpuVertexLayout vertex_layout = GpuVertexLayout::Unknown;
 	GpuBlendMode blend_mode = GpuBlendMode::Opaque;
+	GpuFormat depth_format = GpuFormat::Unknown;
+	bool depth_test = false, depth_write = false;
+	GpuCompareOp depth_compare = GpuCompareOp::LessEqual;
+	GpuCullMode cull_mode = GpuCullMode::None;
+	GpuFrontFace front_face = GpuFrontFace::CounterClockwise;
+	// Complete per-draw vertex+fragment push payload: 0 or 4..128, multiple of 4.
+	int parameter_bytes = 0;
 	// Stage-5 starts with one conventional sampled 2D texture slot. Keeping
 	// sampler state on the pipeline avoids exposing backend descriptor objects.
 	int sampled_texture_count = 0;
@@ -341,7 +366,7 @@ public:
 		out = GpuTextureId();
 		uploaded = false;
 		const int bpp = GpuFormatBytesPerPixel(desc.format);
-		if(bpp <= 0 || desc.format == GpuFormat::D24S8) return GpuResult::Unsupported;
+		if(bpp <= 0 || (desc.format == GpuFormat::D24S8 || desc.format == GpuFormat::D32F)) return GpuResult::Unsupported;
 		if(!identity || !data || size <= 0 || desc.size.cx <= 0 || desc.size.cy <= 0 ||
 		   size / bpp / desc.size.cx < desc.size.cy)
 			return GpuResult::InvalidArgument;
@@ -410,11 +435,20 @@ public:
 	virtual GpuResult BeginRenderPass(GpuCommandListId list, const GpuRenderPassDesc& desc) = 0;
 	virtual GpuResult SetPipeline(GpuCommandListId list, GpuPipelineId pipeline) = 0;
 	virtual GpuResult SetVertexBuffer(GpuCommandListId list, GpuBufferId buffer) = 0;
+	// Initial indexed path: fully host-written index buffers, no device-local/storage
+	// indices. Implementations may reject unsupported combinations explicitly.
+	virtual GpuResult SetIndexBuffer(GpuCommandListId, GpuBufferId, GpuIndexType) { return GpuResult::Unsupported; }
+	// Exact parameter_bytes payload. Set again after changing the pipeline.
+	virtual GpuResult SetGraphicsParameters(GpuCommandListId, const void *, int) { return GpuResult::Unsupported; }
+	virtual GpuResult DrawIndexed(GpuCommandListId, int, int = 0) { return GpuResult::Unsupported; }
 	virtual GpuResult SetSampledTexture(GpuCommandListId, int, GpuTextureId) { return GpuResult::Unsupported; }
 	virtual GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) = 0;
 	virtual GpuResult EndRenderPass(GpuCommandListId list) = 0;
 	virtual GpuResult EndCommands(GpuCommandListId list) = 0;
 	virtual GpuResult Submit(GpuCommandListId list) = 0;
+	// Discard unsubmitted recording/ended work without publishing texture state.
+	// A submission with uncertain GPU completion cannot be discarded or replayed.
+	virtual GpuResult DiscardCommands(GpuCommandListId) { return GpuResult::Unsupported; }
 };
 
 String DumpGpuBackendKind(GpuBackendKind kind);
