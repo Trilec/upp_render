@@ -1,30 +1,33 @@
 # Current work — 2026-11-01
 
-The stable Windows demo is **bin/win64/UppVulkanUiDemo.exe**.
+The stable **bin/win64/UppVulkanUiDemo.exe** now opens Roles & states.
+It reuses the Cinespace shared theme adapter for six profiles with paired
+dark/light panes and all four roles. Commands, icons, selected/disabled states,
+fields, validation, choices, tabs, slider, progress, range and status are live
+Ui controls in a Vulkan window. Browser, full/micro picker, text/IME and a small
+tree/table/image page remain separate tabs. Use `--scene-inspector` for particles,
+metrics, the inspector, GPU dialog and image/compute laboratory.
+
+The Colour-page clipping was reproduced as six 30-pixel fields requiring 36
+pixels. The shared picker now applies compact recipes to those readouts and
+measures their rows. Switching to five-channel CMYK also relayouts the parent;
+it previously squeezed five 24-pixel editors into 22-pixel rows.
+
+Automated UI validation passed in 21.094 seconds, including all four
+picker pages, all seven channel modes in both themes and 48 profile/role/mode
+cases. CPU vector/glyph rasters, GDI font requests and software fallback were
+zero; final native ownership was zero. Captures show complete readout baselines.
+
 [Exact identity and evidence](qualification/README.md) ·
-[Build](BUILD_WINDOWS.md) · [Release checklist](RELEASE_CANDIDATE.md)
+[Build and dependencies](BUILD_WINDOWS.md) · [Release checklist](RELEASE_CANDIDATE.md)
 
-The Olive showcase now has graphical status rings, a cache chart and one compact
-tree/table/image Controls page. The outer tabs use the underline style.
-The shared colour picker owns compact dropdown/edit/toggle recipes and theme
-accent navigation, fixing the clipping reproduced by the Image-page regression.
+Strict physical acceptance remains **8/10 (80%)**. Real OS IME candidates and
+physical AA/input/monitor scaling are separate checks. The owner waived the
+five-minute repeat; no completed soak is claimed for this new hash.
+The host uses system DPI awareness; live per-monitor transitions are unqualified.
 
-Automated whole-UI validation passed in16.875s with zero GDI font requests,
-CPU vector/glyph rasters or software fallback, and zero native ownership at exit.
-The vector cache now limits native texture count to256 as well as32MiB pixel
-payload. Private samples stayed near189MiB through178.5s of a partial run.
-The owner closed/used that run and waived its five-minute repeat; a completed
-refreshed memory/responsiveness gate is therefore **not established**.
-
-Strict physical acceptance remains **8/10 (80%)**. Remaining items are real OS
-IME candidate interaction and physical AA/input/monitor-scaling review.
-The host uses system DPI awareness; live per-monitor transitions are not qualified.
-
-Next release work is the [manual checklist](WINDOWS_VULKAN_MANUAL_ACCEPTANCE.md)
-and applicable dependency/runtime notices. WebGPU/Metal, CineView/OCIO and active
-3D development are separate scopes. Core and Animation remain read-only;
-the focused Ui correction is [reproducible here](dependencies/README.md).
-
-Older work logs and qualification reports are preserved in the
-[history archive](qualification/README.md#history), rather than competing with
-this current note. Concurrent3D source, documentation and build output are retained.
+Core and Animation remain read-only. Only the focused Ui picker source was
+changed; [its reproducible patch](dependencies/README.md) accompanies the pinned
+Ui build. Shared Cinespace theme sources were read-only. Concurrent 3D work is
+preserved and excluded from this binary. Historical records are compressed in
+[the archive](qualification/README.md#history).

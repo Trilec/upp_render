@@ -2,6 +2,7 @@
 #include <GpuRender/GpuRender.h>
 #include <Ui/Ui.h>
 #include "GpuWidgets.h"
+#include "GpuRoles.h"
 #include <Ui/UiFileBrowser/UiFileBrowser.h>
 
 namespace Upp {
@@ -11,8 +12,10 @@ public:
 	explicit GpuControlsDialog(bool validation);
 	~GpuControlsDialog() override;
 	void Layout() override;
+	void Paint(Draw& draw) override;
 	void StartQualification(String& report);
 	void ShowTextPage() { tabs.SetActiveTab(3); }
+	void ShowRolesPage() { tabs.SetActiveTab(5); }
 	bool QualificationPassed() const { return passed; }
 private:
 	TimeCallback qualification_clock;
@@ -27,6 +30,7 @@ private:
 	UiLineEdit text_entry;
 	UiDoc text_document;
 	GpuWidgets widgets;
+	GpuRolesPage roles;
 	UiTab tabs;
 	UiLabel heading,status;
 	UiButton close;

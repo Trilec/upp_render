@@ -1,59 +1,68 @@
-# Vulkan whole-UI showcase
+# Vulkan UI showcase
 
-Build package: `GpuUiGallery`. Stable Windows executable:
-`bin/win64/UppVulkanUiDemo.exe`. The default theme is **Olive dark**.
+Package: `GpuUiGallery`. Stable executable: `bin/win64/UppVulkanUiDemo.exe`.
 
-## What it demonstrates
+## Main control workbench
 
-The animated scene, PropertyEditor, menus, dropdowns and all client controls are
-recorded by `GpuTopWindow` and drawn through Vulkan. The GPU dialog opens another
-Vulkan-composited window sharing the device. The Scene menu opens the file
-browser, full/micro colour pickers, text/IME editors and image/compute laboratory.
-View > Light / Dark switches the same Ui theme authority used by owned dialogs.
+The default page is **Roles & states**, based on the Cinespace reference.
+Dark and light panes remain visible together. A profile selector offers Olive,
+Legacy, CineCast R9, CineWrite R4.1, CineFlow v30 and CineStage R3.
+The four role buttons change emphasis while preserving values and selection.
 
-`main.cpp` owns scene/control behavior and the deterministic qualification/load
-modes. `GpuMetrics.h/.cpp` composes the existing UiProgressRing, UiChartRing,
-UiPanel and UiLabel controls; it contains no custom rendering or timing loop.
-Compute, capture and extended control qualification have their existing separate
-source files. `GpuWidgets.h/.cpp` supplies the shared three-column Controls
-page and workspace: two short tree groups, four table rows, an immutable sample
-image, checkbox and progress bar. Production renderer code does not depend on these demo helpers.
+Live specimens include ordinary/icon commands, selected/disabled buttons, a real
+menu, editable/invalid/read-only fields, dropdown, toggle, checked/mixed checks,
+radio choices, underline tabs, slider, progress, segmented range and status tags.
+Each pane scrolls when its measured content exceeds the viewport.
 
-## Read the meters
+Other pages retain the file browser, full/micro colour pickers, text/IME editors
+and the compact three-column tree/table/image composition. These are native Ui
+controls recorded through a Vulkan root, not screenshots or painted imitations.
 
-The existing status callback updates the controls at 4 Hz; presented FPS is sampled
-over one second. These derived readings do not drive animation or scheduling.
+`GpuRoles.h/.cpp` owns only the composition and callbacks. It uses the read-only
+`Shared/UiTheme` package from upp_cinespace for actual profile recipes; it does not
+link the Cinespace demo or copy the production theme implementation.
+The renderer library itself has no Cinespace dependency.
+
+## Scene inspector and metrics
+
+Run `--scene-inspector` to open the particle scene and inspector.
+Its GPU dialog opens a second populated Vulkan window. Scene menu entries open
+the control workbench and image/compute laboratory. View switches Light/Dark.
+
+`GpuMetrics.h/.cpp` composes the existing progress/chart rings and labels.
+The existing status callback updates at 4 Hz; FPS is sampled over one second.
 
 | Meter | Arc scale | Numeric reading |
 | --- | --- | --- |
-| Presented FPS | Measured FPS / animation target | Actual presented FPS, even above target |
-| CPU replay | Elapsed replay / target frame interval | Milliseconds, not GPU execution time |
-| GPU paths | Last frame / this window's observed peak | Actual path count; not GPU utilization |
-| Motion speed | Authored multiplier / 3.00x | Multiplier plus paused/live status |
-| Cache chart | Relative image/vector/glyph payload bytes | Total MiB and image entry count |
+| Presented FPS | Measured FPS / animation target | Actual presented FPS |
+| CPU replay | Elapsed replay / frame interval | Milliseconds, not GPU time |
+| GPU paths | Last frame / observed session peak | Path count, not utilization |
+| Motion speed | Authored multiplier / 3.00x | Speed plus paused/live status |
+| Cache chart | Image/vector/glyph payload composition | Total MiB and image count |
 
-The cache chart excludes driver allocations and total VRAM. The Ui controls own
-theme resolution, text and arc painting. The gallery owns only layout and metric
-projection; there is no second renderer, copied control implementation or worker.
+The cache chart excludes driver allocations and total VRAM.
+No second animation timer, renderer or copied ring implementation is introduced.
 
-## Modes
+## Running and checking
 
 ```text
-UppVulkanUiDemo.exe --require-gpu
+UppVulkanUiDemo.exe
+UppVulkanUiDemo.exe --scene-inspector --require-gpu
 UppVulkanUiDemo.exe --text-controls
-UppVulkanUiDemo.exe --qualify-ui
+UppVulkanUiDemo.exe --qualify-ui --validation
 UppVulkanUiDemo.exe --capture-scenes
 UppVulkanUiDemo.exe --benchmark-soak --require-gpu --benchmark-seconds=300
 UppVulkanUiDemo.exe --benchmark-compute --benchmark-seconds=20
 ```
 
-Automation closes itself and writes reports beside the executable. For normal
-review, simply run the executable. Preserve reports before repeating a test.
-Leave fixed-load runs open, unminimized and unchanged in size/settings.
-`--validation` requires an optional developer layer and should be omitted on
-SDK-free machines. See [physical acceptance](../../docs/WINDOWS_VULKAN_MANUAL_ACCEPTANCE.md)
-for the separate AA, real OS IME and monitor-scaling checklist.
+Qualification covers all picker pages, every colour channel in both theme modes,
+48 paired profile/role/mode cases, retained edits/selection, actual inspector
+colour dialogs, browser/micro picker, text composition and repeated GPU dialogs.
+The readout regression first reproduced six 30-pixel fields requiring 36 pixels; CMYK also
+exposed a missing parent relayout when changing from four to five channels.
+Both fixes belong to the shared picker and the [qualified Ui patch](../../docs/dependencies/README.md).
 
-The outer page tabs explicitly use the compact underline variant. The colour
-picker's own dense field/layout correction is in the shared Ui control and the
-reproducible [qualified dependency patch](../../docs/dependencies/README.md).
+Automation closes itself and writes reports beside the executable. Normal review
+stays open until closed by the user. `--validation` needs developer layers;
+omit it on SDK-free machines. Real OS IME/physical DPI remain
+[separate acceptance](../../docs/WINDOWS_VULKAN_MANUAL_ACCEPTANCE.md).

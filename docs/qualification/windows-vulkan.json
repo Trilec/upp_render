@@ -4,11 +4,12 @@
   "status": "Local Windows/Vulkan showcase: automated UI PASS; complete refreshed soak waived by owner",
   "artifact": {
     "path": "bin/win64/UppVulkanUiDemo.exe",
-    "size": 8999936,
-    "sha256": "fa9e31d28aeb0cc0eaf11a03ee8141d66f6b65521f4b06f71c3a2c8432d0fa5b",
+    "size": 9263104,
+    "sha256": "16d4d8c6d4ef0855ba54a742bc2ca40606cfc6d06f382f9a8aed67a6dc9236ba",
     "platform": "Windows x64",
     "configuration": "Release +GUI,GPUUI,CFONTS",
-    "package": "GpuUiGallery"
+    "package": "GpuUiGallery",
+    "default_page": "Roles & states"
   },
   "source": {
     "renderer_base": "b3a42b1ffe8830cb36c121add2b77d0e72fad465",
@@ -18,28 +19,49 @@
       "vector_entries": 256,
       "vector_payload_bytes": 33554432
     },
-    "showcase_hashes": "refresh-2026-11-01.json (qualified_showcase_sources)",
+    "showcase_hashes": "refresh-2026-11-01.json (current_controls_update.source_hashes)",
     "ui_base": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
     "ui_patch": "docs/dependencies/compact-color-picker.patch",
-    "ui_color_picker_raw_sha256": "39f7f261173943a6c85b5d0f4f49af6128049d397494aba5df67a1c6ccb3000d",
+    "ui_color_picker_raw_sha256": "3e3726e2eb7af21bdde18e03f2806faeb80a2fc1c4c6e7e713665f193abcc7fa",
     "animation": "4a01b6f4e2a9f122ea1a93457b62a4054d01f970",
     "upp_version": 18468,
-    "concurrent_3d_changes_included": false
+    "concurrent_3d_changes_included": false,
+    "cinespace_theme": {
+      "repository": "upp_cinespace",
+      "package": "Shared/UiTheme",
+      "git_base": "58f4a90a274904831815189b53b6e9a849734400",
+      "api_version": 3,
+      "working_tree_source_hashes": [
+        {
+          "path": "Shared/UiTheme/CineSpaceTheme.cpp",
+          "sha256": "92d70c2ccd1532591028f325be4f0ce75cbfa362797a4f9c92efdf5f95f4626d"
+        },
+        {
+          "path": "Shared/UiTheme/CineSpaceTheme.h",
+          "sha256": "45d9c129bc48f212aa171d765ac5c00fe2baaeb93b7a7a815118e11eb70e58de"
+        },
+        {
+          "path": "Shared/UiTheme/UiTheme.upp",
+          "sha256": "0a1e0fe0d65eba299a1282f5f7bdc6041fb0631ce42afe61ae05bc3a5a4bde66"
+        }
+      ],
+      "scope": "Build dependency of the showcase only; existing theme recipes consumed read-only."
+    }
   },
   "qualification": {
-    "evidence": "refresh-2026-11-01.json",
+    "evidence": "refresh-2026-11-01.json (current_controls_update)",
     "ui": {
       "status": "PASS",
-      "job_id": "exec-41612799EC247D08D450C7C3FAA4665C",
-      "seconds": 16.875,
+      "job_id": "exec-E32E16E536515835D0FFF6027B1BFF5C",
+      "seconds": 21.094,
       "validation": true,
-      "picker_image_modes": [
-        "Light",
-        "Dark"
-      ],
-      "picker_dropdowns": 4,
-      "picker_toggles": 3,
-      "picker_edits": 6,
+      "picker_pages": 4,
+      "picker_channel_modes": 7,
+      "picker_channel_theme_modes": 2,
+      "roles_profiles": 6,
+      "roles": 4,
+      "paired_modes": 2,
+      "roles_cases": 48,
       "cpu_vector_rasters": 0,
       "cpu_glyph_rasters": 0,
       "legacy_gdi_font_requests": 0,
@@ -47,21 +69,8 @@
       "final_native_ownership": "ZERO"
     },
     "soak": {
-      "status": "INCOMPLETE_OWNER_SKIPPED_REPEAT",
-      "job_id": "exec-89FD74455C96A1BC33630A60A87187DA",
-      "finished_after_seconds": 225.843,
-      "measured_private_samples_bytes": [
-        197967872,
-        198025216,
-        198049792
-      ],
-      "observation_seconds": [
-        37.25,
-        105.75,
-        178.5
-      ],
-      "full_memory_gate": "NOT_ESTABLISHED",
-      "evidence": "Owner: No, don't worry about the five minutes. I think this is okay. Let's just keep continuing with everything else."
+      "status": "NOT_RERUN_FOR_THIS_HASH",
+      "reason": "Owner waived the five-minute repeat. Earlier partial samples and interrupted run retain their prior executable identity in refresh evidence."
     }
   },
   "acceptance": {
@@ -71,7 +80,7 @@
     "physical_review": "AA/control input, real OS IME candidate selection and physical monitor scaling remain unqualified for this hash",
     "dpi_awareness": "system; live per-monitor transitions not qualified",
     "os_native_choosers": "Outside automated client-area qualification. Owner-interacted interrupted run retained36 legacy GDI font requests; specific source not established. Controlled UI run had0.",
-    "human_olive_visual_review": "Owner approved earlier2458f9d graphical refresh; not a physical-input/IME/DPI acceptance of this hash",
+    "human_olive_visual_review": "Earlier graphical refresh approved by owner; latest Roles & states and readout corrections await owner review.",
     "caro": "24 October65f771f7 build passed; refreshed binary not retested on Caro"
   },
   "runtime": {
@@ -89,6 +98,6 @@
     "pushed": false,
     "published": false,
     "public_archive_ready": false,
-    "notes": "Before public distribution complete physical acceptance and assemble dependency/runtime notices. Local bin intentionally contains only the executable."
+    "notes": "Before public distribution complete physical acceptance and assemble dependency/runtime notices. Local executables are not a complete public runtime distribution."
   }
 }

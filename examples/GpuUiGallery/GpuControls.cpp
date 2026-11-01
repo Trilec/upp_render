@@ -76,9 +76,9 @@ struct UiFileBrowserTest {
 GpuControlsDialog::GpuControlsDialog(bool validation)
 {
 	SetRequireGpu().SetValidation(validation).SetAsyncPresentation();
-	Title("Vulkan UI controls and text").Sizeable().Zoomable()
-	     .SetRect(0,0,1240,800);
-	heading.SetText("File browser, colour pickers and multilingual text");
+	Title("Vulkan UI - roles, states and controls").Sizeable().Zoomable()
+	     .SetRect(0,0,1360,980);
+	heading.SetText("Live Vulkan controls - paired theme profiles, roles and states");
 	status.SetText("Select a tab. Browser previews and palette data are prepared once and uploaded.");
 	close.SetText("Close"); close.WhenAction=[=] { Close(); };
 	browser.WhenAccept=[=](const UiFileBrowserSelection& selection) {
@@ -98,7 +98,7 @@ GpuControlsDialog::GpuControlsDialog(bool validation)
 	sample.Cat("\nColour emoji: "); sample.Cat(0x1f600);
 	text_entry.SetText(WString("Type or paste here")); text_document.SetText(ToUtf8(sample));
 	text_page.Add(text_help); text_page.Add(text_entry); text_page.Add(text_document); tabs.Add(text_page,"Text & IME");
-	tabs.Add(widgets,"Controls");
+	tabs.Add(widgets,"Collections"); tabs.Add(roles,"Roles & states");
 	ApplyTabStyle();
 
 	micro.WhenLayoutChange=[=] { Layout(); };
@@ -121,6 +121,10 @@ GpuControlsDialog::~GpuControlsDialog()
 {
 	qualification_clock.Kill();
 	if(theme_changed) { UiTheme::Set(original_theme); Ctrl::SwapDarkLight(); }
+}
+void GpuControlsDialog::Paint(Draw& draw)
+{
+	draw.DrawRect(GetSize(),UiTheme::GetOliveTokens(UiTheme::GetMode()).background);
 }
 void GpuControlsDialog::Layout()
 {
@@ -291,7 +295,33 @@ void GpuControlsDialog::Tick()
 			picker.SetPageMode(UiColorPicker::PAGE_COLOR); picker.SetPageMode(UiColorPicker::PAGE_IMAGE);
 			++step; return;
 		}
-		Finish(true,"browser/full/micro/text/controls and Image-page field bounds in both themes"); return;
+		++step; tabs.SetActiveTab(5); return;
+	}
+	if(step==32) {
+		String evidence; bool ok=roles.Qualify(evidence); *report<<evidence;
+		if(!ok) { Finish(false,"paired Roles & states profiles"); return; }
+		SetRect(0,0,1360,980); ++step; RequestGpuRefresh(); return;
+	}
+	if(step==33) {
+		String evidence; bool ok=CaptureGpuUiClient(*this,"GpuUi-roles-states",evidence); *report<<evidence;
+		if(!ok) { Finish(false,"Roles & states Vulkan capture"); return; }
+		tabs.SetActiveTab(1); picker.SetPageMode(UiColorPicker::PAGE_COLOR); ++step; return;
+	}
+	if(step==34 || step==35) {
+		String evidence; bool ok=true;
+		for(int channel=0;channel<UiColorPicker::CHANNEL_COUNT;++channel) {
+			picker.SetChannelMode((UiColorPicker::ChannelMode)channel);
+			ok &= PickerFieldBounds(picker,evidence,UiColorPicker::PAGE_COLOR);
+		}
+		ok &= CaptureGpuUiClient(*this,step==34?"GpuUi-picker-readouts-first-mode":"GpuUi-picker-readouts-second-mode",evidence);
+		*report<<evidence; if(!ok) { Finish(false,"colour readouts and channel fields"); return; }
+		if(step==34) {
+			UiThemeContext other=UiTheme::GetContext(); other.mode=other.mode==UiThemeMode::Dark?UiThemeMode::Light:UiThemeMode::Dark;
+			UiTheme::Set(other); Ctrl::SwapDarkLight(); ApplyTabStyle();
+			picker.SetPageMode(UiColorPicker::PAGE_IMAGE); picker.SetPageMode(UiColorPicker::PAGE_COLOR);
+			++step; return;
+		}
+		Finish(true,"browser/full/micro/text, all picker pages, colour channels and paired Roles & states"); return;
 	}
 	*report<<"text_document_shown="<<text_document.IsShown()<<" size="<<text_document.GetSize()
 	       <<" text_length="<<text_document.GetTextW().GetCount()<<" active_tab="<<tabs.GetActiveTab()<<"\n";

@@ -1325,6 +1325,7 @@ GUI_APP_MAIN
 	bool qualification = false;
 	bool compute_demo = false;
 	bool text_controls = false;
+	bool controls_demo = false, scene_inspector = false;
 	bool compute_benchmark = false;
 	Size compute_size(0,0);
 	bool heavy = false;
@@ -1366,6 +1367,8 @@ GUI_APP_MAIN
 		if(arg == "--capture-scenes") { capture_scenes=true; require_gpu=true; }
 		if(arg == "--compute") compute_demo = true;
 		if(arg == "--text-controls") text_controls = true;
+		if(arg == "--controls") controls_demo = true;
+		if(arg == "--scene-inspector") scene_inspector = true;
 		if(arg == "--benchmark-compute") { compute_benchmark = true; require_gpu = true; }
 		if(arg == "--qualify-ui") { qualification = true; require_gpu = true; }
 		if(arg == "--no-grid") grid = false;
@@ -1376,10 +1379,12 @@ GUI_APP_MAIN
 	if((native_menu_probe || tooltip_probe) && !benchmark) { SetExitCode(2); return; }
 	if(compute_size.cx && !compute_benchmark) { SetExitCode(2); return; }
 	if(capture_scenes && (qualification || benchmark || compute_benchmark || compute_demo)) { SetExitCode(2); return; }
-	if(text_controls && (qualification || benchmark || compute_benchmark || compute_demo || capture_scenes)) { SetExitCode(2); return; }
+	if((text_controls || controls_demo) && (qualification || benchmark || compute_benchmark || compute_demo || capture_scenes)) { SetExitCode(2); return; }
 	Animation::SetFPS(animation_fps);
-	if(text_controls) {
-		GpuControlsDialog app(validation); app.ShowTextPage(); app.Run();
+	if(text_controls || controls_demo || (!scene_inspector && !qualification && !benchmark && !compute_benchmark && !compute_demo && !capture_scenes)) {
+		GpuControlsDialog app(validation);
+		if(text_controls) app.ShowTextPage(); else app.ShowRolesPage();
+		app.Run();
 	}
 	else if(compute_benchmark) {
 		ComputeSceneDialog app(validation, compute_size); String report; app.StartBenchmark(seconds, report); app.Run();

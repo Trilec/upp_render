@@ -720,5 +720,360 @@
     "newline": "lf",
     "encoding": "utf-8"
   },
-  "promoted_path": "bin/win64/UppVulkanUiDemo.exe"
+  "promoted_path": "bin/win64/UppVulkanUiDemo.exe",
+  "current_controls_update": {
+    "scope": "Default paired Cinespace Roles & states, all-picker-page sizing and CMYK parent relayout",
+    "artifact": {
+      "path": "bin/win64/UppVulkanUiDemo.exe",
+      "size": 9263104,
+      "sha256": "16d4d8c6d4ef0855ba54a742bc2ca40606cfc6d06f382f9a8aed67a6dc9236ba",
+      "platform": "Windows x64",
+      "configuration": "Release +GUI,GPUUI,CFONTS",
+      "package": "GpuUiGallery",
+      "default_page": "Roles & states"
+    },
+    "renderer_base": "b3a42b1ffe8830cb36c121add2b77d0e72fad465",
+    "ui_raw_sha256": "3e3726e2eb7af21bdde18e03f2806faeb80a2fc1c4c6e7e713665f193abcc7fa",
+    "source_hashes": [
+      {
+        "path": "examples/GpuUiGallery/GpuCapture.cpp",
+        "sha256": "7c20e7d04e2d54ac6d0524f30eed7f1533832f42d69b7616e6993140b5717307"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuComputeScene.cpp",
+        "sha256": "2470a8550e8193c8c3231572c55c8849b76c5aecef1cf2e42833b03dfb870acd"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuControls.cpp",
+        "sha256": "e8558624836d76a07e78397b362776b90b839c51bdbb5fa773f479b65dd41c08"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuMetrics.cpp",
+        "sha256": "20ad3ca2e474efe8c4c4565bc2919e2879183b83558b2f14762086ccb46cab82"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuRoles.cpp",
+        "sha256": "d1dc6308f50730d4733d3787a04792abeef669bd6cc2c3cbca48c16e245c5815"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuWidgets.cpp",
+        "sha256": "b2fba43c4a3c841b050aaa04b6c9dcbcf198361df0673e4169d0b6a337f9b428"
+      },
+      {
+        "path": "examples/GpuUiGallery/main.cpp",
+        "sha256": "380d937b99adf0368c432a385c9d93950cbeedd485d6385249ba03d95692e99a"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuCapture.h",
+        "sha256": "2c84701cde5c9fbf8a3de13869d08deff098f95bf3950257c5e414f347cc9baa"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuComputeScene.h",
+        "sha256": "eb50cd5bec9572a3e2e3f3b8ba99a21a915afbd5e5d02d18394caf778c66cb2d"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuControls.h",
+        "sha256": "a261e6f2f4d91a374aad6c8c053b9d35d04db781c1faf0ff1b2e7802056f12e3"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuMetrics.h",
+        "sha256": "bdab5e7e766afcd7936fc915137e4bef982fda4c478d98becec31cb0c2358c65"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuRoles.h",
+        "sha256": "46957bbc1046ceff1cb755002fc39a7536c0122fe35b5fb27c64d429ded22e61"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuWidgets.h",
+        "sha256": "2ad28534add3c7298ee14559cf72bd6b82d4d542825520fa2f39a173d370ab8f"
+      },
+      {
+        "path": "examples/GpuUiGallery/GpuUiGallery.upp",
+        "sha256": "89ef1aa583b23207f81a63f5f3015d25d2e59f24cbd7e1a17cab4db044286801"
+      }
+    ],
+    "cinespace_theme": {
+      "repository": "upp_cinespace",
+      "package": "Shared/UiTheme",
+      "git_base": "58f4a90a274904831815189b53b6e9a849734400",
+      "api_version": 3,
+      "working_tree_source_hashes": [
+        {
+          "path": "Shared/UiTheme/CineSpaceTheme.cpp",
+          "sha256": "92d70c2ccd1532591028f325be4f0ce75cbfa362797a4f9c92efdf5f95f4626d"
+        },
+        {
+          "path": "Shared/UiTheme/CineSpaceTheme.h",
+          "sha256": "45d9c129bc48f212aa171d765ac5c00fe2baaeb93b7a7a815118e11eb70e58de"
+        },
+        {
+          "path": "Shared/UiTheme/UiTheme.upp",
+          "sha256": "0a1e0fe0d65eba299a1282f5f7bdc6041fb0631ce42afe61ae05bc3a5a4bde66"
+        }
+      ],
+      "scope": "Build dependency of the showcase only; existing theme recipes consumed read-only."
+    },
+    "build_job": {
+      "schema_version": 1,
+      "job_id": "exec-539D49A002FCD354F8EDEF55423F5FD8",
+      "project_id": "project-028DDA9C9C89",
+      "connection_id": "chat",
+      "workspace_id": "folder-D804EA49C6B4",
+      "recipe_id": "upp-builder",
+      "description": "Approved project tool",
+      "command": "umk.exe",
+      "argument_count": 8,
+      "executable_sha256": "3899321510b7b4719ec244a98ab0158831d41674412735ded7cb6eb34b13e235",
+      "executable_size": 8792576,
+      "timeout_ms": 1800000,
+      "created_at": "2026-11-01T14:42:41",
+      "started_at": "2026-11-01T14:42:41",
+      "finished_at": "2026-11-01T14:42:48",
+      "status": "succeeded",
+      "launched": true,
+      "stop_requested": false,
+      "duration_ms": 6625,
+      "exit_code": 0,
+      "timed_out": false,
+      "cancelled": false,
+      "stdout": "Saving \r\n----- Core ( GUI GPUUI CFONTS CLANG WIN32 ) (1 / 27)\r\n----- Animation ( GUI GPUUI CFONTS CLANG WIN32 ) (2 / 27)\r\n----- CtrlLib ( GUI GPUUI CFONTS CLANG WIN32 ) (3 / 27)\r\n----- Ui ( GUI GPUUI CFONTS CLANG WIN32 ) (4 / 27)\r\n----- Shared/UiTheme ( GUI GPUUI CFONTS CLANG WIN32 ) (5 / 27)\r\n----- Ui/UiFileBrowser ( GUI GPUUI CFONTS CLANG WIN32 ) (6 / 27)\r\n----- Utilities/PropertyEditor ( GUI GPUUI CFONTS CLANG WIN32 ) (7 / 27)\r\n----- GpuRender ( GUI GPUUI CFONTS CLANG WIN32 ) (8 / 27)\r\n----- RenderVulkan ( GUI GPUUI CFONTS CLANG WIN32 ) (9 / 27)\r\n----- RenderGpu2D ( GUI GPUUI CFONTS CLANG WIN32 ) (10 / 27)\r\n----- RenderCtrlBridge ( GUI GPUUI CFONTS CLANG WIN32 ) (11 / 27)\r\n----- plugin/png ( GUI GPUUI CFONTS CLANG WIN32 ) (12 / 27)\r\n----- RenderFontWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (13 / 27)\r\n----- plugin/z ( GUI GPUUI CFONTS CLANG WIN32 ) (14 / 27)\r\n----- CtrlCore ( GUI GPUUI CFONTS CLANG WIN32 ) (15 / 27)\r\n----- Draw ( GUI GPUUI CFONTS CLANG WIN32 ) (16 / 27)\r\n----- plugin/bmp ( GUI GPUUI CFONTS CLANG WIN32 ) (17 / 27)\r\n----- RichText ( GUI GPUUI CFONTS CLANG WIN32 ) (18 / 27)\r\n----- Painter ( GUI GPUUI CFONTS CLANG WIN32 ) (19 / 27)\r\n----- Utilities/PropertyEditorCore ( GUI GPUUI CFONTS CLANG WIN32 ) (20 / 27)\r\n----- Ui/UiOsFileDialog ( GUI GPUUI CFONTS CLANG WIN32 ) (21 / 27)\r\n----- RenderCanvas ( GUI GPUUI CFONTS CLANG WIN32 ) (22 / 27)\r\n----- RenderPlatformWin32 ( GUI GPUUI CFONTS CLANG WIN32 ) (23 / 27)\r\n----- RenderRhi ( GUI GPUUI CFONTS CLANG WIN32 ) (24 / 27)\r\n----- RenderCore ( GUI GPUUI CFONTS CLANG WIN32 ) (25 / 27)\r\n----- RenderVector ( GUI GPUUI CFONTS CLANG WIN32 ) (26 / 27)\r\n----- GpuUiGallery ( GUI GPUUI CFONTS MAIN CLANG WIN32 ) (27 / 27)\r\nGpuRoles.cpp\r\nGpuControls.cpp\r\nGpuUiGallery: 2 file(s) built in (0:05.26), 2630 msecs / file\r\nLinking...\r\nE:\\apps\\github\\upp_render\\build\\UppVulkanUiDemo.exe (9263104 B) linked in (0:00.26)\r\n\r\nOK. (0:06.46)\r\n",
+      "stderr": "",
+      "local_stdout_truncated": false,
+      "local_stderr_truncated": false,
+      "containment": "process_tree",
+      "stdout_bytes": 1903,
+      "stderr_bytes": 0,
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "236b5b565a98a02b6041dcd45a88f0492b4cffa1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "236b5b565a98a02b6041dcd45a88f0492b4cffa1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "backend_ok": true,
+      "tool_id": "upp-builder",
+      "tool_provenance": "override",
+      "capture_output": true,
+      "execution_isolation": "approved_local_tool_not_an_os_sandbox",
+      "process_status": "succeeded",
+      "success_exit_codes": [
+        0
+      ],
+      "exit_code_accepted": true,
+      "result_ok": true,
+      "result_code": "",
+      "result_message": "",
+      "stdout_offset": 0,
+      "stdout_next_offset": 1903,
+      "stdout_reset": false,
+      "stderr_offset": 0,
+      "stderr_next_offset": 0,
+      "stderr_reset": false
+    },
+    "ui_job": {
+      "schema_version": 1,
+      "job_id": "exec-E32E16E536515835D0FFF6027B1BFF5C",
+      "project_id": "project-028DDA9C9C89",
+      "connection_id": "chat",
+      "workspace_id": "folder-D804EA49C6B4",
+      "recipe_id": "tool-7A0B237BB3E4",
+      "description": "Approved project tool",
+      "command": "UppVulkanUiDemo.exe",
+      "argument_count": 2,
+      "executable_sha256": "16d4d8c6d4ef0855ba54a742bc2ca40606cfc6d06f382f9a8aed67a6dc9236ba",
+      "executable_size": 9263104,
+      "timeout_ms": 120000,
+      "created_at": "2026-11-01T14:43:36",
+      "started_at": "2026-11-01T14:43:37",
+      "finished_at": "2026-11-01T14:43:58",
+      "status": "succeeded",
+      "launched": true,
+      "stop_requested": false,
+      "duration_ms": 21094,
+      "exit_code": 0,
+      "timed_out": false,
+      "cancelled": false,
+      "stdout": "",
+      "stderr": "",
+      "local_stdout_truncated": false,
+      "local_stderr_truncated": false,
+      "containment": "process_tree",
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "stdout_truncated": false,
+      "stderr_truncated": false,
+      "source_before": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "236b5b565a98a02b6041dcd45a88f0492b4cffa1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "source_after": {
+        "workspace_id": "folder-D804EA49C6B4",
+        "root_fingerprint": "e9eb102dcf7ac64d491df9fdd5b8795e61b0b9fdb317bb38f930e4e02005c8ba",
+        "git_head_available": true,
+        "git_head": "236b5b565a98a02b6041dcd45a88f0492b4cffa1",
+        "git_ref": "refs/heads/main",
+        "scope": "configured_workspace_and_direct_git_head"
+      },
+      "backend_ok": true,
+      "tool_id": "tool-7A0B237BB3E4",
+      "tool_provenance": "project",
+      "capture_output": true,
+      "execution_isolation": "approved_local_tool_not_an_os_sandbox",
+      "process_status": "succeeded",
+      "success_exit_codes": [
+        0
+      ],
+      "exit_code_accepted": true,
+      "result_ok": true,
+      "result_code": "",
+      "result_message": "",
+      "stdout_offset": 0,
+      "stdout_next_offset": 0,
+      "stdout_reset": false,
+      "stderr_offset": 0,
+      "stderr_next_offset": 0,
+      "stderr_reset": false
+    },
+    "ui_report": {
+      "path": "build/GpuUiGallery-qualification.txt",
+      "ok": true,
+      "text": "inspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_colour_dialogs=PASS actual swatch keyboard activation/accept/cancel/shared GPU\nmodal_cycle_start=1\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=2\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=3\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_cycle_start=1\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=2\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=3\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=32 dispatches=32 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nextended_controls_start=1\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-micro-light=PASS size=(1360, 980) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-idle=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-preedit=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_document_shown=true size=(933, 468) text_length=56 active_tab=3\nGpuUi-text-committed=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_unchanged_document_pixels=0 baseline_ink_pixels=403282\nGpuUi-controls=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-picker-image-first-mode=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-picker-image-second-mode=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nroles_states=PASS profiles=6 roles=4 modes=2 cases=48 retained_edit/selection/disabled fields_fit\nGpuUi-roles-states=PASS size=(1360, 980) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=2 error=\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=15\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\nGpuUi-picker-readouts-first-mode=PASS size=(1360, 980) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=15\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\nGpuUi-picker-readouts-second-mode=PASS size=(1360, 980) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nextended_controls=PASS browser/full/micro/text, all picker pages, colour channels and paired Roles & states picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=PASS pause/resume/speed/mode/inspector/modal state retained\nsoftware_fallback_count=0\ngpu_error=\nqualification=PASS\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=27/64 font_error=\n",
+      "offset": 0,
+      "next_offset": 6856,
+      "size": 6856,
+      "truncated": false,
+      "sha256": "bc982e91e1f0c5ce0fb22b932fa535da2409c8fd7b1ab80fd5534e6890ecea4e",
+      "hash_scope": "complete_file_at_read",
+      "newline": "lf",
+      "encoding": "utf-8"
+    },
+    "before_readout_fix": {
+      "artifact_sha256": "c1f1f6c69f6060107e264911b827de198e2a214d720af0e90a0c4899b00dea1f",
+      "job_id": "exec-869828A95237893139786E049A7A8DA9",
+      "status": "FAIL reproduced six30px edit fields requiring36px on Colour page; Image-only coverage had missed them",
+      "report": "inspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_colour_dialogs=PASS actual swatch keyboard activation/accept/cancel/shared GPU\nmodal_cycle_start=1\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=2\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=3\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_cycle_start=1\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=2\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=3\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=35 dispatches=35 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nextended_controls_start=1\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\nclipped_picker_field kind=edit size=(206, 30) minimum=(58, 36)\npicker_page=0 picker_field_bounds=FAIL dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\nextended_controls=FAIL picker page 0 field bounds picker_cases=0 actions=1 accepts=1 cancels=1 fallback=0 error=\nroot=FAIL extended controls\nsoftware_fallback_count=0\ngpu_error=\nqualification=FAIL\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=20/64 font_error=\n"
+    },
+    "intermediate_cmyk_failure": {
+      "artifact_sha256": "7f883f9e46f243e4e822b2ea0462e17442a2c3049ce90404e77bb5d73cba19cd",
+      "job_id": "exec-8B16A7CA976299ABA0B8BBA1DD810F12",
+      "status": "FAIL: five CMYK fields remained22px, required24px because SetChannelMode did not relayout the parent",
+      "report": "inspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_modal surfaces=2 devices=1 direct_owner=true has_owner=true\ninspector_colour_dialogs=PASS actual swatch keyboard activation/accept/cancel/shared GPU\nmodal_cycle_start=1\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=2\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nmodal_cycle_start=3\nworkspace_native_devices=1 surfaces=2 swapchains=2\nworkspace=PASS focus/text/tree/table edit commit-cancel/resize/light-dark\nworkspace_open_edit_close_cycles=3\ncompute_cycle_start=1\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=34 dispatches=34 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=2\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=36 dispatches=36 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_cycle_start=3\ncompute_constructed=1\ncompute_dialog=PASS controls, pause/resume, resize, one compiled program, direct GPU image\ncompute_presented_frames=35 dispatches=35 shader_pipeline_builds=1 image_builds=2 payload_bytes=3684096\ncompute_open_edit_close_cycles=3\nextended_controls_start=1\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=1 picker_field_bounds=PASS dropdowns=2 toggles=0 edits=2\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=2 picker_field_bounds=PASS dropdowns=4 toggles=1 edits=5\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-micro-light=PASS size=(1360, 900) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-micro-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-picker-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-browser-dark=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-idle=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nGpuUi-text-preedit=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_document_shown=true size=(933, 468) text_length=56 active_tab=3\nGpuUi-text-committed=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\ntext_unchanged_document_pixels=0 baseline_ink_pixels=403282\nGpuUi-controls=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-picker-image-first-mode=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=3 picker_field_bounds=PASS dropdowns=4 toggles=3 edits=6\npicker_active_page_accent=PASS\nGpuUi-picker-image-second-mode=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nroles_states=PASS profiles=6 roles=4 modes=2 cases=48 retained_edit/selection/disabled fields_fit\nGpuUi-roles-states=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\nclipped_picker_field kind=edit size=(70, 22) minimum=(46, 24)\nclipped_picker_field kind=edit size=(70, 22) minimum=(46, 24)\nclipped_picker_field kind=edit size=(70, 22) minimum=(46, 24)\nclipped_picker_field kind=edit size=(70, 22) minimum=(46, 24)\nclipped_picker_field kind=edit size=(70, 22) minimum=(46, 24)\npicker_page=0 picker_field_bounds=FAIL dropdowns=3 toggles=1 edits=15\npicker_active_page_accent=PASS\npicker_page=0 picker_field_bounds=PASS dropdowns=3 toggles=1 edits=14\npicker_active_page_accent=PASS\nGpuUi-picker-readouts-first-mode=PASS size=(1000, 720) cpu_vector_rasters=0 cpu_glyph_rasters=0 gpu_composition_layers=0 error=\nextended_controls=FAIL colour readouts and channel fields picker_cases=16 actions=17 accepts=1 cancels=1 fallback=0 error=\nroot=FAIL extended controls\nsoftware_fallback_count=0\ngpu_error=\nqualification=FAIL\nfinal_native_ownership=ZERO\nfont_backend=DirectWrite legacy_gdi_font_requests=0 face_cache_entries=27/64 font_error=\n"
+    },
+    "corrections": [
+      "Six colour readouts now use the same compact themed edit recipe and measured row heights.",
+      "SetChannelMode immediately relayouts the parent when four channels become five.",
+      "The controls window paints its own theme background.",
+      "Roles & states reuses shared Cinespace theme profiles; no production theme implementation copied."
+    ],
+    "validation_limits": "Native image captures inspected. Pointer/keyboard/profile acceptance is left for the owner; no new full soak, physical OS IME or monitor-DPI claim.",
+    "previous_manifest": {
+      "schema_version": 1,
+      "date": "2026-11-01",
+      "status": "Local Windows/Vulkan showcase: automated UI PASS; complete refreshed soak waived by owner",
+      "artifact": {
+        "path": "bin/win64/UppVulkanUiDemo.exe",
+        "size": 8999936,
+        "sha256": "fa9e31d28aeb0cc0eaf11a03ee8141d66f6b65521f4b06f71c3a2c8432d0fa5b",
+        "platform": "Windows x64",
+        "configuration": "Release +GUI,GPUUI,CFONTS",
+        "package": "GpuUiGallery"
+      },
+      "source": {
+        "renderer_base": "b3a42b1ffe8830cb36c121add2b77d0e72fad465",
+        "renderer_delta": {
+          "path": "render/RenderGpu2D/RenderGpu2D.h",
+          "raw_sha256": "2a513d3f3d8b0ba7b46bf79969182b7de95bdeb247ac1d3bc63446dd533560e7",
+          "vector_entries": 256,
+          "vector_payload_bytes": 33554432
+        },
+        "showcase_hashes": "refresh-2026-11-01.json (qualified_showcase_sources)",
+        "ui_base": "f88aab5150ca7f375b8c4a61a01da57832c82e03",
+        "ui_patch": "docs/dependencies/compact-color-picker.patch",
+        "ui_color_picker_raw_sha256": "39f7f261173943a6c85b5d0f4f49af6128049d397494aba5df67a1c6ccb3000d",
+        "animation": "4a01b6f4e2a9f122ea1a93457b62a4054d01f970",
+        "upp_version": 18468,
+        "concurrent_3d_changes_included": false
+      },
+      "qualification": {
+        "evidence": "refresh-2026-11-01.json",
+        "ui": {
+          "status": "PASS",
+          "job_id": "exec-41612799EC247D08D450C7C3FAA4665C",
+          "seconds": 16.875,
+          "validation": true,
+          "picker_image_modes": [
+            "Light",
+            "Dark"
+          ],
+          "picker_dropdowns": 4,
+          "picker_toggles": 3,
+          "picker_edits": 6,
+          "cpu_vector_rasters": 0,
+          "cpu_glyph_rasters": 0,
+          "legacy_gdi_font_requests": 0,
+          "software_fallback_count": 0,
+          "final_native_ownership": "ZERO"
+        },
+        "soak": {
+          "status": "INCOMPLETE_OWNER_SKIPPED_REPEAT",
+          "job_id": "exec-89FD74455C96A1BC33630A60A87187DA",
+          "finished_after_seconds": 225.843,
+          "measured_private_samples_bytes": [
+            197967872,
+            198025216,
+            198049792
+          ],
+          "observation_seconds": [
+            37.25,
+            105.75,
+            178.5
+          ],
+          "full_memory_gate": "NOT_ESTABLISHED",
+          "evidence": "Owner: No, don't worry about the five minutes. I think this is okay. Let's just keep continuing with everything else."
+        }
+      },
+      "acceptance": {
+        "strict_gates_passed": 8,
+        "strict_gates_total": 10,
+        "percent": 80,
+        "physical_review": "AA/control input, real OS IME candidate selection and physical monitor scaling remain unqualified for this hash",
+        "dpi_awareness": "system; live per-monitor transitions not qualified",
+        "os_native_choosers": "Outside automated client-area qualification. Owner-interacted interrupted run retained36 legacy GDI font requests; specific source not established. Controlled UI run had0.",
+        "human_olive_visual_review": "Owner approved earlier2458f9d graphical refresh; not a physical-input/IME/DPI acceptance of this hash",
+        "caro": "24 October65f771f7 build passed; refreshed binary not retested on Caro"
+      },
+      "runtime": {
+        "requires": [
+          "Windows x64",
+          "Graphics driver providing compatible Vulkan support"
+        ],
+        "does_not_require": [
+          "U++ development toolchain",
+          "Vulkan SDK"
+        ],
+        "optional_validation": "Developer validation layers required for --validation"
+      },
+      "publication": {
+        "pushed": false,
+        "published": false,
+        "public_archive_ready": false,
+        "notes": "Before public distribution complete physical acceptance and assemble dependency/runtime notices. Local bin intentionally contains only the executable."
+      }
+    }
+  }
 }

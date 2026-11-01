@@ -20,7 +20,12 @@ The final source commit includes this delta; do not build the unmodified base
 and claim the refreshed binary's qualification.
 
 The assembly resolves packages in `render`, `examples`, `tests`, `tools`,
-the Ui repository/export, Animation and `uppsrc`. UMK accepts the nests as a
+the Ui repository/export, upp_cinespace, Animation and `uppsrc`.
+The showcase uses `Shared/UiTheme` from upp_cinespace for the requested theme
+profiles. The renderer packages do not depend on that application adapter.
+Match its recorded source hashes as well as its commit: the qualified API 3
+adapter includes working-tree changes. It is a build dependency only; runtime
+users still need only the graphics driver. UMK accepts the nests as a
 comma-separated argument; the output directory is not a source nest.
 
 ```text

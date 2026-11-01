@@ -7,17 +7,22 @@ instances, swapchains or command buffers.
 ## Run the Windows demo
 
 The stable local executable is **[bin/win64/UppVulkanUiDemo.exe](bin/win64/UppVulkanUiDemo.exe)**.
-This directory contains only the current Release executable. Future qualified
+This is the stable whole-UI Release executable. Future qualified
 builds replace that same file; executables and compiler output are not committed.
 
-The demo opens in **Olive dark**, with an animated Vulkan scene, a live inspector,
-ring meters and a cache composition chart. Use:
+The demo opens on **Roles & states**, with paired dark/light specimens. Choose
+Olive, Legacy, CineCast, CineWrite, CineFlow or CineStage and switch between
+Standard, Subtle, Accent and Alert without resetting edits or selection.
 
-- **GPU dialog** for a second Vulkan window containing editable controls.
-- **Scene > Browser and colour pickers** for the file browser, full colour picker,
-  micro picker and multilingual text/IME editors.
-- **Scene > Image and compute** for GPU-generated images and a dithered ramp.
-- **View > Light / Dark** to compare the two theme modes.
+- **Roles & states**: command/icon buttons, selected/disabled states, validation,
+  editable/read-only fields, dropdown, toggle, checks/radio choices, tabs, slider,
+  progress, segmented range and semantic status chips.
+- **Colour picker / Micro picker / File browser / Text & IME**: working control pages.
+- **Collections**: a small tree, table and GPU image.
+
+Run `UppVulkanUiDemo.exe --scene-inspector` for the animated scene, live inspector,
+metric rings, GPU dialog and image/compute menu. The default showcase uses the
+Cinespace Roles & states composition and its existing shared theme recipes.
 
 The client area, controls and owned dialogs use Vulkan drawing. The application
 retains Windows windowing/input and DirectWrite text services. A compatible
@@ -57,10 +62,10 @@ drop-in replacement for that snapshot.
 
 | Directory | Contents |
 | --- | --- |
-| `bin/win64/` | One current runnable Windows showcase |
+| `bin/win64/` | Latest qualified Windows executables |
 | `build/` | Disposable outputs, the pinned dependency export and retained local evidence |
 | `render/` | Public integration and renderer/backend packages |
-| `examples/` | Three focused product demos |
+| `examples/` | Control, surface and drawing demos |
 | `tests/` | Deterministic regression and load packages |
 | `shaders/` | Shader sources and checked-in generated SPIR-V |
 | `tools/` | Development utilities |

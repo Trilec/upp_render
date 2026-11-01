@@ -10,10 +10,11 @@ to the refreshed demo; older launch details/results below retain their original
 Inspect animated circles, curves and text at normal viewing size. Check smooth
 edges without missing pixels or clipping. AA is applied by the renderer; this
 gallery has no AA toggle. View > Light / Dark changes the theme.
-Use GPU dialog to check the second populated window, focus, editing and resize.
-Scene > Browser and colour pickers opens File browser, Colour picker,
-Micro picker and Text & IME tabs. Check browser selection/preview/filter,
-picker dragging and typed colour values, nested popups, keyboard and mouse.
+The default window opens Roles & states. Change profiles and roles, type into
+both panes, open dropdowns/menus, switch tabs and scroll the range/status controls.
+Use Colour picker > Color to inspect all six readouts and switch to CMYK; also
+check Image, Micro picker and File browser. Run --scene-inspector for the
+animated scene and GPU dialog; check the second window, focus, editing and resize.
 Record defects separately by control and theme.
 
 ## Real OS IME

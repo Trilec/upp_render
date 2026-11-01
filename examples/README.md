@@ -1,7 +1,7 @@
 # Examples
 
 The primary showcase is [GpuUiGallery](GpuUiGallery/README.md), with a single
-stable executable at `bin/win64/UppVulkanUiDemo.exe`. Its Controls tab and GPU
+stable executable at `bin/win64/UppVulkanUiDemo.exe`. It opens the paired Cinespace Roles & states workbench. Its Collections tab and GPU
 workspace share one lightweight three-column tree/table/image composition.
 
 Two focused examples remain: [GpuSurfaceDemo](GpuSurfaceDemo/README.md) for
