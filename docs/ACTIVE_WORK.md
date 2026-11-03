@@ -28,6 +28,6 @@ The host uses system DPI awareness; live per-monitor transitions are unqualified
 
 Core and Animation remain read-only. Only the focused Ui picker source was
 changed; [its reproducible patch](dependencies/README.md) accompanies the pinned
-Ui build. Shared Cinespace theme sources were read-only. Concurrent 3D work is
+Ui build. Shared Cinespace theme sources were read-only. Concurrent [Ui3DView work](UI3DVIEW.md) is
 preserved and excluded from this binary. Historical records are compressed in
 [the archive](qualification/README.md#history).

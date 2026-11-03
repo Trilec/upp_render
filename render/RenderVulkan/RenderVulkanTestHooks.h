@@ -166,6 +166,8 @@ struct VulkanGroupedSurfaceSessionTestResult {
 	bool post_lease_failure = false;
 	bool recovery = false;
 	bool device_cleanup_failure_non_short_circuit = false;
+	bool offscreen_validation_report = false;
+	bool repeated_close_validation_report = false;
 	bool grouped_swapchains_separate = false;
 	bool first_report_authoritative = false;
 	bool second_report_authoritative = false;

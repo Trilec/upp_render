@@ -52,6 +52,9 @@ bounds; failures in required-GPU mode are reported rather than hidden by fallbac
 [Usage](docs/GPU_CTRL_USAGE.md) · [Integration](docs/GPU_CTRL_INTEGRATION.md) ·
 [Package map](render/README.md) · [Examples](examples/README.md)
 
+For the embedded 3D viewer, use the [Ui3DView guide](docs/UI3DVIEW.md). It covers
+the control, optional native UI, demo, API, build commands and tested status.
+
 ## Build and repository layout
 
 See [Windows build instructions](docs/BUILD_WINDOWS.md). Copy the

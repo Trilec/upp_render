@@ -2,6 +2,7 @@
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include "../../shaders/Ui3DMeshVertSpirv.h"
 #include "../../shaders/Ui3DMeshFragSpirv.h"
+#include "../../shaders/Ui3DEdgeFragSpirv.h"
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -21,9 +22,9 @@ bool Check(bool value, const char *message)
 }
 FARPROC WINAPI Resolver(HMODULE, LPCSTR) { return reinterpret_cast<FARPROC>(1); }
 
-struct Vertex { float x,y,z,nx,ny,nz,u,v,r,g,b,a; };
+struct Vertex { float x,y,z,nx,ny,nz,r,g,b,a; };
 struct Parameters { float mvp[16], normal[12], tint[4]; };
-static_assert(sizeof(Vertex) == 48 && sizeof(Parameters) == 128, "mesh shader contract");
+static_assert(sizeof(Vertex) == 40 && sizeof(Parameters) == 128, "mesh shader contract");
 
 Parameters Identity(bool flip_y = true)
 {
@@ -37,12 +38,12 @@ Parameters Identity(bool flip_y = true)
 // Both triangles cover the same XY region, but their depth planes intersect.
 // This makes the correct front-most color vary across one rendered primitive.
 const Vertex kVertices[] = {
-	{-.8f,-.7f,.2f,0,0,1,0,0,1,0,0,1},
-	{ .8f,-.7f,.8f,0,0,1,0,0,1,0,0,1},
-	{  0, .85f,.5f,0,0,1,0,0,1,0,0,1},
-	{-.8f,-.7f,.8f,0,0,1,0,0,0,1,0,1},
-	{ .8f,-.7f,.2f,0,0,1,0,0,0,1,0,1},
-	{  0, .85f,.5f,0,0,1,0,0,0,1,0,1}
+	{-.8f,-.7f,.2f,0,0,1,1,0,0,1},
+	{ .8f,-.7f,.8f,0,0,1,1,0,0,1},
+	{  0, .85f,.5f,0,0,1,1,0,0,1},
+	{-.8f,-.7f,.8f,0,0,1,0,1,0,1},
+	{ .8f,-.7f,.2f,0,0,1,0,1,0,1},
+	{  0, .85f,.5f,0,0,1,0,1,0,1}
 };
 const uint32 kIndices[] = {0,1,2,3,4,5};
 
@@ -126,7 +127,7 @@ public:
 		depth = Texture(GpuFormat::D32F, GpuTextureUsage_DepthAttachment);
 		pipeline_desc.color_format = GpuFormat::RGBA8; pipeline_desc.depth_format = GpuFormat::D32F;
 		pipeline_desc.vertex_shader = vs; pipeline_desc.fragment_shader = fs;
-		pipeline_desc.vertex_layout = GpuVertexLayout::Position3Normal3Uv2Color4F;
+		pipeline_desc.vertex_layout = GpuVertexLayout::Position3Normal3Color4F;
 		pipeline_desc.parameter_bytes = sizeof(Parameters);
 		pipeline_desc.depth_test = pipeline_desc.depth_write = true;
 		pipeline_desc.depth_compare = GpuCompareOp::Less;
@@ -275,6 +276,103 @@ bool Black(const Vector<byte>& image)
 	return true;
 }
 
+
+void TestVisibleEdgeOverlay(Fixture& f)
+{
+	auto& d = f.device;
+	GpuShaderDesc shader;
+	shader.format = GpuShaderFormat::SpirV; shader.stage = GpuShaderStage::Fragment;
+	shader.code = String(reinterpret_cast<const char *>(kUi3DEdgeFragment), sizeof(kUi3DEdgeFragment));
+	GpuShaderId edge_shader;
+	if(!f.Result(d.CreateShader(shader, edge_shader), "create visible edge shader")) return;
+	f.shaders.Add(edge_shader);
+	auto desc = f.pipeline_desc;
+	desc.topology = GpuPrimitiveTopology::LineList; desc.fragment_shader = edge_shader;
+	desc.depth_write = false; desc.depth_compare = GpuCompareOp::LessEqual;
+	GpuPipelineId edge_pipeline = f.Pipeline(desc);
+	desc.depth_compare = GpuCompareOp::Equal;
+	GpuPipelineId probe_pipeline = f.Pipeline(desc);
+	desc.depth_test = false;
+	GpuPipelineId clip_pipeline = f.Pipeline(desc);
+	if(!edge_pipeline.IsValid() || !probe_pipeline.IsValid() || !clip_pipeline.IsValid()) return;
+	const Vertex quad[] = {
+		{-.8f,-.8f,.5f,0,0,1,0,0,1,1}, { .8f,-.8f,.5f,0,0,1,0,0,1,1},
+		{ .8f, .8f,.5f,0,0,1,0,0,1,1}, {-.8f, .8f,.5f,0,0,1,0,0,1,1}
+	};
+	const uint32 quad_indices[] = {0,1,2,0,2,3};
+	// Black authored vertex colors deliberately oppose the requested green/red
+	// outline. Selection/edge RGB must remain the uniform requested color.
+	const Vertex lines[] = {
+		{-.65f, .25f,.5f,0,0,1,0,0,0,1}, { .65f, .25f,.5f,0,0,1,0,0,0,1},
+		{-.65f,-.25f,.75f,0,0,1,0,0,0,1}, { .65f,-.25f,.75f,0,0,1,0,0,0,1}
+	};
+	const uint32 line_indices[] = {0,1,2,3};
+	const float outside_far = std::nextafter(1.0f, 2.0f);
+	const Vertex clipped_lines[] = {
+		{-.65f, .5f, 1e-7f,0,0,1,0,0,0,1}, { .65f, .5f, 1e-7f,0,0,1,0,0,0,1},
+		{-.65f,   0,-1e-7f,0,0,1,0,0,0,1}, { .65f,   0,-1e-7f,0,0,1,0,0,0,1},
+		{-.65f,-.5f,outside_far,0,0,1,0,0,0,1}, { .65f,-.5f,outside_far,0,0,1,0,0,0,1}
+	};
+	const uint32 clip_indices[] = {0,1,2,3,4,5};
+	GpuBufferId quad_v = f.Buffer(GpuBufferUsage_Vertex, quad, sizeof(quad));
+	GpuBufferId quad_i = f.Buffer(GpuBufferUsage_Index, quad_indices, sizeof(quad_indices));
+	GpuBufferId line_v = f.Buffer(GpuBufferUsage_Vertex, lines, sizeof(lines));
+	GpuBufferId line_i = f.Buffer(GpuBufferUsage_Index, line_indices, sizeof(line_indices));
+	GpuBufferId clip_v = f.Buffer(GpuBufferUsage_Vertex, clipped_lines, sizeof(clipped_lines));
+	GpuBufferId clip_i = f.Buffer(GpuBufferUsage_Index, clip_indices, sizeof(clip_indices));
+	if(!quad_v.IsValid() || !quad_i.IsValid() || !line_v.IsValid() || !line_i.IsValid() || !clip_v.IsValid() || !clip_i.IsValid()) return;
+	Parameters flat = Identity(), green = Identity(), red = Identity(), yellow = Identity();
+	green.tint[0] = green.tint[2] = 0; green.normal[11] = 2e-7f;
+	red.tint[1] = red.tint[2] = 0; red.normal[11] = 2e-7f;
+	yellow.tint[2] = 0; // No bias: equal-depth probe must see the original solid depth.
+	auto record = [&](GpuCommandListId cmd, GpuPipelineId pipeline, GpuBufferId vertices,
+	                  GpuBufferId indices, const Parameters& parameters, int count, int first) {
+		return f.Result(d.SetPipeline(cmd, pipeline), "edge oracle pipeline") &&
+		       f.Result(d.SetVertexBuffer(cmd, vertices), "edge oracle vertices") &&
+		       f.Result(d.SetIndexBuffer(cmd, indices, GpuIndexType::UInt32), "edge oracle indices") &&
+		       f.Result(d.SetGraphicsParameters(cmd, &parameters, sizeof(parameters)), "edge oracle parameters") &&
+		       f.Result(d.DrawIndexed(cmd, count, first), "edge oracle indexed draw");
+	};
+	auto finish = [&](GpuCommandListId cmd, Vector<byte>& pixels) {
+		if(!f.Result(d.EndRenderPass(cmd), "end edge oracle pass") ||
+		   !f.Result(d.EndCommands(cmd), "end edge oracle command") ||
+		   !f.Result(d.Submit(cmd), "submit finite edge oracle")) { d.DiscardCommands(cmd); return false; }
+		return Check(d.ReadTexturePixels(f.color, pixels) && pixels.GetCount() == 64*64*4, "read edge oracle pixels");
+	};
+	auto count_rgb = [](const Vector<byte>& pixels, int r, int g, int b) {
+		int count = 0;
+		for(int i = 0; i + 3 < pixels.GetCount(); i += 4)
+			if(pixels[i] == r && pixels[i+1] == g && pixels[i+2] == b) ++count;
+		return count;
+	};
+	GpuCommandListId cmd;
+	if(!f.Result(d.BeginCommands(cmd), "begin solid and edge oracle")) return;
+	if(!f.Result(d.BeginRenderPass(cmd, f.Pass()), "begin solid and edge pass") ||
+	   !record(cmd, f.pipeline, quad_v, quad_i, flat, 6, 0) ||
+	   !record(cmd, edge_pipeline, line_v, line_i, green, 2, 0) ||
+	   !record(cmd, edge_pipeline, line_v, line_i, red, 2, 2)) { d.DiscardCommands(cmd); return; }
+	Vector<byte> pixels;
+	if(!finish(cmd, pixels)) return;
+	Check(count_rgb(pixels,0,0,255) > 2000, "Solid plus edges retains opaque solid face interiors");
+	Check(count_rgb(pixels,0,255,0) >= 35, "coplanar visible edge uses exact uniform color despite black authored colors");
+	Check(count_rgb(pixels,255,0,0) == 0, "rear edge remains occluded behind the opaque solid");
+
+	if(!f.Result(d.BeginCommands(cmd), "begin depth preservation probe")) return;
+	auto load = f.Pass(); load.color_load = GpuLoadOp::Load; load.depth_load = GpuLoadOp::Load;
+	if(!f.Result(d.BeginRenderPass(cmd, load), "load solid depth after edge overlay") ||
+	   !record(cmd, probe_pipeline, line_v, line_i, yellow, 2, 0)) { d.DiscardCommands(cmd); return; }
+	if(!finish(cmd, pixels)) return;
+	Check(count_rgb(pixels,255,255,0) >= 35, "edge overlay does not modify stored solid depth");
+
+	if(!f.Result(d.BeginCommands(cmd), "begin biased edge clipping oracle")) return;
+	if(!f.Result(d.BeginRenderPass(cmd, f.Pass()), "clear biased edge clipping target") ||
+	   !record(cmd, clip_pipeline, clip_v, clip_i, green, 2, 0) ||
+	   !record(cmd, clip_pipeline, clip_v, clip_i, red, 4, 2)) { d.DiscardCommands(cmd); return; }
+	if(!finish(cmd, pixels)) return;
+	Check(count_rgb(pixels,0,255,0) >= 35, "edge just inside near plane survives fragment bias");
+	Check(count_rgb(pixels,255,0,0) == 0, "fragment bias cannot pull near/far-clipped geometry into view");
+}
+
 void TestRendering(Fixture& f)
 {
 	Vector<byte> forward, reverse, short_image, orientation;
@@ -378,6 +476,7 @@ CONSOLE_APP_MAIN
 						if(fixture.Init()) {
 							TestRejectionAndDiscard(fixture);
 							TestRendering(fixture);
+							TestVisibleEdgeOverlay(fixture);
 						}
 					}
 					Check(device.GetLiveBufferCount() == 0 && device.GetLiveTextureCount() == 0 &&

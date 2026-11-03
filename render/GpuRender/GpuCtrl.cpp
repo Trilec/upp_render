@@ -39,7 +39,27 @@ struct GpuCtrl::Impl {
 			// The callback may destroy both target and this host. No access after it.
 			return target->MouseEvent(event, p + offset, zdelta, keyflags);
 		}
-		void State(int reason) override { if(reason==CLOSE){if(impl)impl->OnHostState(reason);DHCtrl::State(reason);return;} DHCtrl::State(reason);if(impl)impl->OnHostState(reason); }
+		void State(int reason) override
+		{
+			if(reason == CLOSE) {
+				if(impl) impl->OnHostState(reason);
+				DHCtrl::State(reason);
+				return;
+			}
+			DHCtrl::State(reason);
+			if(reason == OPEN && GetHWND()) {
+				// Native overlays are siblings under the U++ top window. Establish
+				// their clipping before creating the Vulkan presentation surface.
+				// Keep WS_DISABLED so semantic input stays with the Ctrl dispatcher.
+				LONG_PTR style = GetWindowLongPtr(GetHWND(), GWL_STYLE);
+				if(!(style & WS_CLIPSIBLINGS)) {
+					SetWindowLongPtr(GetHWND(), GWL_STYLE, style | WS_CLIPSIBLINGS);
+					SetWindowPos(GetHWND(), nullptr, 0, 0, 0, 0,
+					             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+				}
+			}
+			if(impl) impl->OnHostState(reason);
+		}
 		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){
 			if(impl&&impl->clock.Consume(wParam)) {
 				Ptr<Host> alive(this);

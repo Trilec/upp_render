@@ -12,6 +12,9 @@ namespace Upp {
 
 enum class Ui3DNavigationPhase { Begin, Update, Commit, Cancel };
 enum class Ui3DNavigationMode { None, Orbit, Pan, Dolly };
+enum class Ui3DDisplayMode { Solid, Wireframe, SolidEdges };
+enum class Ui3DGridPlane { XY, YZ, XZ };
+enum class Ui3DNavigationTool { Select, Orbit, Pan };
 
 struct Ui3DViewState;
 
@@ -23,6 +26,7 @@ struct Ui3DViewPick : Scene3DPick {
 private:
 	friend class Ui3DView;
 	std::weak_ptr<const Ui3DViewState> source_view;
+	std::weak_ptr<const Scene3DSnapshot> sampled_scene;
 };
 
 struct Ui3DNavigationEvent {
@@ -33,6 +37,23 @@ struct Ui3DNavigationEvent {
 	uint64 scene_binding_revision = 0;
 	uint64 starting_camera_revision = 0;
 	Scene3DCamera camera;
+	String reason;
+};
+
+enum class Ui3DToolPointerPhase { Begin, Update, Commit, Cancel };
+
+// Frozen scene/camera/start_pick describe the press; point/keyflags/ray describe
+// this event in that projection. Caller owns handle hit testing and document edits.
+struct Ui3DToolPointerEvent {
+	Ui3DToolPointerPhase phase = Ui3DToolPointerPhase::Begin;
+	uint64 gesture_id = 0;
+	std::shared_ptr<const Scene3DSnapshot> scene;
+	Scene3DCamera camera;
+	Ui3DViewPick start_pick;
+	Point start_point = Point(0, 0), point = Point(0, 0);
+	dword keyflags = 0;
+	Scene3DRay ray;
+	bool ray_valid = false;
 	String reason;
 };
 
@@ -49,9 +70,14 @@ struct Ui3DViewOptions {
 	Rgba8 background = Rgba8(34, 39, 47, 255);
 	Rgba8 grid_color = Rgba8(79, 87, 101, 255);
 	Rgba8 selection_color = Rgba8(255, 182, 67, 255);
+	Rgba8 edge_color = Rgba8(125, 137, 153, 255);
 	bool show_grid = true;
 	bool show_axes = true;
-	bool wireframe = false;
+	bool wireframe = false; // Legacy flag; takes precedence over solid_edges.
+	bool solid_edges = false;
+	bool show_selection = true;
+	bool adaptive_grid = true;
+	Ui3DGridPlane grid_plane = Ui3DGridPlane::XZ;
 	bool lighting = true;
 	int grid_extent = 10;     // 1..100 cells on either side of the origin.
 	double grid_spacing = 1; // Metres, finite 0.001..10000.
@@ -100,8 +126,23 @@ public:
 
 	Function<void(const Ui3DNavigationEvent&)> WhenNavigation;
 	Function<void(const Ui3DSelectionRequest&)> WhenSelectionRequest;
+	// Offered before left navigation/selection, including double press.
+	// False at Begin falls through; false at Update cancels. Terminal returns
+	// are ignored. Accepted gestures retain the original callback and scene.
+	// SetScene/SetCamera/selection change cancels; publish edits at Commit.
+	// Destruction releases capture and suppresses pending notifications.
+	Function<bool(const Ui3DToolPointerEvent&)> WhenToolPointer;
+	bool IsToolPointerActive() const { return tool_pointer_active; }
+	void CancelToolPointer(const String& reason = "cancelled");
+	// Token is an event from this active gesture. Null clears its preview.
+	// Does not change GetScene(), authoritative binding or frozen gesture context.
+	// Picking/rendering use the preview; termination clears it before callbacks.
+	bool SetToolPointerPreviewScene(const Ui3DToolPointerEvent& gesture,
+	                               std::shared_ptr<const Scene3DSnapshot> scene,
+	                               String& error);
 
-	// Null explicitly clears the view. Same pointer is a no-op. Rebinding to a
+	// Null explicitly clears the view. Same pointer only cancels an active pointer
+	// tool. Rebinding to a
 	// different snapshot cancels navigation, retaining immutable CPU resources.
 	bool SetScene(std::shared_ptr<const Scene3DSnapshot> scene, String& error);
 	std::shared_ptr<const Scene3DSnapshot> GetScene() const;
@@ -109,10 +150,21 @@ public:
 	Scene3DCamera GetCamera() const;
 	bool SetOptions(const Ui3DViewOptions& options, String& error);
 	Ui3DViewOptions GetOptions() const;
+	bool SetDisplayMode(Ui3DDisplayMode mode, String& error);
+	Ui3DDisplayMode GetDisplayMode() const;
+	// Named view applies the exact axis pose, matched orthographic projection and
+	// its XY/YZ/XZ grid together. User/invalid direction rejects without mutation.
+	bool SetViewDirection(Scene3DViewDirection direction, String& error);
+	bool SetOrthographic(bool on, String& error);
+	// Left-button tool changes affect future presses only. An active gesture or
+	// pending selection click retains the mode captured at its original press.
+	bool SetNavigationTool(Ui3DNavigationTool tool, String& error);
+	Ui3DNavigationTool GetNavigationTool() const;
 	bool SetSelection(const std::vector<String>& ids, String& error);
 	std::vector<String> GetSelection() const;
 	bool FitAll();
 	bool FitSelection();
+	bool FitBounds(const Scene3DBounds& bounds);
 	Ui3DViewPick Pick(Pointf point) const;
 	bool IsCurrentPick(const Ui3DViewPick& pick) const;
 	uint64 GetSceneBindingRevision() const { return scene_binding_revision; }
@@ -123,6 +175,9 @@ public:
 	void CancelNavigation(const String& reason = "cancelled");
 
 	void LeftDown(Point p, dword keyflags) override;
+	// Select double-click requests selection, then frames the hit bounds if the
+	// originating pick remains current after the callback. Other tools only drag.
+	void LeftDouble(Point p, dword keyflags) override;
 	void LeftUp(Point p, dword keyflags) override;
 	void MiddleDown(Point p, dword keyflags) override;
 	// U++ has separate middle double/triple virtuals; each press can navigate.
@@ -139,11 +194,13 @@ public:
 
 protected:
 	void State(int reason) override;
+	void Layout() override;
 
 private:
 	std::shared_ptr<Ui3DViewState> state;
 	Scene3DCamera navigation_start;
 	Ui3DNavigationMode navigation = Ui3DNavigationMode::None;
+	Ui3DNavigationTool navigation_tool = Ui3DNavigationTool::Select;
 	Point press_point = Point(0, 0);
 	int navigation_button = 0;
 	bool click_pending = false;
@@ -155,8 +212,20 @@ private:
 	TimeCallback navigation_watch, navigation_notice;
 	Function<void()> pending_navigation_notice;
 	bool destroying = false;
+	bool tool_pointer_active = false;
+	Ui3DToolPointerEvent tool_pointer_event;
+	Function<bool(const Ui3DToolPointerEvent&)> tool_pointer_callback;
+	TimeCallback tool_pointer_watch;
+
+	bool BeginToolPointer(Point p, dword flags);
+	void UpdateToolPointer(Point p, dword flags);
+	void FinishToolPointer(bool commit, const String& reason);
+	bool ToolPointerContextCurrent() const;
+	void ClearToolPointerPreview();
 
 	void FlushNavigationNotice();
+	bool ApplyCamera(const Scene3DCamera& camera, bool set_grid_plane,
+	                 Ui3DGridPlane grid_plane, String& error);
 	void BeginNavigation(Ui3DNavigationMode mode, int button, Point p);
 	void FinishNavigation(bool commit, const String& reason);
 	void EmitNavigation(Ui3DNavigationPhase phase, Ui3DNavigationMode mode,

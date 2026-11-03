@@ -1,25 +1,75 @@
 #include "Ui3DViewContent.h"
 #include "../../shaders/Ui3DMeshVertSpirv.h"
 #include "../../shaders/Ui3DMeshFragSpirv.h"
+#include "../../shaders/Ui3DEdgeFragSpirv.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
 #include <set>
 
 namespace Upp {
+
+Scene3DVec3 Ui3DViewGridLayout::ToWorld(double u, double v) const
+{
+	switch(plane) {
+	case Ui3DGridPlane::XY: return Scene3DVec3(u, v, 0);
+	case Ui3DGridPlane::YZ: return Scene3DVec3(0, u, v);
+	case Ui3DGridPlane::XZ: return Scene3DVec3(u, 0, v);
+	}
+	return Scene3DVec3();
+}
+
+bool Ui3DViewGridLayout::operator==(const Ui3DViewGridLayout& other) const
+{
+	return plane == other.plane && spacing == other.spacing && center_u == other.center_u &&
+	       center_v == other.center_v && extent == other.extent;
+}
+
+bool ComputeUi3DViewGridLayout(const Scene3DCamera& camera, const Ui3DViewOptions& options,
+                              Size viewport, Ui3DViewGridLayout& out)
+{
+	out = Ui3DViewGridLayout();
+	String error;
+	if(viewport.cx <= 0 || viewport.cy <= 0 || !camera.Validate(error) ||
+	   options.grid_extent < 1 || options.grid_extent > 100 || !std::isfinite(options.grid_spacing) ||
+	   options.grid_spacing < 0.001 || options.grid_spacing > 10000 ||
+	   (options.grid_plane != Ui3DGridPlane::XY && options.grid_plane != Ui3DGridPlane::YZ &&
+	    options.grid_plane != Ui3DGridPlane::XZ)) return false;
+	Ui3DViewGridLayout grid;
+	grid.plane = options.grid_plane; grid.extent = options.grid_extent; grid.spacing = options.grid_spacing;
+	if(options.adaptive_grid) {
+		const double height = camera.orthographic ? camera.ortho_height :
+		                      2 * camera.distance * std::tan(camera.fov_y * 0.5);
+		const double width = height * ((double)viewport.cx / viewport.cy);
+		// Maintain readable cells and enough bounded coverage after a half-cell snap.
+		const double requested = std::max(height * 48.0 / viewport.cy,
+		                                  std::max(width, height) / (2 * grid.extent - 1));
+		const double decade = std::pow(10.0, std::floor(std::log10(requested / options.grid_spacing)));
+		const double fraction = requested / (options.grid_spacing * decade);
+		const double nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+		grid.spacing = std::max(1e-9, std::min(1e10, options.grid_spacing * decade * nice));
+		double u = camera.target.x, v = camera.target.z;
+		if(grid.plane == Ui3DGridPlane::XY) v = camera.target.y;
+		if(grid.plane == Ui3DGridPlane::YZ) u = camera.target.y;
+		grid.center_u = std::round(u / grid.spacing) * grid.spacing;
+		grid.center_v = std::round(v / grid.spacing) * grid.spacing;
+	}
+	out = grid;
+	return true;
+}
+
 namespace {
 
 struct MeshVertex {
 	float x, y, z;
 	float nx, ny, nz;
-	float u, v;
 	float r, g, b, a;
 };
-static_assert(sizeof(MeshVertex) == 48, "public RHI 3D vertex stride");
+static_assert(sizeof(MeshVertex) == 40, "untextured RHI 3D vertex stride");
 
 struct MeshParameters {
 	float mvp[16];
-	float normal[12]; // Three padded columns; w carries lighting/color-space flags.
+	float normal[12]; // Padded normal columns; w: lighting/source, sRGB encoding, edge bias.
 	float tint[4];
 };
 static_assert(sizeof(MeshParameters) == 128, "portable minimum graphics push payload");
@@ -62,8 +112,10 @@ private:
 	MeshGpu grid, axes;
 	uint64 decoration_revision = 0, selection_revision = 0;
 	Index<String> selected;
-	GpuShaderId vertex_shader, fragment_shader;
-	GpuPipelineId triangles, lines;
+	GpuShaderId vertex_shader, fragment_shader, edge_shader;
+	GpuPipelineId triangles, wire_lines, overlay_lines;
+	Ui3DViewGridLayout grid_layout;
+	bool have_grid_layout = false;
 	GpuTextureId depth;
 	Size depth_size = Size(0, 0);
 	GpuFormat target_format = GpuFormat::Unknown;
@@ -73,7 +125,7 @@ private:
 	            GpuBufferId& id, String& error);
 	void ReleaseMesh(GpuDevice& device, MeshGpu& mesh);
 	bool EnsureMesh(GpuDevice& device, std::shared_ptr<const Scene3DMesh> source, String& error);
-	bool EnsureDecorations(GpuDevice& device, String& error);
+	bool EnsureDecorations(GpuDevice& device, Size viewport, String& error);
 	bool EnsurePipelines(GpuDevice& device, GpuFormat format, String& error);
 	bool EnsureDepth(GpuDevice& device, Size size, String& error);
 	MeshParameters Parameters(const Scene3DMatrix& view_projection,
@@ -125,53 +177,62 @@ bool ViewContent::EnsureMesh(GpuDevice& device, std::shared_ptr<const Scene3DMes
 		MeshVertex vertex = {
 			(float)v.position.x, (float)v.position.y, (float)v.position.z,
 			(float)v.normal.x, (float)v.normal.y, (float)v.normal.z,
-			(float)v.u, (float)v.v, v.r, v.g, v.b, v.a
+			v.r, v.g, v.b, v.a
 		};
 		vertices.push_back(vertex);
 	}
 	const auto& indices = source->GetIndices();
-	std::vector<uint32> edges;
-	edges.reserve(indices.size() * 2);
+	struct Edge { uint32 a, b; };
+	static_assert(sizeof(Edge) == 2 * sizeof(uint32), "packed edge index pair");
+	std::vector<Edge> edges;
+	edges.reserve(indices.size());
+	auto edge = [&](uint32 a, uint32 b) { edges.push_back({ std::min(a, b), std::max(a, b) }); };
 	for(size_t i = 0; i < indices.size(); i += 3) {
-		edges.push_back(indices[i]); edges.push_back(indices[i + 1]);
-		edges.push_back(indices[i + 1]); edges.push_back(indices[i + 2]);
-		edges.push_back(indices[i + 2]); edges.push_back(indices[i]);
+		edge(indices[i], indices[i + 1]); edge(indices[i + 1], indices[i + 2]); edge(indices[i + 2], indices[i]);
 	}
+	std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+		return a.a < b.a || (a.a == b.a && a.b < b.b);
+	});
+	edges.erase(std::unique(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+		return a.a == b.a && a.b == b.b;
+	}), edges.end());
 	bool ok = Buffer(device, GpuBufferUsage_Vertex, vertices.data(),
 	                 (int64)vertices.size() * sizeof(MeshVertex), mesh.vertices, error) &&
 	          Buffer(device, GpuBufferUsage_Index, indices.data(),
 	                 (int64)indices.size() * sizeof(uint32), mesh.indices, error) &&
 	          Buffer(device, GpuBufferUsage_Index, edges.data(),
-	                 (int64)edges.size() * sizeof(uint32), mesh.edges, error);
+	                 (int64)edges.size() * sizeof(Edge), mesh.edges, error);
 	if(!ok) { ReleaseMesh(device, mesh); return false; }
 	mesh.index_count = (int)indices.size();
-	mesh.edge_count = (int)edges.size();
+	mesh.edge_count = (int)edges.size() * 2;
 	meshes.emplace(source.get(), std::move(mesh));
 	++state->stats.mesh_uploads;
 	state->stats.resident_meshes = (int)meshes.size();
 	return true;
 }
 
-bool ViewContent::EnsureDecorations(GpuDevice& device, String& error)
+bool ViewContent::EnsureDecorations(GpuDevice& device, Size viewport, String& error)
 {
-	if(decoration_revision == state->decoration_revision) return true;
+	if(!state->options.show_grid && !state->options.show_axes) return true;
+	Ui3DViewGridLayout next;
+	if(!ComputeUi3DViewGridLayout(state->camera, state->options, viewport, next)) {
+		error = state->error = "invalid camera/grid state"; return false;
+	}
+	if(have_grid_layout && next == grid_layout && decoration_revision == state->decoration_revision) return true;
 	std::vector<MeshVertex> vertices;
 	std::vector<uint32> indices;
 	auto line = [&](Scene3DVec3 a, Scene3DVec3 b, Rgba8 color) {
 		const uint32 index = (uint32)vertices.size();
 		for(const Scene3DVec3& p : { a, b })
-			vertices.push_back({(float)p.x, (float)p.y, (float)p.z, 0, 1, 0, 0, 0,
+			vertices.push_back({(float)p.x, (float)p.y, (float)p.z, 0, 1, 0,
 			                    Linear(color.r), Linear(color.g), Linear(color.b), 1});
 		indices.push_back(index); indices.push_back(index + 1);
 	};
-	const int extent = state->options.grid_extent;
-	const double step = state->options.grid_spacing, span = extent * step;
-	for(int i = -extent; i <= extent; ++i) {
-		double position = i * step;
-		line(Scene3DVec3(-span, 0, position), Scene3DVec3(span, 0, position),
-		     state->options.grid_color);
-		line(Scene3DVec3(position, 0, -span), Scene3DVec3(position, 0, span),
-		     state->options.grid_color);
+	const double step = next.spacing, span = next.extent * step;
+	for(int i = -next.extent; i <= next.extent; ++i) {
+		const double u = next.center_u + i * step, v = next.center_v + i * step;
+		line(next.ToWorld(next.center_u - span, v), next.ToWorld(next.center_u + span, v), state->options.grid_color);
+		line(next.ToWorld(u, next.center_v - span), next.ToWorld(u, next.center_v + span), state->options.grid_color);
 	}
 	MeshGpu new_grid, new_axes;
 	bool ok = Buffer(device, GpuBufferUsage_Vertex, vertices.data(),
@@ -180,10 +241,10 @@ bool ViewContent::EnsureDecorations(GpuDevice& device, String& error)
 	                 (int64)indices.size() * sizeof(uint32), new_grid.indices, error);
 	new_grid.index_count = (int)indices.size();
 	vertices.clear(); indices.clear();
-	const double length = min(span, 3.0 * step);
-	line(Scene3DVec3(0, 0.004, 0), Scene3DVec3(length, 0.004, 0), Rgba8(213, 91, 94));
-	line(Scene3DVec3(0, 0.004, 0), Scene3DVec3(0, length, 0), Rgba8(110, 186, 120));
-	line(Scene3DVec3(0, 0.004, 0), Scene3DVec3(0, 0.004, length), Rgba8(99, 153, 226));
+	const double length = std::min(span, 3.0 * step);
+	line(Scene3DVec3(), Scene3DVec3(length, 0, 0), Rgba8(213, 91, 94));
+	line(Scene3DVec3(), Scene3DVec3(0, length, 0), Rgba8(110, 186, 120));
+	line(Scene3DVec3(), Scene3DVec3(0, 0, length), Rgba8(99, 153, 226));
 	ok = ok &&
 	     Buffer(device, GpuBufferUsage_Vertex, vertices.data(),
 	            (int64)vertices.size() * sizeof(MeshVertex), new_axes.vertices, error) &&
@@ -193,6 +254,7 @@ bool ViewContent::EnsureDecorations(GpuDevice& device, String& error)
 	if(!ok) { ReleaseMesh(device, new_grid); ReleaseMesh(device, new_axes); return false; }
 	ReleaseMesh(device, grid); ReleaseMesh(device, axes);
 	grid = std::move(new_grid); axes = std::move(new_axes);
+	grid_layout = next; have_grid_layout = true;
 	decoration_revision = state->decoration_revision;
 	return true;
 }
@@ -213,16 +275,24 @@ bool ViewContent::EnsurePipelines(GpuDevice& device, GpuFormat format, String& e
 		desc.label = "Ui3DView mesh fragment";
 		if(!Result(device, device.CreateShader(desc, fragment_shader), "create fragment shader", error)) return false;
 	}
+	if(!edge_shader.IsValid()) {
+		GpuShaderDesc desc;
+		desc.stage = GpuShaderStage::Fragment; desc.format = GpuShaderFormat::SpirV;
+		desc.code = String(reinterpret_cast<const char *>(kUi3DEdgeFragment), sizeof(kUi3DEdgeFragment));
+		desc.label = "Ui3DView visible edge fragment";
+		if(!Result(device, device.CreateShader(desc, edge_shader), "create edge fragment shader", error)) return false;
+	}
 	if(target_format != format) {
 		if(triangles.IsValid()) device.DestroyPipeline(triangles);
-		if(lines.IsValid()) device.DestroyPipeline(lines);
-		triangles = GpuPipelineId(); lines = GpuPipelineId();
+		if(wire_lines.IsValid()) device.DestroyPipeline(wire_lines);
+		if(overlay_lines.IsValid()) device.DestroyPipeline(overlay_lines);
+		triangles = GpuPipelineId(); wire_lines = GpuPipelineId(); overlay_lines = GpuPipelineId();
 		target_format = format;
 	}
 	GpuPipelineDesc desc;
 	desc.color_format = format;
 	desc.vertex_shader = vertex_shader; desc.fragment_shader = fragment_shader;
-	desc.vertex_layout = GpuVertexLayout::Position3Normal3Uv2Color4F;
+	desc.vertex_layout = GpuVertexLayout::Position3Normal3Color4F;
 	desc.parameter_bytes = sizeof(MeshParameters);
 	desc.depth_format = GpuFormat::D32F;
 	desc.depth_test = true; desc.depth_write = true;
@@ -233,9 +303,14 @@ bool ViewContent::EnsurePipelines(GpuDevice& device, GpuFormat format, String& e
 	if(!triangles.IsValid() &&
 	   !Result(device, device.CreatePipeline(desc, triangles), "create depth triangle pipeline", error)) return false;
 	desc.topology = GpuPrimitiveTopology::LineList;
-	desc.label = "Ui3DView depth lines";
-	if(!lines.IsValid() &&
-	   !Result(device, device.CreatePipeline(desc, lines), "create depth line pipeline", error)) return false;
+	desc.fragment_shader = edge_shader;
+	desc.label = "Ui3DView primary wire lines";
+	if(!wire_lines.IsValid() &&
+	   !Result(device, device.CreatePipeline(desc, wire_lines), "create wire line pipeline", error)) return false;
+	desc.depth_write = false;
+	desc.label = "Ui3DView visible edge overlays";
+	if(!overlay_lines.IsValid() &&
+	   !Result(device, device.CreatePipeline(desc, overlay_lines), "create edge overlay pipeline", error)) return false;
 	return true;
 }
 
@@ -284,9 +359,9 @@ MeshParameters ViewContent::Parameters(const Scene3DMatrix& view_projection,
 bool ViewContent::Render(GpuDevice& device, const GpuFrameInfo& frame, String& error)
 {
 	if(!EnsurePipelines(device, frame.color_format, error) ||
-	   !EnsureDepth(device, frame.size, error) || !EnsureDecorations(device, error)) return false;
+	   !EnsureDepth(device, frame.size, error) || !EnsureDecorations(device, frame.size, error)) return false;
 
-	const auto scene = state->scene;
+	const auto scene = state->GetRenderScene();
 	if(cached_scene != scene) {
 		std::set<const Scene3DMesh *> used;
 		if(scene) for(const auto& object : scene->GetObjects())
@@ -328,8 +403,7 @@ bool ViewContent::Render(GpuDevice& device, const GpuFrameInfo& frame, String& e
 	if(!Result(device, device.BeginRenderPass(command, pass), "begin mesh pass", error)) return fail();
 	int draws = 0;
 	GpuPipelineId current;
-	auto draw = [&](const MeshGpu& mesh, bool edges, const MeshParameters& parameters) {
-		GpuPipelineId pipeline = edges ? lines : triangles;
+	auto draw = [&](const MeshGpu& mesh, GpuPipelineId pipeline, bool edges, const MeshParameters& parameters) {
 		if(pipeline != current) {
 			if(!Result(device, device.SetPipeline(command, pipeline), "bind mesh pipeline", error)) return false;
 			current = pipeline;
@@ -343,32 +417,39 @@ bool ViewContent::Render(GpuDevice& device, const GpuFrameInfo& frame, String& e
 		++draws;
 		return true;
 	};
+	// All filled objects establish the complete scene depth before any overlay.
+	// Wireframe is deliberately edge-only; it does not silently introduce a fill.
 	if(scene) for(const auto& object : scene->GetObjects()) {
 		if(!object.visible || !object.mesh) continue;
-		auto found = meshes.find(object.mesh.get());
-		const bool highlight = selected.Find(object.id) >= 0;
-		float r = object.r, g = object.g, b = object.b;
-		if(highlight) {
-			r = r * 0.35f + Linear(state->options.selection_color.r) * 0.65f;
-			g = g * 0.35f + Linear(state->options.selection_color.g) * 0.65f;
-			b = b * 0.35f + Linear(state->options.selection_color.b) * 0.65f;
-		}
 		auto parameters = Parameters(view_projection, object.world, object.inverse_world,
-		                             r, g, b, 1, state->options.lighting && !state->options.wireframe);
-		if(!draw(found->second, state->options.wireframe, parameters)) return fail();
+		                             object.r, object.g, object.b, 1,
+		                             state->options.lighting && !state->options.wireframe);
+		if(!draw(meshes.find(object.mesh.get())->second,
+		         state->options.wireframe ? wire_lines : triangles, state->options.wireframe, parameters)) return fail();
 	}
 	const Scene3DMatrix identity = Scene3DMatrix::Identity();
 	auto flat = Parameters(view_projection, identity, identity, 1, 1, 1, 1, false);
-	if(state->options.show_grid && !draw(grid, true, flat)) return fail();
-	if(state->options.show_axes && !draw(axes, true, flat)) return fail();
-	if(!state->options.wireframe && scene) for(const auto& object : scene->GetObjects()) {
-		if(!object.visible || !object.mesh || selected.Find(object.id) < 0) continue;
+	flat.normal[3] = -1; // Edge shader preserves grid/axis vertex colors only on this path.
+	flat.normal[11] = 2e-7f;
+	if(state->options.show_grid && !draw(grid, overlay_lines, false, flat)) return fail();
+	if(state->options.show_axes && !draw(axes, overlay_lines, false, flat)) return fail();
+	auto outline = [&](const Scene3DObject& object, Rgba8 color) {
 		auto parameters = Parameters(view_projection, object.world, object.inverse_world,
-		                             Linear(state->options.selection_color.r),
-		                             Linear(state->options.selection_color.g),
-		                             Linear(state->options.selection_color.b), 1, false);
-		if(!draw(meshes.find(object.mesh.get())->second, true, parameters)) return fail();
-	}
+		                             Linear(color.r), Linear(color.g), Linear(color.b), 1, false);
+		// Bias is applied after clipping by the edge fragment shader. It does not
+		// move near/far clip planes and does not modify the stored solid depth.
+		parameters.normal[11] = 2e-7f;
+		return draw(meshes.find(object.mesh.get())->second, overlay_lines, true, parameters);
+	};
+	if(!state->options.wireframe && state->options.solid_edges && scene)
+		for(const auto& object : scene->GetObjects())
+			if(object.visible && object.mesh && !outline(object, state->options.edge_color)) return fail();
+	// Selection is an independent uniform-color edge overlay. Authored surface
+	// and vertex colors remain unchanged in every display mode.
+	if(state->options.show_selection && scene)
+		for(const auto& object : scene->GetObjects())
+			if(object.visible && object.mesh && selected.Find(object.id) >= 0 &&
+			   !outline(object, state->options.selection_color)) return fail();
 	if(!Result(device, device.EndRenderPass(command), "end mesh pass", error) ||
 	   !Result(device, device.EndCommands(command), "end mesh commands", error)) return fail();
 	if(!Result(device, device.Submit(command), "submit mesh commands", error)) {
@@ -388,14 +469,16 @@ void ViewContent::Close(GpuDevice& device)
 	meshes.clear(); cached_scene.reset();
 	ReleaseMesh(device, grid); ReleaseMesh(device, axes);
 	if(depth.IsValid()) device.DestroyTexture(depth);
-	if(lines.IsValid()) device.DestroyPipeline(lines);
+	if(wire_lines.IsValid()) device.DestroyPipeline(wire_lines);
+	if(overlay_lines.IsValid()) device.DestroyPipeline(overlay_lines);
 	if(triangles.IsValid()) device.DestroyPipeline(triangles);
 	if(fragment_shader.IsValid()) device.DestroyShader(fragment_shader);
+	if(edge_shader.IsValid()) device.DestroyShader(edge_shader);
 	if(vertex_shader.IsValid()) device.DestroyShader(vertex_shader);
-	depth = GpuTextureId(); lines = GpuPipelineId(); triangles = GpuPipelineId();
-	vertex_shader = GpuShaderId(); fragment_shader = GpuShaderId();
+	depth = GpuTextureId(); wire_lines = GpuPipelineId(); overlay_lines = GpuPipelineId(); triangles = GpuPipelineId();
+	vertex_shader = GpuShaderId(); fragment_shader = GpuShaderId(); edge_shader = GpuShaderId();
 	depth_size = Size(0, 0); target_format = GpuFormat::Unknown;
-	decoration_revision = 0; selection_revision = 0; selected.Clear();
+	decoration_revision = 0; selection_revision = 0; selected.Clear(); have_grid_layout = false;
 	state->stats.resident_meshes = 0;
 	state->stats.depth_active = false;
 }

@@ -1000,6 +1000,8 @@ static bool TestGroupedSurfaceSessions()
 {
 	VulkanGroupedSurfaceSessionTestResult result;
 	if(!Check(TestVulkanGroupedSurfaceSessions(&TestResolver, result), "grouped surface-session tests should succeed")) return false;
+	if(!Check(result.offscreen_validation_report, "offscreen Close must snapshot post-Open validation errors, warnings and messages")) return false;
+	if(!Check(result.repeated_close_validation_report, "repeated Close must retain the final validation report")) return false;
 	if(!Check(result.compatible_shared && result.grouped_swapchains_separate && result.compatible_registry_entries == 1 && result.compatible_acquire_count == 2 && result.compatible_diag.runtime_create_count == 1 && result.compatible_diag.instance_create_count == 1 && result.compatible_diag.surface_create_count == 2 && result.compatible_diag.device_create_count == 1 && result.compatible_diag.device_live_count == 1, "compatible grouped sessions should share runtime, instance and one logical device while retaining two surfaces")) return false;
 	if(!Check(result.first_report_authoritative && result.second_report_authoritative, "grouped acquisition reports should distinguish new and reused leases")) return false;
 	if(!Check(result.non_final_close && result.non_final_registry_entries == 1 && result.non_final_acquire_count == 1 && result.non_final_diag.runtime_live_count == 1 && result.non_final_diag.instance_live_count == 1 && result.non_final_diag.surface_live_count == 1 && result.non_final_diag.device_live_count == 1, "non-final grouped close should preserve the second session")) return false;

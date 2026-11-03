@@ -678,7 +678,9 @@ GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeline
 {
 	if(desc.depth_format != GpuFormat::Unknown || desc.depth_test || desc.depth_write ||
 	   desc.parameter_bytes != 0 || desc.cull_mode != GpuCullMode::None ||
-	   desc.front_face != GpuFrontFace::CounterClockwise || desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F) {
+	   desc.front_face != GpuFrontFace::CounterClockwise ||
+	   desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F ||
+	   desc.vertex_layout == GpuVertexLayout::Position3Normal3Color4F) {
 		out = GpuPipelineId(); Fail("CreatePipeline reason=3d_not_implemented"); return GpuResult::Unsupported;
 	}
 	out = GpuPipelineId();

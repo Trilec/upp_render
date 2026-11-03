@@ -1,0 +1,7 @@
+description "Optional native Ui chrome around the renderer-owned Ui3DView";
+uses
+	Ui3DView,
+	Ui;
+file
+	Ui3DViewport.h,
+	Ui3DViewport.cpp;

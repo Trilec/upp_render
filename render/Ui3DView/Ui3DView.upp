@@ -10,5 +10,4 @@ file
 	Ui3DView.h,
 	Ui3DView.cpp,
 	Ui3DViewContent.h,
-	Ui3DViewContent.cpp,
-	README.md;
+	Ui3DViewContent.cpp;

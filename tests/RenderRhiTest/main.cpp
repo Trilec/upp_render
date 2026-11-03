@@ -569,6 +569,10 @@ static bool TestUnsupported3DContract()
 	GpuPipelineId out; out.value = 123;
 	ok &= Check(device.CreatePipeline(pipeline, out) == GpuResult::Unsupported && !out.IsValid(),
 	            "Null rejects new mesh pipelines explicitly");
+	pipeline.vertex_layout = GpuVertexLayout::Position3Normal3Color4F; out.value = 123;
+	ok &= Check(device.CreatePipeline(pipeline, out) == GpuResult::Unsupported && !out.IsValid() &&
+	            device.GetLivePipelineCount() == 0,
+	            "Null rejects untextured 3D layout without reporting a handle or allocating a pipeline");
 	GpuRenderPassDesc pass;
 	ok &= Check(!pass.depth_target.IsValid() && pass.depth_format == GpuFormat::Unknown &&
 	            pass.flip_viewport_y, "new pass defaults preserve existing UI orientation");

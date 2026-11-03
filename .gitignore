@@ -76,3 +76,5 @@ Testing/
 /CLANGx64_Vulkan.bm
 /GitHubOut.var
 __pycache__/
+docs/ACTIVE_WORK.md
+/docs/ui3dview-design

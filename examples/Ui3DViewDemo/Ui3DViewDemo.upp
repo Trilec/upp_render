@@ -1,12 +1,18 @@
+description "Native four-view Vulkan viewport and application-owned camera catalogue";
 uses
-	Ui3DView,
+	Ui3DViewUi,
 	Ui,
+	Painter,
 	plugin/png;
-
 file
 	Ui3DViewDemo.h,
 	Ui3DViewDemo.cpp,
+	ViewerCameraModel.h,
+	ViewerCameraModel.cpp,
+	ViewerLists.h,
+	ViewerLists.cpp,
+	Qualification.cpp,
+	OverlayQualification.cpp,
 	main.cpp;
-
 mainconfig
 	"" = "GUI";

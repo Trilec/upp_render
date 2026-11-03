@@ -16,6 +16,12 @@ bool Near(const Scene3DVec3& a, const Scene3DVec3& b, double epsilon = 1e-9)
 {
 	return Near(a.x,b.x,epsilon) && Near(a.y,b.y,epsilon) && Near(a.z,b.z,epsilon);
 }
+bool SameCamera(const Scene3DCamera& a, const Scene3DCamera& b)
+{
+	return a.revision==b.revision && Near(a.target,b.target,0) && a.yaw==b.yaw && a.pitch==b.pitch &&
+	       a.distance==b.distance && a.orthographic==b.orthographic && a.fov_y==b.fov_y &&
+	       a.ortho_height==b.ortho_height && a.near_plane==b.near_plane && a.far_plane==b.far_plane;
+}
 Scene3DVertex Vertex(Scene3DVec3 p, Scene3DVec3 normal = {0,0,1})
 {
 	Scene3DVertex out; out.position=p; out.normal=normal; return out;
@@ -152,7 +158,7 @@ void CameraTests()
 	Check(camera.WorldRay(Pointf(500,200),Size(800,600),ray) && Near(ray.origin,{1,1,10}) && Near(ray.direction,{0,0,-1}),"orthographic ray origins vary, direction stays fixed");
 	Check(Near(depth,9.9/99.9),"orthographic depth independently matches expected value");
 	uint64 revision=camera.revision; Check(camera.Orbit(0,0) && camera.revision==revision,"unchanged orbit preserves revision");
-	Check(camera.Orbit(0.1,100) && camera.revision==revision+1 && camera.Validate(error),"orbit clamps away from poles and increments revision");
+	Check(camera.Orbit(0.1,100) && camera.revision==revision+1 && camera.Validate(error),"orbit clamps to valid pitch range and increments revision");
 	camera=Camera(); revision=camera.revision;
 	Check(camera.Pan(30,60,Size(800,600)) && Near(camera.target,{-1,2,0}) && camera.revision==revision+1,"pan pixels convert to target-plane world units");
 	Check(camera.Dolly(std::log(2.0)) && Near(camera.distance,5),"dolly logarithmic delta halves perspective distance");
@@ -202,6 +208,147 @@ void CameraTests()
 	      !tight.Project(tight.target,Size(800,600),screen,depth),
 	      "dolly preserves intentional tight clipping rather than widening clips or clamping distance");
 }
+void CameraAxisTests()
+{
+	struct AxisCase {
+		Scene3DViewDirection direction;
+		Scene3DVec3 back, right, up;
+	};
+	// Independent expected world bases from the Y-up native handoff, not computed
+	// through the production camera's angles or cross-product implementation.
+	const AxisCase axes[]={
+		{Scene3DViewDirection::Front, {0,0,1}, {1,0,0}, {0,1,0}},
+		{Scene3DViewDirection::Back, {0,0,-1}, {-1,0,0}, {0,1,0}},
+		{Scene3DViewDirection::Right, {1,0,0}, {0,0,-1}, {0,1,0}},
+		{Scene3DViewDirection::Left, {-1,0,0}, {0,0,1}, {0,1,0}},
+		{Scene3DViewDirection::Top, {0,1,0}, {1,0,0}, {0,0,-1}},
+		{Scene3DViewDirection::Bottom, {0,-1,0}, {1,0,0}, {0,0,1}}
+	};
+	const Size size(800,600);
+	String error;
+	for(const AxisCase& axis:axes) for(bool ortho:{false,true}) {
+		auto camera=Camera(); camera.target={3,4,5}; camera.yaw=0.3; camera.pitch=0.2;
+		Check(camera.SetOrthographic(ortho),"axis test projection prepared");
+		auto before=camera;
+		Check(camera.AlignTo(axis.direction) && camera.Validate(error) && camera.revision==before.revision+1,
+		      "all six exact axis alignments are valid and increment revision");
+		Check(camera.orthographic==before.orthographic && Near(camera.target,before.target,0) &&
+		      camera.distance==before.distance && camera.ortho_height==before.ortho_height &&
+		      camera.fov_y==before.fov_y && camera.near_plane==before.near_plane && camera.far_plane==before.far_plane,
+		      "axis alignment changes only pose and revision");
+		Scene3DVec3 right,up,forward; camera.GetBasis(right,up,forward);
+		Check(Near(right,axis.right,0) && Near(up,axis.up,0) && Near(forward,-axis.back,0),
+		      "axis bases are exact, with correct screen-up including poles");
+		Check(Near(camera.GetEye(),camera.target+axis.back*10,0) && camera.GetViewDirection(0)==axis.direction,
+		      "exact axis eye and zero-tolerance direction recognition agree");
+		before=camera;
+		Check(camera.AlignTo(axis.direction) && SameCamera(camera,before),"reapplying exact direction is a successful no-op");
+		Pointf projected; double depth;
+		Check(camera.Project(camera.target+axis.up,size,projected,depth) && Near(projected.x,400) && Near(projected.y,270),
+		      "each canonical screen-up vector projects exactly thirty pixels upward");
+		Check(camera.Project(camera.target+axis.right,size,projected,depth) && Near(projected.x,430) && Near(projected.y,300),
+		      "each canonical screen-right vector projects exactly thirty pixels rightward");
+		Scene3DRay ray;
+		bool ray_ok=camera.WorldRay(Pointf(475,225),size,ray);
+		Scene3DVec3 expected_origin=ortho ? camera.GetEye()+axis.right*2.5+axis.up*2.5 : camera.GetEye();
+		Scene3DVec3 expected_direction=ortho ? -axis.back : (-axis.back+axis.right*0.25+axis.up*0.25).Normalized();
+		Check(ray_ok && Near(ray.origin,expected_origin) && Near(ray.direction,expected_direction),
+		      "all axis rays agree with independent perspective and orthographic expected values");
+		Scene3DVec3 point=camera.target+axis.right*2.5+axis.up*2.5;
+		Check(camera.Project(point,size,projected,depth) && Near(projected.x,475) && Near(projected.y,225) &&
+		      (point-ray.origin).Cross(ray.direction).Length()<1e-9,"all axis project/ray paths intersect the same target-plane point");
+		Scene3DMatrix matrix=camera.GetViewProjection(size);
+		double x=matrix.m[0]*point.x+matrix.m[4]*point.y+matrix.m[8]*point.z+matrix.m[12];
+		double y=matrix.m[1]*point.x+matrix.m[5]*point.y+matrix.m[9]*point.z+matrix.m[13];
+		double z=matrix.m[2]*point.x+matrix.m[6]*point.y+matrix.m[10]*point.z+matrix.m[14];
+		double w=matrix.m[3]*point.x+matrix.m[7]*point.y+matrix.m[11]*point.z+matrix.m[15];
+		Check(Near((x/w+1)*400,475) && Near((y/w+1)*300,225) && Near(z/w,depth),
+		      "GPU projection matrices match independent expected coordinates for all axes and both projections");
+	}
+	auto camera=Camera(); camera.orthographic=true; camera.AlignTo(Scene3DViewDirection::Top);
+	Scene3DVec3 right,up,forward;
+	Check(camera.Pan(30,60,size) && Near(camera.target,{-0.4,0,-0.8}),"top pan uses -Z as screen-up");
+	camera=Camera(); camera.orthographic=true; camera.AlignTo(Scene3DViewDirection::Bottom);
+	Check(camera.Pan(30,60,size) && Near(camera.target,{-0.4,0,0.8}),"bottom pan uses +Z as screen-up");
+	camera=Camera(); camera.AlignTo(Scene3DViewDirection::Top);
+	Check(camera.Orbit(0.2,0) && camera.GetViewDirection()==Scene3DViewDirection::User &&
+	      camera.pitch==3.14159265358979323846/2,"yaw rotation at a pole retains its exact axis but is a user orientation");
+	camera.GetBasis(right,up,forward);
+	Check(Near(forward,{0,-1,0}) && Near(right.Length(),1) && Near(up.Length(),1) && Near(right.Dot(up),0),
+	      "rolled top view remains a finite orthonormal basis");
+	Check(camera.AlignTo(Scene3DViewDirection::Top) && camera.GetViewDirection(0)==Scene3DViewDirection::Top,
+	      "aligning a rolled pole restores canonical screen-up");
+	Check(camera.Orbit(0,-0.1) && camera.GetViewDirection()==Scene3DViewDirection::User,
+	      "orbit can leave an exact top view without singularity");
+	camera=Camera(); camera.Orbit(0.5e-6,0);
+	Check(camera.GetViewDirection(1e-6)==Scene3DViewDirection::Front && camera.GetViewDirection(1e-8)==Scene3DViewDirection::User,
+	      "direction recognition applies angular tolerance without mutating pose");
+	auto before=camera;
+	Check(camera.GetViewDirection(-1)==Scene3DViewDirection::User &&
+	      camera.GetViewDirection(std::numeric_limits<double>::quiet_NaN())==Scene3DViewDirection::User &&
+	      camera.GetViewDirection(1)==Scene3DViewDirection::User && SameCamera(camera,before),
+	      "invalid direction tolerance returns User without mutation");
+	Check(!camera.AlignTo(Scene3DViewDirection::User) && SameCamera(camera,before) &&
+	      !camera.AlignTo(static_cast<Scene3DViewDirection>(999)) && SameCamera(camera,before),
+	      "User and unknown direction values are rejected atomically");
+	camera=Camera(); camera.pitch=3.14159265358979323846/2+0.001; before=camera;
+	Check(!camera.Validate(error) && !camera.AlignTo(Scene3DViewDirection::Front) && SameCamera(camera,before) &&
+	      camera.GetViewDirection()==Scene3DViewDirection::User,"out-of-range pitch remains invalid and alignment does not repair invalid state silently");
+	camera=Camera(); camera.revision=std::numeric_limits<uint64>::max(); before=camera;
+	Check(camera.AlignTo(Scene3DViewDirection::Front) && SameCamera(camera,before) &&
+	      !camera.AlignTo(Scene3DViewDirection::Right) && SameCamera(camera,before),
+	      "exhausted camera revision permits alignment no-op but rejects a changed pose");
+	camera=Camera(); camera.target={1e9,-1e9,1e9}; camera.distance=1e-6;
+	camera.AlignTo(Scene3DViewDirection::Top); camera.GetBasis(right,up,forward);
+	Check(Near(right,{1,0,0},0) && Near(up,{0,0,-1},0) && Near(forward,{0,-1,0},0),
+	      "exact basis does not lose direction precision at a large translated target");
+}
+void CameraProjectionTests()
+{
+	const Size size(800,600);
+	auto camera=Camera(); camera.target={3,4,5}; camera.yaw=0.3; camera.pitch=0.2;
+	Scene3DVec3 right,up,forward; camera.GetBasis(right,up,forward);
+	Scene3DVec3 point=camera.target+up*2+right*1.5;
+	Pointf before_screen,after_screen; double depth;
+	camera.Project(point,size,before_screen,depth);
+	auto before=camera;
+	Check(camera.SetOrthographic(true) && camera.orthographic && Near(camera.ortho_height,20) &&
+	      camera.revision==before.revision+1,"perspective-to-orthographic conversion uses independently expected twenty-metre span");
+	Check(Near(camera.target,before.target,0) && camera.yaw==before.yaw && camera.pitch==before.pitch &&
+	      camera.distance==before.distance && camera.fov_y==before.fov_y && camera.near_plane==before.near_plane &&
+	      camera.far_plane==before.far_plane,"projection switch preserves target, pose, perspective lens and authored clips");
+	Check(camera.Project(point,size,after_screen,depth) && Near(before_screen.x,after_screen.x) && Near(before_screen.y,after_screen.y),
+	      "projection switch keeps target-plane horizontal and vertical framing");
+	before=camera;
+	Check(camera.SetOrthographic(true) && SameCamera(camera,before),"repeated projection selection is a successful no-op");
+	Check(camera.SetOrthographic(false) && !camera.orthographic && Near(camera.distance,10) &&
+	      camera.revision==before.revision+1,"orthographic-to-perspective round trip restores orbit distance");
+	Check(camera.Project(point,size,after_screen,depth) && Near(before_screen.x,after_screen.x) && Near(before_screen.y,after_screen.y),
+	      "projection round trip preserves target-plane framing");
+	camera.SetOrthographic(true); camera.ortho_height=8; before=camera;
+	Check(camera.SetOrthographic(false) && Near(camera.distance,4) && camera.ortho_height==8 &&
+	      camera.yaw==before.yaw && camera.pitch==before.pitch && Near(camera.target,before.target,0),
+	      "authored orthographic span controls perspective distance without a different camera orientation");
+	Scene3DCamera repeated; repeated.fov_y=0.7; repeated.distance=7.3;
+	bool ok=true;
+	for(int i=0;i<100;++i) ok &= repeated.SetOrthographic(true) && repeated.SetOrthographic(false);
+	Check(ok && Near(repeated.distance,7.3,1e-11),"one hundred projection round trips do not accumulate meaningful framing drift");
+	camera=Camera(); camera.distance=1e9; camera.fov_y=3; before=camera;
+	Check(!camera.SetOrthographic(true) && SameCamera(camera,before),"projection rejects oversized derived orthographic span without clamping");
+	camera=Camera(); camera.distance=1e-6; camera.fov_y=0.01; before=camera;
+	Check(!camera.SetOrthographic(true) && SameCamera(camera,before),"projection rejects undersized derived orthographic span without mutation");
+	camera=Camera(); camera.orthographic=true; camera.ortho_height=1e9; camera.fov_y=0.01; before=camera;
+	Check(!camera.SetOrthographic(false) && SameCamera(camera,before),"projection rejects oversized derived perspective distance without mutation");
+	camera=Camera(); camera.orthographic=true; camera.ortho_height=1e-6; camera.fov_y=3; before=camera;
+	Check(!camera.SetOrthographic(false) && SameCamera(camera,before),"projection rejects undersized derived perspective distance without mutation");
+	camera=Camera(); camera.fov_y=std::numeric_limits<double>::quiet_NaN(); before=camera;
+	Check(!camera.SetOrthographic(true) && !camera.orthographic && std::isnan(camera.fov_y) &&
+	      camera.revision==before.revision && camera.distance==before.distance && camera.ortho_height==before.ortho_height,
+	      "projection rejects invalid current lens without changing camera fields");
+	camera=Camera(); camera.revision=std::numeric_limits<uint64>::max(); before=camera;
+	Check(camera.SetOrthographic(false) && SameCamera(camera,before) && !camera.SetOrthographic(true) && SameCamera(camera,before),
+	      "exhausted revision permits projection no-op but rejects a changed projection");
+}
 void PickTests()
 {
 	String error; auto box=Scene3DMesh::MakeBox({2,2,2},error);
@@ -236,7 +383,7 @@ void PickTests()
 
 CONSOLE_APP_MAIN
 {
-	MatrixTests(); MeshTests(); SceneTests(); CameraTests(); PickTests();
+	MatrixTests(); MeshTests(); SceneTests(); CameraTests(); CameraAxisTests(); CameraProjectionTests(); PickTests();
 	Cout() << "RenderSceneTest: " << checks << " checks, " << failures << " failures" << EOL;
 	if(!checks || failures) SetExitCode(1);
 }

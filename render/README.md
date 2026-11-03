@@ -42,3 +42,9 @@ These separate packages are not competing user APIs. They preserve dependency di
 `GpuRender.upp` currently lists `RenderVulkan` so adding the public package on the supported Windows/Vulkan build also links the default provider registration. Generic `GpuRender` source owns no Vulkan implementation objects and talks only to neutral `RenderRhi` provider/device contracts.
 
 For compatible Vulkan presenters the provider context shares runtime/instance/logical-device ownership, queue handles and one device-level pipeline cache. Presenter `UiRenderer2D` state, native surfaces, swapchains, frames and image/glyph RHI handles remain independent unless a future explicit resource-sharing contract says otherwise.
+
+## 3D viewport
+
+`RenderScene`, `Ui3DView` and optional `Ui3DViewUi` provide immutable scene values,
+the embedded Vulkan view and native viewport controls. Start with the
+[Ui3DView guide](../docs/UI3DVIEW.md) for ownership, API and integration.

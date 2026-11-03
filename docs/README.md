@@ -22,12 +22,10 @@
 
 ## Ui3DView control
 
-[Use the control](../render/Ui3DView/README.md) ·
-[Architecture and API contract](UI3DVIEW_ARCHITECTURE.md) ·
-[Build, tests and captures](UI3DVIEW_VALIDATION.md)
+[Ui3DView — objective, API, usage, gotchas, build and tested status](UI3DVIEW.md)
 
-The latest Release demo is `bin/win64/Ui3DViewDemo.exe`. This native 3D
-control has its own qualification record, separate from the whole-UI demo.
+The latest Release demo is `bin/win64/Ui3DViewDemo.exe`. The linked guide is the
+single maintained document for the 3D control and its optional native UI.
 
 ## Design and later work
 
@@ -37,7 +35,6 @@ control has its own qualification record, separate from the whole-UI demo.
 [implementation plan](WGPU_IMPLEMENTATION_PLAN.md) ·
 [CineView handoff](CINEVIEW_RENDERER_HANDOFF.md)
 
-The active 3D design/handoff documents belong to concurrent work and are retained.
 WebGPU/Metal, video/OCIO and 3D are not qualified by the Windows UI demo.
 
 ## History

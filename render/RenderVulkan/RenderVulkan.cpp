@@ -3645,8 +3645,54 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 	result.incompatible_after_failure = true;
 	result.retained_state_unchanged = true;
 	}
+	{
+		// Exercise post-Open diagnostic propagation without any swapchain or
+		// presentation frame state. These synthetic records belong only to this
+		// ownership test hook; the real 3D pixel oracle remains uninjected.
+		VulkanSurfaceSessionGroup group;
+		VulkanSurfaceSession session(group);
+		if(!session.Open(true, first_window, resolver) || session.frame_impl || session.HasSwapchain()) return false;
+		if(group.impl->registry.GetEntryCount() != 1) return false;
+		VulkanInstanceOwner *owner = &group.impl->registry.entries[0]->owner;
+		const int warnings = owner->instance.capture.warnings;
+		const int errors = owner->instance.capture.errors;
+		const char *warning_text = "synthetic post-open offscreen warning";
+		const char *error_text = "synthetic post-open offscreen error";
+		VulkanValidationTestInjection injection;
+		injection.enabled = true;
+		injection.point = VulkanValidationTestPoint::AfterDeviceCreation;
+		injection.message = warning_text;
+		SetVulkanValidationTestInjection(injection);
+		InjectValidationIfRequested(owner->instance.capture, injection.point);
+		injection.enabled = true; injection.error = true; injection.message = error_text;
+		SetVulkanValidationTestInjection(injection);
+		InjectValidationIfRequested(owner->instance.capture, injection.point);
+		ClearVulkanValidationTestInjection();
+		if(session.GetReport().validation_warning_count != warnings ||
+		   session.GetReport().validation_error_count != errors) return false;
+		session.Close();
+		auto has_message = [](const Vector<String>& messages, const char *expected) {
+			for(const String& message : messages) if(message == expected) return true;
+			return false;
+		};
+		auto captured = [&] {
+			const VulkanSurfaceReport& report = session.GetReport();
+			return report.validation_warning_count == warnings + 1 && report.validation_error_count == errors + 1 &&
+			       report.preflight.validation_warning_count == warnings + 1 &&
+			       report.preflight.validation_error_count == errors + 1 &&
+			       has_message(report.validation_messages, warning_text) &&
+			       has_message(report.validation_messages, error_text) &&
+			       has_message(report.preflight.validation_messages, warning_text) &&
+			       has_message(report.preflight.validation_messages, error_text);
+		};
+		result.offscreen_validation_report = captured();
+		if(!result.offscreen_validation_report) return false;
+		session.Close();
+		result.repeated_close_validation_report = captured();
+		if(!result.repeated_close_validation_report) return false;
+	}
 	result.diag = GetVulkanRuntimeDeviceDiagnostics();
-	return result.compatible_shared && result.grouped_swapchains_separate && result.non_final_close && result.final_close && result.reverse_close && result.incompatible_entries && result.post_lease_failure && result.recovery && result.never_acquired_report && result.first_report_authoritative && result.second_report_authoritative && result.first_survivor_state && result.second_survivor_state && result.retained_cleanup_failure && result.same_key_refused && result.incompatible_after_failure && result.retained_state_unchanged && result.device_cleanup_failure_non_short_circuit && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0 && result.diag.swapchain_live_count == 0;
+	return result.offscreen_validation_report && result.repeated_close_validation_report && result.compatible_shared && result.grouped_swapchains_separate && result.non_final_close && result.final_close && result.reverse_close && result.incompatible_entries && result.post_lease_failure && result.recovery && result.never_acquired_report && result.first_report_authoritative && result.second_report_authoritative && result.first_survivor_state && result.second_survivor_state && result.retained_cleanup_failure && result.same_key_refused && result.incompatible_after_failure && result.retained_state_unchanged && result.device_cleanup_failure_non_short_circuit && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0 && result.diag.swapchain_live_count == 0;
 }
 
 bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult& result)
@@ -4681,6 +4727,13 @@ static void CleanupSurfaceSession(VulkanSurfaceSession::Impl& impl)
 	impl.graphics_queue = VK_NULL_HANDLE;
 	impl.present_queue = VK_NULL_HANDLE;
 	impl.report.device_cleanup_ok = impl.report.device_cleanup_ok && device_ok;
+
+	// RHI-only/offscreen work has no presentation frame state, so its close path
+	// cannot rely on DestroyFrameState() to synchronize validation diagnostics.
+	// Surface and device cleanup have finished; our instance lease still keeps
+	// the callback capture alive. Preserve those final counts before releasing it.
+	if(VulkanInstanceOwner *owner = impl.lease.GetOwner())
+		CopySurfaceValidationCapture(impl.report, owner->instance.capture);
 
 	bool shared_ok = impl.report.shared_instance_released && impl.report.shared_instance_cleanup_ok;
 	if(had_instance_lease)

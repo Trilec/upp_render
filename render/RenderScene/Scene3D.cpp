@@ -7,7 +7,7 @@ namespace Upp {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kPitchLimit = kPi * 0.5 - 0.001;
+constexpr double kPitchLimit = kPi * 0.5;
 bool Finite(double x) { return std::isfinite(x); }
 double Clamp(double x, double low, double high) { return std::max(low, std::min(high, x)); }
 bool ColorValid(float r, float g, float b, float a)
@@ -25,6 +25,30 @@ bool AdvanceRevision(Scene3DCamera& camera)
 	if(camera.revision == std::numeric_limits<uint64>::max()) return false;
 	++camera.revision;
 	return true;
+}
+void CameraSinCos(double angle, double& sine, double& cosine)
+{
+	// Preserve truly cardinal poses exactly rather than leaving sin(pi) residuals.
+	// General user angles are not rounded to a nearby preset.
+	double a=std::remainder(angle,2*kPi);
+	if(a==0) { sine=0; cosine=1; }
+	else if(a==kPi*0.5) { sine=1; cosine=0; }
+	else if(a==-kPi*0.5) { sine=-1; cosine=0; }
+	else if(a==kPi || a==-kPi) { sine=0; cosine=-1; }
+	else { sine=std::sin(a); cosine=std::cos(a); }
+}
+bool ViewAngles(Scene3DViewDirection direction, double& yaw, double& pitch)
+{
+	yaw=0; pitch=0;
+	switch(direction) {
+	case Scene3DViewDirection::Front: return true;
+	case Scene3DViewDirection::Back: yaw=kPi; return true;
+	case Scene3DViewDirection::Right: yaw=kPi*0.5; return true;
+	case Scene3DViewDirection::Left: yaw=-kPi*0.5; return true;
+	case Scene3DViewDirection::Top: pitch=kPi*0.5; return true;
+	case Scene3DViewDirection::Bottom: pitch=-kPi*0.5; return true;
+	default: return false;
+	}
 }
 bool ValidId(const String& id)
 {
@@ -310,18 +334,21 @@ bool Scene3DCamera::Validate(String& error) const
 	   std::abs(pitch)>kPitchLimit || !Finite(distance) || distance<1e-6 || distance>1e9 ||
 	   !Finite(fov_y) || fov_y<0.01 || fov_y>kPi-0.01 || !Finite(ortho_height) || ortho_height<1e-6 || ortho_height>1e9 ||
 	   !Finite(near_plane) || !Finite(far_plane) || near_plane<1e-6 || far_plane<=near_plane || far_plane>1e12) {
-		error="Invalid camera: require finite position, nonpolar pitch, positive scale and 0<near<far"; return false;
+		error="Invalid camera: require finite position, pitch in [-pi/2,pi/2], positive scale and 0<near<far"; return false;
 	}
 	return true;
 }
 Scene3DVec3 Scene3DCamera::GetEye() const
 {
-	double c=std::cos(pitch);
-	return target+Scene3DVec3(std::sin(yaw)*c,std::sin(pitch),std::cos(yaw)*c)*distance;
+	Scene3DVec3 right,up,forward; GetBasis(right,up,forward);
+	return target-forward*distance;
 }
 void Scene3DCamera::GetBasis(Scene3DVec3& right, Scene3DVec3& up, Scene3DVec3& forward) const
 {
-	forward=(target-GetEye()).Normalized(); right=forward.Cross({0,1,0}).Normalized(); up=right.Cross(forward).Normalized();
+	// The analytic yaw/pitch basis avoids a singular cross product with world-up
+	// at +/-Y, and avoids loss of direction precision at a large translated target.
+	double sy,cy,sp,cp; CameraSinCos(yaw,sy,cy); CameraSinCos(pitch,sp,cp);
+	right={cy,0,-sy}; up={-sy*sp,cp,-cy*sp}; forward={-sy*cp,-sp,-cy*cp};
 }
 Scene3DMatrix Scene3DCamera::GetViewProjection(Size size) const
 {
@@ -395,6 +422,48 @@ bool Scene3DCamera::Pan(double dx, double dy, Size size)
 	if(!AdvanceRevision(next) || !next.Validate(error)) return false;
 	*this=next;
 	return true;
+}
+bool Scene3DCamera::AlignTo(Scene3DViewDirection direction)
+{
+	String error; if(!Validate(error)) return false;
+	Scene3DCamera next=*this;
+	if(!ViewAngles(direction,next.yaw,next.pitch)) return false;
+	if(next.yaw==yaw && next.pitch==pitch) return true;
+	if(!AdvanceRevision(next)) return false;
+	*this=next;
+	return true;
+}
+bool Scene3DCamera::SetOrthographic(bool on)
+{
+	String error; if(!Validate(error)) return false;
+	if(orthographic==on) return true;
+	Scene3DCamera next=*this;
+	double span_per_distance=2*std::tan(fov_y*0.5);
+	if(on) next.ortho_height=distance*span_per_distance;
+	else next.distance=ortho_height/span_per_distance;
+	next.orthographic=on;
+	if(!next.Validate(error) || !AdvanceRevision(next)) return false;
+	*this=next;
+	return true;
+}
+Scene3DViewDirection Scene3DCamera::GetViewDirection(double tolerance_radians) const
+{
+	String error;
+	if(!Validate(error) || !Finite(tolerance_radians) || tolerance_radians<0 || tolerance_radians>=kPi*0.25)
+		return Scene3DViewDirection::User;
+	Scene3DVec3 right,up,forward; GetBasis(right,up,forward);
+	// Unit-vector chord length gives angular tolerance without acos cancellation
+	// near exact alignment. Full-basis comparison distinguishes rolled pole views.
+	double chord=2*std::sin(tolerance_radians*0.5);
+	const Scene3DViewDirection directions[]={Scene3DViewDirection::Front,Scene3DViewDirection::Back,
+		Scene3DViewDirection::Right,Scene3DViewDirection::Left,Scene3DViewDirection::Top,Scene3DViewDirection::Bottom};
+	for(Scene3DViewDirection direction:directions) {
+		Scene3DCamera aligned; ViewAngles(direction,aligned.yaw,aligned.pitch);
+		Scene3DVec3 axis_right,axis_up,axis_forward; aligned.GetBasis(axis_right,axis_up,axis_forward);
+		if((right-axis_right).Length()<=chord && (up-axis_up).Length()<=chord && (forward-axis_forward).Length()<=chord)
+			return direction;
+	}
+	return Scene3DViewDirection::User;
 }
 bool Scene3DCamera::Dolly(double logarithmic_delta)
 {

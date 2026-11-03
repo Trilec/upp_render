@@ -140,6 +140,10 @@ private:
 	Scene3DBounds bounds;
 };
 
+// Direction is independent of projection. User means a pose that does not match
+// one of the canonical axis bases; it is not an assignable orientation preset.
+enum class Scene3DViewDirection { User, Front, Back, Right, Left, Top, Bottom };
+
 struct Scene3DCamera {
 	uint64 revision = 1;
 	Scene3DVec3 target;
@@ -149,6 +153,8 @@ struct Scene3DCamera {
 	double near_plane = 0.01, far_plane = 10000.0;
 	bool Validate(String& error) const;
 	Scene3DVec3 GetEye() const;
+	// Defined at exact poles. At Top screen-up is -Z; at Bottom it is +Z when
+	// aligned by AlignTo. At other pole yaw values the basis retains that roll.
 	void GetBasis(Scene3DVec3& right, Scene3DVec3& up, Scene3DVec3& forward) const;
 	Scene3DMatrix GetViewProjection(Size size) const;
 	// False for invalid dimensions/state or outside the near/far clip volume;
@@ -160,6 +166,19 @@ struct Scene3DCamera {
 	// positive Dolly logarithmic_delta moves closer (one unit multiplies by exp(-1)).
 	bool Orbit(double yaw_delta, double pitch_delta);
 	bool Pan(double dx, double dy, Size size);
+	// Align pose only; projection, target, framing values and clips stay unchanged.
+	// User/invalid direction, invalid current camera or exhausted revision rejects
+	// without mutation. Exact Front/Back/Right/Left/Top/Bottom is a successful no-op.
+	bool AlignTo(Scene3DViewDirection direction);
+	// Changes projection while preserving vertical framing at the target plane:
+	// ortho_height = 2 * distance * tan(fov_y / 2). Switching back solves for distance.
+	// Target, orientation, FOV and clips stay unchanged. Unrepresentable framing
+	// rejects without mutation rather than clamping or silently changing the lens.
+	bool SetOrthographic(bool on);
+	// Recognizes the complete canonical orientation, including screen-up at poles.
+	// Finite angular tolerance is in radians, 0 <= tolerance < pi/4. An invalid
+	// camera/tolerance or a rotated pole basis returns User; this never mutates.
+	Scene3DViewDirection GetViewDirection(double tolerance_radians = 1e-6) const;
 	// Dolly preserves authored clip planes; deliberately tight clipping remains
 	// application-controlled. It does not silently widen clips or constrain the pivot.
 	bool Dolly(double logarithmic_delta);

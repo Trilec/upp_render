@@ -1,0 +1,12 @@
+description "App-side viewport camera catalogue, preview and guarded undo regression";
+
+uses
+	Core,
+	RenderScene;
+
+file
+	main.cpp,
+	"../../examples/Ui3DViewDemo/ViewerCameraModel.cpp";
+
+mainconfig
+	"" = "CONSOLE";

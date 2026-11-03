@@ -179,6 +179,7 @@ String DumpGpuVertexLayout(GpuVertexLayout layout)
 	case GpuVertexLayout::Position2Color4F: return "Position2Color4F";
 	case GpuVertexLayout::Position2Uv2Color4F: return "Position2Uv2Color4F";
 	case GpuVertexLayout::Position3Normal3Uv2Color4F: return "Position3Normal3Uv2Color4F";
+	case GpuVertexLayout::Position3Normal3Color4F: return "Position3Normal3Color4F";
 	}
 	return String("Unknown(") + AsString((int)layout) + ")";
 }

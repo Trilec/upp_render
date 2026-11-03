@@ -87,6 +87,8 @@ enum class GpuVertexLayout {
 	Position2Uv2Color4F,
 	// Packed float position3, normal3, uv2, linear color4 (48-byte stride).
 	Position3Normal3Uv2Color4F,
+	// Untextured position3, normal3, linear color4 (40-byte stride; locations 0/1/2).
+	Position3Normal3Color4F,
 };
 
 enum class GpuCompareOp { Never, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always };

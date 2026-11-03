@@ -13,3 +13,10 @@ The three minimal entry-point tutorials are now [source snippets](../docs/snippe
 rather than extra demo projects. Six superseded bring-up/stock-GDI examples and
 their helper were retired. The raw precision-image caller moved to
 `tests/GpuImageSourceTest`; its source and coverage are retained.
+
+## 3D viewport
+
+`Ui3DViewDemo` demonstrates the reusable 3D control with four persistent panes,
+saved cameras and an application-owned inspector. The stable executable is
+`bin/win64/Ui3DViewDemo.exe`; the [Ui3DView guide](../docs/UI3DVIEW.md) contains
+its API, build/run commands and tested status.
