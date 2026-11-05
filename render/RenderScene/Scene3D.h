@@ -84,6 +84,8 @@ struct Scene3DObjectDesc {
 	std::shared_ptr<const Scene3DMesh> mesh;
 	bool visible = true, selectable = true;
 	float r = 1, g = 1, b = 1, a = 1;
+	// Hosts can supply joint/element highlighting while retaining object selection and framing.
+	bool selection_outline = true;
 };
 
 struct Scene3DSceneDesc {
@@ -98,6 +100,8 @@ struct Scene3DObject {
 	Scene3DBounds bounds;
 	bool visible = true, selectable = true;
 	float r = 1, g = 1, b = 1, a = 1;
+	// Hosts can supply joint/element highlighting while retaining object selection and framing.
+	bool selection_outline = true;
 };
 
 struct Scene3DRay {

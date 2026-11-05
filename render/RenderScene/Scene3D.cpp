@@ -254,6 +254,7 @@ std::shared_ptr<const Scene3DSnapshot> Scene3DSnapshot::Create(const Scene3DScen
 		scene->ids.Add(source.id);
 		auto& object = scene->objects[i];
 		object.id=source.id; object.parent_id=source.parent_id; object.mesh=source.mesh;
+		object.selection_outline=source.selection_outline;
 		object.selectable=source.selectable; object.r=source.r; object.g=source.g; object.b=source.b; object.a=source.a;
 	}
 	for(int i=0; i<count; ++i) {

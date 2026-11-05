@@ -448,7 +448,7 @@ bool ViewContent::Render(GpuDevice& device, const GpuFrameInfo& frame, String& e
 	// and vertex colors remain unchanged in every display mode.
 	if(state->options.show_selection && scene)
 		for(const auto& object : scene->GetObjects())
-			if(object.visible && object.mesh && selected.Find(object.id) >= 0 &&
+			if(object.visible && object.selection_outline && object.mesh && selected.Find(object.id) >= 0 &&
 			   !outline(object, state->options.selection_color)) return fail();
 	if(!Result(device, device.EndRenderPass(command), "end mesh pass", error) ||
 	   !Result(device, device.EndCommands(command), "end mesh commands", error)) return fail();
