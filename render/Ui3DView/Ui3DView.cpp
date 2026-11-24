@@ -113,6 +113,13 @@ bool Ui3DView::SetOptions(const Ui3DViewOptions& options, String& error)
 	   options.selection_color.a != 255 || options.edge_color.a != 255) {
 		error = "Ui3DView currently supports opaque decoration colors only"; return false;
 	}
+	if(options.matte_color.a != 255 || options.gate_color.a != 255 || options.safe_color.a != 255 ||
+	   !std::isfinite(options.matte_opacity) || options.matte_opacity < 0 || options.matte_opacity > 1 ||
+	   !std::isfinite(options.action_safe) || !std::isfinite(options.title_safe) ||
+	   options.title_safe <= 0 || options.title_safe > options.action_safe || options.action_safe > 1) {
+		error = "Film guides require opaque palette colors, opacity 0..1 and 0<title safe<=action safe<=1";
+		return false;
+	}
 	if(options.grid_extent < 1 || options.grid_extent > 100 ||
 	   !std::isfinite(options.grid_spacing) ||
 	   options.grid_spacing < 0.001 || options.grid_spacing > 10000) {
@@ -129,9 +136,13 @@ bool Ui3DView::SetOptions(const Ui3DViewOptions& options, String& error)
 	   old.show_grid == options.show_grid && old.show_selection == options.show_selection &&
 	   old.show_axes == options.show_axes && old.wireframe == options.wireframe &&
 	   old.solid_edges == options.solid_edges && old.adaptive_grid == options.adaptive_grid &&
-	   old.grid_plane == options.grid_plane &&
+	   old.grid_plane == options.grid_plane && old.orbit_leaves_axis_view == options.orbit_leaves_axis_view &&
 	   old.lighting == options.lighting && old.grid_extent == options.grid_extent &&
-	   old.grid_spacing == options.grid_spacing) { error.Clear(); return true; }
+	   old.grid_spacing == options.grid_spacing && old.show_gate == options.show_gate &&
+	   old.show_safe == options.show_safe && old.matte_opacity == options.matte_opacity &&
+	   old.action_safe == options.action_safe && old.title_safe == options.title_safe &&
+	   old.matte_color == options.matte_color && old.gate_color == options.gate_color &&
+	   old.safe_color == options.safe_color) { error.Clear(); return true; }
 	if(old.grid_color != options.grid_color || old.grid_extent != options.grid_extent ||
 	   old.grid_spacing != options.grid_spacing || old.adaptive_grid != options.adaptive_grid ||
 	   old.grid_plane != options.grid_plane)
@@ -268,9 +279,13 @@ Ui3DViewPick Ui3DView::Pick(Pointf point) const
 	result.viewport_size = GetSize();
 	result.camera_revision = state->camera.revision;
 	result.scene_revision = scene ? scene->GetRevision() : 0;
-	Scene3DRay ray;
-	if(scene && state->camera.WorldRay(point, result.viewport_size, ray))
-		static_cast<Scene3DPick&>(result) = scene->Pick(ray, state->camera.revision);
+	// A fully opaque film matte hides the same pixels from selection that it
+	// hides in the composed GPU view. Translucent overscan remains selectable.
+	const Rect gate=state->camera.GetGateRect(result.viewport_size);
+	const bool hidden_by_matte=state->options.show_gate && state->options.matte_opacity>=1 &&
+	    (point.x<gate.left || point.y<gate.top || point.x>=gate.right || point.y>=gate.bottom);
+	if(scene && !hidden_by_matte)
+		static_cast<Scene3DPick&>(result) = scene->PickScreen(point,result.viewport_size,state->camera);
 	return result;
 }
 
@@ -622,14 +637,19 @@ void Ui3DView::MouseMove(Point p, dword flags)
 	const double dx = p.x - press_point.x, dy = p.y - press_point.y;
 	bool changed = false;
 	switch(navigation) {
-	case Ui3DNavigationMode::Orbit: changed = next.Orbit(-dx * 0.007, dy * 0.007); break;
+	case Ui3DNavigationMode::Orbit:
+		if(navigation_button == 2 && (dx || dy) && state->options.orbit_leaves_axis_view &&
+		   next.orthographic && next.GetViewDirection() != Scene3DViewDirection::User)
+			if(!next.SetOrthographic(false)) return;
+		changed = next.Orbit(-dx * 0.007, dy * 0.007);
+		break;
 	case Ui3DNavigationMode::Pan: changed = next.Pan(dx, dy, GetSize()); break;
 	case Ui3DNavigationMode::Dolly: changed = next.Dolly(-dy * 0.015); break;
 	default: break;
 	}
 	if(!changed || state->camera.revision == std::numeric_limits<uint64>::max()) return;
 	const auto& current = state->camera;
-	if(next.yaw == current.yaw && next.pitch == current.pitch &&
+	if(next.orthographic == current.orthographic && next.yaw == current.yaw && next.pitch == current.pitch &&
 	   next.distance == current.distance && next.ortho_height == current.ortho_height &&
 	   next.target.x == current.target.x && next.target.y == current.target.y &&
 	   next.target.z == current.target.z) return;

@@ -1,6 +1,6 @@
 # Regression and load packages
 
-These 46 packages are retained because they check distinct renderer contracts.
+These packages exercise different renderer contracts.
 They are source tests, not additional release executables. Build only the targets
 needed for a change; keep their binaries in `build/`.
 
@@ -11,11 +11,14 @@ needed for a change; keep their binaries in `build/`.
 | GPU 2D replay | RenderGpu2DTest, RenderGpuTextTest, RenderGpuVectorTest, GpuCtrlReplayTest |
 | Vulkan resources and drawing | RenderVulkanTest, RenderVulkanResourceTest, RenderVulkanGraphicsTest, RenderVulkanImageTest, RenderVulkanPathTest, RenderVulkanVectorTest, RenderVulkanGeneralVectorTest, RenderVulkanPrecisionTest, RenderVulkanComputeTest, GpuImageSourceTest |
 | Vulkan lifecycle | RenderVulkanFrameTest, RenderVulkanClearFrameTest, RenderVulkanPostCreateCleanupTest |
+| 3D viewport | RenderSceneTest, Ui3DViewCameraTest, Ui3DViewTest, Ui3DMaterialTest, RenderVulkan3DTest |
 | Native presentation | GpuCtrlHeaderTest, GpuCtrlFrameSourceTest, GpuCtrlPresentationTest, GpuTopWindowPresentationTest, GpuTransientPopupPresentationTest |
 | Transient controls | GpuDropListPopupPresentationTest, GpuUiDropdownPopupPresentationTest, GpuUiMenuPopupPresentationTest, GpuUiTooltipPresentationTest |
 | Text and control coverage | RenderFontWin32Test, RenderVulkanTextTest, RenderVulkanTextDirectWriteTest, UiTextLayoutTest, UiGpuDrawingTest, GpuUiCoverageTest |
 | Sustained load | GpuResourceLoad, GpuSiblingLoad |
 | Separate future-backend proof | RenderWgpuNativeTest |
+
+The [macOS test script](../tools/test-macos.sh) selects the portable scene, camera, RHI and embedded presentation checks. Ui3DViewTest uses guarded Windows input and Ui3DMaterialTest uses a Windows native surface fixture.
 
 Software/native reference cases intentionally exercise CPU/GDI behavior to compare
 renderer output. Their presence does not select fallback in the required-Vulkan

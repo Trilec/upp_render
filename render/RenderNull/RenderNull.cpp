@@ -101,6 +101,12 @@ static bool ValidateNativeWindowDesc(const GpuSurfaceDesc& desc, String& reason)
 			return false;
 		}
 		return true;
+	case GpuNativeWindowKind::MetalLayer:
+		if(desc.native_window.handle == 0) {
+			reason = "metal_layer_handle_zero";
+			return false;
+		}
+		return true;
 	case GpuNativeWindowKind::Win32:
 		if(desc.native_window.handle == 0) {
 			reason = "win32_window_handle_zero";
@@ -680,7 +686,8 @@ GpuResult NullGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeline
 	   desc.parameter_bytes != 0 || desc.cull_mode != GpuCullMode::None ||
 	   desc.front_face != GpuFrontFace::CounterClockwise ||
 	   desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F ||
-	   desc.vertex_layout == GpuVertexLayout::Position3Normal3Color4F) {
+	   desc.vertex_layout == GpuVertexLayout::Position3Normal3Color4F ||
+	   desc.vertex_layout == GpuVertexLayout::Position3Covariance6Corner2Color4F) {
 		out = GpuPipelineId(); Fail("CreatePipeline reason=3d_not_implemented"); return GpuResult::Unsupported;
 	}
 	out = GpuPipelineId();

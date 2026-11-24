@@ -1,7 +1,7 @@
 #include <Ui/Ui.h>
 #include <Ui/UiFileBrowser/UiFileBrowser.h>
 #include <GpuRender/RenderCtrlBridge.h>
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
 #include <RenderGpu2D/RenderGpu2D.h>
@@ -350,7 +350,7 @@ GUI_APP_MAIN
 	      native.instance_live_count == 0 && native.surface_live_count == 0 &&
 	      VulkanGpuDevice::GetSharedImmutableAllocationBytes() == 0;
 	ok &= cases == 224 && failures == 0;
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 	const auto fonts = GetRenderFontWin32Stats();
 	ok &= fonts.legacy_gdi_font_requests == 0 && fonts.error.IsEmpty();
 	Cout() << "font_backend=DirectWrite legacy_gdi_font_requests=" << fonts.legacy_gdi_font_requests

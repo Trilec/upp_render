@@ -35,7 +35,8 @@ Supporting layers:
 - `RenderSoftware` — software correctness reference.
 - `RenderVector` — U++ Painter vector/SVG raster authority.
 - `RenderNull` — headless RHI validation.
-- `RenderPlatformWin32` — current Win32 native-surface description adapter.
+- `RenderPlatformWin32` — embedded HWND, clipped native child, and frame clock.
+- `RenderPlatformCocoa` — embedded AppKit view, Metal drawable, backing-pixel sizing and overlay clipping. UMK selects the native package for the target OS.
 
 These separate packages are not competing user APIs. They preserve dependency direction and make backend work testable without pulling U++ UI integration into the renderer core.
 

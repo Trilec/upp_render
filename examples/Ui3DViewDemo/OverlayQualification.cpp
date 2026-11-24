@@ -1,5 +1,6 @@
 // Finite native observation of the HUD during motion. Never used by normal startup.
 #include "Ui3DViewDemo.h"
+#ifdef GUI_WIN
 #include <plugin/png/png.h>
 #include <windows.h>
 #include <algorithm>
@@ -571,3 +572,4 @@ bool Ui3DViewDemo::QualifyOverlays(String& report, const String& evidence_direct
 }
 
 }
+#endif

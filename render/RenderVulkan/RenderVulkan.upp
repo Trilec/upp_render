@@ -4,6 +4,7 @@ uses
 
 file
 	RenderVulkan.h,
+	VulkanPlatform.h,
 	RenderVulkanSurfaceSession.h,
 	RenderVulkanRhi.h,
 	RenderVulkanTestHooks.h,

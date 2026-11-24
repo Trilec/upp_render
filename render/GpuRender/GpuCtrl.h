@@ -39,6 +39,10 @@ public:
 	bool IsGpuReady() const;
 	String GetGpuError() const;
 	void RequestGpuRefresh();
+#ifdef GUI_COCOA
+	// Rectangles in control coordinates painted by ordinary U++ overlay controls.
+	void SetCocoaOverlayRects(const Vector<Rect>& rects);
+#endif
 	GpuCtrl& RetryGpuInit();
 	GpuCtrl& SetBackend(GpuBackendKind kind);
 	GpuCtrl& SetValidation(bool validation = true);

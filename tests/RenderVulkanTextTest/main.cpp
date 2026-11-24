@@ -3,7 +3,7 @@
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include <Painter/Painter.h>
 #include <cmath>
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
 
@@ -369,7 +369,7 @@ CONSOLE_APP_MAIN
 	            diag.device_live_count == 0 && diag.swapchain_live_count == 0,
 	            "Vulkan text test should finish with zero Vulkan ownership diagnostics");
 
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 	const auto font_stats = GetRenderFontWin32Stats();
 	ok &= Check(font_stats.legacy_gdi_font_requests == 0 && font_stats.error.IsEmpty(),
 	            "DirectWrite Vulkan text does not invoke legacy GDI fonts");

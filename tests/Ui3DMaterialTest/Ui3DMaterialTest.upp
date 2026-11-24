@@ -1,0 +1,9 @@
+description "Native GPU pixel qualification for Ui3DView materials, alpha, camera roll and guides";
+uses
+	Ui3DView,
+	RenderVulkan,
+	plugin/png;
+file
+	main.cpp;
+mainconfig
+	"" = "GUI";

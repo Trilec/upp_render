@@ -1,2 +1,0 @@
-UPP = "render;examples;tests;tools;<ui-repository-or-export>;<cinespace-repository>;<animation-repository>;<uppsrc>";
-OUTPUT = "build";

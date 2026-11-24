@@ -20,7 +20,8 @@ bool SameCamera(const Scene3DCamera& a, const Scene3DCamera& b)
 {
 	return a.revision==b.revision && Near(a.target,b.target,0) && a.yaw==b.yaw && a.pitch==b.pitch &&
 	       a.distance==b.distance && a.orthographic==b.orthographic && a.fov_y==b.fov_y &&
-	       a.ortho_height==b.ortho_height && a.near_plane==b.near_plane && a.far_plane==b.far_plane;
+	       a.ortho_height==b.ortho_height && a.near_plane==b.near_plane && a.far_plane==b.far_plane &&
+	       a.roll==b.roll && a.gate_aspect==b.gate_aspect;
 }
 Scene3DVertex Vertex(Scene3DVec3 p, Scene3DVec3 normal = {0,0,1})
 {
@@ -72,7 +73,7 @@ void MeshTests()
 	vertices[2].position={0,1,0}; vertices[1].normal={0,0,0};
 	Check(!Scene3DMesh::Create(vertices,indices,error),"zero normal rejected");
 	vertices[1].normal={0,0,1}; vertices[1].a=0.5f;
-	Check(!Scene3DMesh::Create(vertices,indices,error),"unsupported transparent vertex rejected");
+	Check(bool(Scene3DMesh::Create(vertices,indices,error)),"finite straight vertex alpha is retained");
 	vertices[1].a=1; vertices[1].u=std::numeric_limits<float>::quiet_NaN();
 	Check(!Scene3DMesh::Create(vertices,indices,error),"NaN UV rejected");
 	auto box=Scene3DMesh::MakeBox({2,4,6},error);
@@ -114,7 +115,7 @@ void SceneTests()
 	desc.objects[0].id="actor:child"; desc.objects[0].local=Scene3DMatrix::Scale({0,1,1});
 	Check(!Scene3DSnapshot::Create(desc,error),"singular local transform rejected before publication");
 	desc.objects[0].local=Scene3DMatrix(); desc.objects[0].a=0.9f;
-	Check(!Scene3DSnapshot::Create(desc,error),"unsupported transparent material rejected");
+	Check(bool(Scene3DSnapshot::Create(desc,error)),"finite material alpha is independent of opaque coverage");
 	desc.objects[0].a=1; desc.revision=0;
 	Check(!Scene3DSnapshot::Create(desc,error),"zero scene revision rejected");
 	desc=Scene3DSceneDesc();
@@ -379,11 +380,322 @@ void PickTests()
 	hit=scene->Pick(ray,2);
 	Check(hit.hit && Near(hit.distance,10) && Near(hit.world_normal,Scene3DVec3(3,2,0).Normalized()),"pick uses inverse-transpose normal and world-unit distance under nonuniform scale");
 }
+void MaterialCameraTests()
+{
+    String error;
+    auto camera=Camera();
+    const auto original=camera;
+    Check(camera.SetLookAt({0,0,10},{0,0,0},{0,1,0},error) && SameCamera(camera,original),
+          "exact unchanged eye/aim/up is a revision-preserving no-op");
+    Check(camera.SetLookAt({2,3,4},{1,.5,-1},{.4,1,.2},error),"authored eye aim and up accepted");
+    Scene3DVec3 right,up,forward; camera.GetBasis(right,up,forward);
+    const auto wanted_forward=(Scene3DVec3(1,.5,-1)-Scene3DVec3(2,3,4)).Normalized();
+    const auto wanted_up=(Scene3DVec3(.4,1,.2)-wanted_forward*Scene3DVec3(.4,1,.2).Dot(wanted_forward)).Normalized();
+    Check(Near(camera.GetEye(),{2,3,4}) && Near(camera.target,{1,.5,-1}) &&
+          Near(forward,wanted_forward) && Near(up,wanted_up),"eye/aim/up reproduces the actual authored camera basis");
+    const auto accepted=camera;
+    Check(!camera.SetLookAt({0,0,1},{0,0,0},{0,0,1},error) && SameCamera(camera,accepted),
+          "parallel up rejects atomically");
+    Check(!camera.SetLookAt({0,0,1},{0,0,0},{0,0,0},error) && SameCamera(camera,accepted),
+          "zero up rejects atomically");
+    for(int sign:{-1,1}) {
+        Check(camera.SetLookAt({0,5.0*sign,0},{0,0,0},{1,0,0},error),"exact pole camera accepts a non-world-up roll");
+        camera.GetBasis(right,up,forward);
+        Check(Near(up,{1,0,0}) && Near(camera.GetEye(),{0,5.0*sign,0}),"pole up remains authored rather than guessed");
+    }
+    camera=Camera(); camera.roll=3.14159265358979323846/2;
+    Pointf point; double depth;
+    Check(camera.Project({1,0,0},Size(800,600),point,depth) && Near(point.x,400) && point.y<300,
+          "positive roll maps world +X to screen up");
+    camera.gate_aspect=1;
+    Check(camera.GetGateRect(Size(1280,720))==Rect(280,0,1000,720),"square film gate is pillarboxed in a wide view");
+    camera.gate_aspect=16.0/9;
+    Check(camera.GetGateRect(Size(720,1280))==Rect(0,437,720,842),"widescreen film gate is letterboxed in a tall view");
+    bool projected=true;
+    for(bool orthographic:{false,true}) for(Size size:{Size(1280,720),Size(720,1280),Size(853,617)}) {
+        camera=Camera(); camera.roll=.37; camera.gate_aspect=16.0/9;
+        camera.orthographic=orthographic; camera.ortho_height=5;
+        for(Scene3DVec3 world:std::vector<Scene3DVec3>{{-.5,.3,0},{1,-.7,-2},{0,0,1}}) {
+            Scene3DRay ray;
+            projected &= camera.Project(world,size,point,depth) && camera.WorldRay(point,size,ray);
+            const auto delta=world-ray.origin;
+            projected &= delta.Cross(ray.direction).Length()<1e-8 && delta.Dot(ray.direction)>0;
+        }
+    }
+    Check(projected,"rolled perspective and orthographic film gates preserve project/ray agreement at wide, tall and odd sizes");
+    camera=Camera(); camera.gate_aspect=std::numeric_limits<double>::quiet_NaN();
+    Check(!camera.Validate(error) && camera.GetGateRect(Size(800,600)).IsEmpty(),"invalid film gate cannot produce a usable projection");
+
+    std::vector<byte> rgba={255,0,0,0, 0,255,0,255, 0,0,255,128, 255,255,255,64};
+    auto texture=Scene3DTexture::Create(Size(2,2),rgba,Scene3DTextureColorSpace::Srgb,error);
+    Check(bool(texture),"exact top-down straight RGBA texture accepted");
+    if(!texture) return;
+    rgba[3]=255;
+    Check(texture->GetPixels()[3]==0 && texture->GetSize()==Size(2,2) &&
+          texture->GetColorSpace()==Scene3DTextureColorSpace::Srgb,"immutable texture owns its pixel copy and color-space identity");
+    Check(Near(texture->SampleAlpha(.25,.75,false),0) && Near(texture->SampleAlpha(.75,.75,false),1) &&
+          Near(texture->SampleAlpha(.25,.25,false),128.0/255) &&
+          Near(texture->SampleAlpha(.75,.25,false),64.0/255),"V-up UVs address all four top-down texel centers correctly");
+    Check(Near(texture->SampleAlpha(.5,.5,false),(0+255+128+64)/(4.0*255)),
+          "alpha interpolation is linear independently of RGB color space");
+    Check(Near(texture->SampleAlpha(1.75,.75,true),1) && Near(texture->SampleAlpha(-100,100,false),0),
+          "repeat and clamp-to-edge use their declared addressing policies");
+    Check(texture->SampleAlpha(std::numeric_limits<double>::infinity(),0,false)==0,
+          "non-finite sample coordinates cannot address texture memory");
+    rgba.pop_back();
+    Check(!Scene3DTexture::Create(Size(2,2),rgba,Scene3DTextureColorSpace::Srgb,error),"incomplete RGBA pixels reject");
+    Check(!Scene3DTexture::Create(Size(0,2),rgba,Scene3DTextureColorSpace::Srgb,error),"empty texture dimensions reject");
+    Check(!Scene3DTexture::Create(Size(16385,2),rgba,Scene3DTextureColorSpace::Srgb,error),"oversized texture dimensions reject");
+    rgba={255,255,255,255};
+    Check(!Scene3DTexture::Create(Size(1,1),rgba,(Scene3DTextureColorSpace)999,error),"unknown texture encoding rejects");
+}
+void MaterialPickTests()
+{
+    String error;
+    auto a=Vertex({-2,-2,0}),b=Vertex({2,-2,0}),c=Vertex({0,2,0});
+    a.u=b.u=c.u=.5; a.v=b.v=c.v=.5;
+    auto mesh=Scene3DMesh::Create({a,b,c},{0,1,2},error);
+    Scene3DSceneDesc desc;
+    desc.objects={Object("front",mesh),Object("back",mesh,{0,0,-1})};
+    const auto front=desc.objects[0];
+    Scene3DRay ray; ray.origin={0,0,10}; ray.direction={0,0,-1}; ray.max_distance=100;
+    auto pick=[&] {
+        auto scene=Scene3DSnapshot::Create(desc,error);
+        Check(bool(scene),"material pick scene validates");
+        return scene?scene->Pick(ray,1):Scene3DPick();
+    };
+    auto texture=[&](byte alpha) {
+        return Scene3DTexture::Create(Size(1,1),std::vector<byte>{255,255,255,alpha},
+                                     Scene3DTextureColorSpace::Srgb,error);
+    };
+    desc.objects[0].a=0; desc.objects[0].material.color_texture=texture(0);
+    Check(pick().id=="front","Opaque ignores material and texture alpha for picking");
+    desc.objects[0].opacity=.1f;
+    Check(pick().id=="front","independent fade leaves a nonzero opaque surface selectable");
+    desc.objects[0].opacity=0;
+    Check(pick().id=="back","zero independent opacity removes a surface from picking");
+    desc.objects[0]=front; desc.objects[0].material.alpha_mode=Scene3DAlphaMode::Mask;
+    desc.objects[0].material.color_texture=texture(0);
+    Check(pick().id=="back","masked hole permits picking the actual surface behind it");
+    desc.objects[0].material.color_texture=texture(255); desc.objects[0].a=.5f;
+    desc.objects[0].opacity=.1f;
+    Check(pick().id=="front","mask equality survives cutoff before applying independent opacity");
+    desc.objects[0].a=.49f;
+    Check(pick().id=="back","mask tests material coverage before the object fade");
+    desc.objects[0].a=0; desc.objects[0].material.alpha_cutoff=0;
+    Check(pick().id=="front","zero alpha at a zero mask cutoff remains covered");
+    desc.objects[0].material.alpha_mode=Scene3DAlphaMode::Blend;
+    Check(pick().id=="back","zero blend coverage is unpickable");
+    desc.objects[0].a=.01f;
+    Check(pick().id=="front","positive blend coverage remains pickable");
+    desc.objects={front}; desc.objects[0].material.double_sided=false;
+    ray.origin={0,0,-10}; ray.direction={0,0,1};
+    Check(!pick().hit,"single-sided picking rejects a back face");
+    desc.objects[0].material.double_sided=true;
+    Check(pick().hit,"double-sided picking accepts the same back face");
+    desc.objects[0].opacity=std::numeric_limits<float>::quiet_NaN();
+    Check(!Scene3DSnapshot::Create(desc,error),"non-finite independent opacity rejects atomically");
+    desc.objects[0].opacity=1; desc.objects[0].material.alpha_cutoff=2;
+    Check(!Scene3DSnapshot::Create(desc,error),"invalid alpha cutoff cannot enter a scene snapshot");
+}
+
+Scene3DSplat GaussianPoint()
+{
+    Scene3DSplat point;
+    point.covariance[0]=.04; point.covariance[1]=.006; point.covariance[2]=.003;
+    point.covariance[3]=.01; point.covariance[4]=.002; point.covariance[5]=.09;
+    point.r=.8f; point.g=.3f; point.b=.1f; point.a=.7f;
+    return point;
+}
+void GaussianResourceTests()
+{
+    String error;
+    std::vector<Scene3DSplat> input={GaussianPoint()};
+    input[0].position={1,2,3};
+    const auto original=input[0];
+    auto cloud=Scene3DSplats::Create(input,error);
+    Check(cloud && error.IsEmpty(),"Gaussian finite positive-semidefinite source is accepted");
+    input[0].position={99,98,97}; input[0].covariance[1]=99; input[0].a=0;
+    Check(cloud && Near(cloud->GetSplats()[0].position,original.position) &&
+          Near(cloud->GetSplats()[0].covariance[1],.006) && cloud->GetSplats()[0].a==.7f,
+          "Gaussian factory detaches position covariance and colour from every caller alias");
+    // A Gaussian's coordinate extrema depend on its marginal variances, even
+    // when its principal axes are oblique.
+    const double contour=std::sqrt(2*std::log(255.0));
+    Check(cloud && Near(cloud->GetBounds().min,{1-.2*contour,2-.1*contour,3-.3*contour}) &&
+          Near(cloud->GetBounds().max,{1+.2*contour,2+.1*contour,3+.3*contour}),
+          "Gaussian bounds enclose the analytical one-over-255 marginal contour");
+    Check(!Scene3DSplats::Create({},error) && !error.IsEmpty(),"empty Gaussian resource is rejected");
+    auto rejected=[&](const Scene3DSplat& point,const char *message) {
+        Check(!Scene3DSplats::Create({point},error) && !error.IsEmpty(),message);
+    };
+    auto point=GaussianPoint(); point.position.x=std::numeric_limits<double>::quiet_NaN();
+    rejected(point,"Gaussian NaN centre rejects");
+    point=GaussianPoint(); point.position.z=1e9+1; rejected(point,"Gaussian centre budget rejects");
+    point=GaussianPoint(); point.r=-.1f; rejected(point,"Gaussian negative linear colour rejects");
+    point=GaussianPoint(); point.a=1.01f; rejected(point,"Gaussian opacity above one rejects");
+    point=GaussianPoint(); point.g=std::numeric_limits<float>::infinity(); rejected(point,"Gaussian infinite colour rejects");
+    point=GaussianPoint(); point.covariance[0]=-.01; rejected(point,"Gaussian negative marginal variance rejects");
+    point=GaussianPoint(); point.covariance[2]=std::numeric_limits<double>::quiet_NaN();
+    rejected(point,"Gaussian non-finite covariance rejects");
+    point=GaussianPoint(); point.covariance[0]=1e18+1e10; rejected(point,"Gaussian covariance budget rejects");
+    point=Scene3DSplat(); point.covariance[1]=2;
+    rejected(point,"Gaussian invalid two-axis covariance rejects");
+    point=Scene3DSplat(); point.covariance[1]=point.covariance[2]=point.covariance[4]=-.75;
+    rejected(point,"Gaussian negative determinant rejects even with positive two-axis minors");
+    point=Scene3DSplat();
+    const double rank_one[6]={4,6,8,9,12,16};
+    for(int i=0;i<6;++i) point.covariance[i]=rank_one[i];
+    Check(bool(Scene3DSplats::Create({point},error)),"Gaussian rank-one covariance remains valid");
+    for(double& covariance:point.covariance) covariance=0;
+    Check(bool(Scene3DSplats::Create({point},error)),"Gaussian zero covariance remains valid for pixel filtering");
+    point=Scene3DSplat(); point.covariance[0]=point.covariance[3]=point.covariance[5]=1e18;
+    Check(bool(Scene3DSplats::Create({point},error)),"Gaussian bounded large covariance remains valid");
+    std::vector<Scene3DSplat> maximum(Scene3DMaxSplats,GaussianPoint());
+    Check(bool(Scene3DSplats::Create(maximum,error)),"exact Gaussian resource point budget is admitted");
+    maximum.push_back(GaussianPoint());
+    Check(!Scene3DSplats::Create(maximum,error),"Gaussian resource point budget plus one rejects");
+}
+void GaussianProjectionTests()
+{
+    String error; auto camera=Camera();
+    camera.orthographic=true; camera.ortho_height=2;
+    Check(camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error),"Gaussian analytic camera is valid");
+    const Size viewport(200,100);
+    auto point=GaussianPoint(); point.position={.2,.3,0};
+    Scene3DSplatProjection projection;
+    Check(Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection),
+          "Gaussian orthographic projection succeeds");
+    Check(Near(projection.center.x,110) && Near(projection.center.y,35) &&
+          Near(projection.covariance_xx,100.25) && Near(projection.covariance_xy,-15) &&
+          Near(projection.covariance_yy,25.25),
+          "Gaussian orthographic covariance matches independent fifty-pixels-per-metre values");
+    Check(Near(projection.Coverage(projection.center),1),"Gaussian centre has unit coverage");
+    const double expected=std::exp(-.5*(25.25*100-900+100.25*9)/(100.25*25.25-225));
+    Check(Near(projection.Coverage(projection.center+Pointf(10,-3)),expected),
+          "Gaussian oblique density matches analytical inverse-covariance evaluation");
+    Check(projection.Coverage(projection.center+Pointf(100,100))==0,
+          "Gaussian finite coverage contour excludes distant points");
+    point.position={0,0,0};
+    auto parent=Scene3DMatrix::Translation({.5,0,0})*Scene3DMatrix::Scale({2,3,4});
+    Check(Scene3DProjectSplat(point,camera.GetViewProjection(viewport)*parent,viewport,projection) &&
+          Near(projection.center.x,125) && Near(projection.center.y,50) &&
+          Near(projection.covariance_xx,400.25) && Near(projection.covariance_xy,-90) &&
+          Near(projection.covariance_yy,225.25),
+          "Gaussian full parent transform changes position and covariance exactly once");
+    camera.roll=1.57079632679489661923;
+    Check(Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection) &&
+          Near(projection.covariance_xx,25.25) && Near(projection.covariance_xy,15) &&
+          Near(projection.covariance_yy,100.25),"Gaussian roll rotates the full covariance");
+    camera.roll=0; camera.gate_aspect=4;
+    Check(camera.GetGateRect(viewport)==Rect(0,25,200,75) &&
+          Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection) &&
+          Near(projection.covariance_xx,25.25) && Near(projection.covariance_xy,-3.75) &&
+          Near(projection.covariance_yy,6.5),"Gaussian physical gate changes the actual pixel scale");
+    camera.gate_aspect=0; camera.orthographic=false;
+    point.position={.5,.2,0};
+    Check(Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection) &&
+          Near(projection.center.x,105) && Near(projection.center.y,48) &&
+          Near(projection.covariance_xx,4.4) && Near(projection.covariance_xy,-.668) &&
+          Near(projection.covariance_yy,1.2804),
+          "Gaussian perspective includes off-axis XZ YZ and depth covariance");
+    const auto valid=projection;
+    for(double z:{4.95,6.0,-200.0}) {
+        point.position.z=z;
+        Check(!Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection) &&
+              projection.center==valid.center && projection.covariance_xx==valid.covariance_xx,
+              "Gaussian invalid near far or behind-camera projection preserves output");
+    }
+    point=GaussianPoint();
+    Check(!Scene3DProjectSplat(point,camera.GetViewProjection(viewport),Size(0,100),projection),
+          "Gaussian zero-sized projection rejects");
+    auto invalid=camera.GetViewProjection(viewport); invalid.m[0]=std::numeric_limits<double>::infinity();
+    Check(!Scene3DProjectSplat(point,invalid,viewport,projection),"Gaussian non-finite projection rejects");
+    for(double& covariance:point.covariance) covariance=0;
+    Check(Scene3DProjectSplat(point,camera.GetViewProjection(viewport),viewport,projection) &&
+          Near(projection.covariance_xx,.25) && Near(projection.covariance_yy,.25) &&
+          Near(projection.covariance_xy,0),"Gaussian zero density retains the declared quarter-pixel variance");
+}
+void GaussianScenePickTests()
+{
+    String error; auto camera=Camera(); camera.orthographic=true; camera.ortho_height=2;
+    camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error); camera.revision=87;
+    Scene3DSplat point; point.covariance[0]=point.covariance[3]=point.covariance[5]=.01;
+    auto cloud=Scene3DSplats::Create({point},error);
+    Scene3DObjectDesc object; object.id="gaussian:original"; object.splats=cloud;
+    Scene3DSceneDesc desc; desc.revision=43; desc.objects={object};
+    auto scene=Scene3DSnapshot::Create(desc,error);
+    Check(scene && !scene->GetBounds().empty,"Gaussian scene contributes actual covariance bounds");
+    if(!scene) return;
+    auto hit=scene->PickScreen(Pointf(100,50),Size(200,100),camera);
+    Check(hit.hit && hit.id==object.id && hit.splat==0 && hit.triangle==-1 &&
+          hit.scene_revision==43 && hit.camera_revision==87 &&
+          Near(hit.world_point,{0,0,0}) && Near(hit.distance,5),
+          "Gaussian screen pick retains exact point identity revisions and centre-plane depth");
+    Check(!scene->PickScreen(Pointf(115,65),Size(200,100),camera).hit,
+          "Gaussian pick rejects a transparent ellipse corner inside its quad bounds");
+    Check(scene->PickScreen(Pointf(114,50),Size(200,100),camera).hit,
+          "Gaussian analytical contour remains selectable before independent fade");
+    desc.objects[0].a=.5f; desc.objects[0].opacity=.25f;
+    auto faded=Scene3DSnapshot::Create(desc,error);
+    Check(faded && !faded->PickScreen(Pointf(114,50),Size(200,100),camera).hit &&
+          faded->PickScreen(Pointf(110,50),Size(200,100),camera).hit,
+          "Gaussian pick applies the same multiplied-alpha threshold as fragment coverage");
+    desc.objects[0]=object; desc.objects[0].selectable=false;
+    auto unselectable=Scene3DSnapshot::Create(desc,error);
+    Check(unselectable && !unselectable->PickScreen(Pointf(100,50),Size(200,100),camera).hit,
+          "Gaussian selectability remains independent from visible geometry");
+    auto front=point; front.position.z=.5;
+    desc.objects[0]=object; desc.objects[0].splats=Scene3DSplats::Create({point,front},error);
+    auto layered=Scene3DSnapshot::Create(desc,error);
+    Check(layered && layered->PickScreen(Pointf(100,50),Size(200,100),camera).splat==1,
+          "Gaussian nearest pick preserves original unsorted resource point index");
+    const auto mesh=Scene3DMesh::Create({Vertex({-2,-2,0}),Vertex({2,-2,0}),Vertex({0,2,0})},{0,1,2},error);
+    desc.objects={object,Object("mesh:front",mesh,{0,0,1})};
+    auto occluded=Scene3DSnapshot::Create(desc,error);
+    Check(occluded && occluded->PickScreen(Pointf(100,50),Size(200,100),camera).id=="mesh:front",
+          "Gaussian screen pick respects actual opaque mesh occlusion");
+    desc.objects[0].local=Scene3DMatrix::Translation({0,0,2});
+    auto foreground=Scene3DSnapshot::Create(desc,error);
+    Check(foreground && foreground->PickScreen(Pointf(100,50),Size(200,100),camera).id==object.id,
+          "Gaussian in front of the mesh wins at its rendered depth plane");
+    desc.objects={object,object}; desc.objects[1].id="gaussian:second";
+    auto tied=Scene3DSnapshot::Create(desc,error);
+    Check(tied && tied->PickScreen(Pointf(100,50),Size(200,100),camera).id==object.id,
+          "Gaussian equal-depth object ties retain descriptor order");
+    auto miss=scene->PickScreen(Pointf(-1,50),Size(200,100),camera);
+    Check(!miss.hit && miss.scene_revision==43 && miss.camera_revision==87,
+          "Gaussian outside-view miss retains source and camera revisions");
+    desc.objects={object}; desc.objects[0].mesh=mesh;
+    Check(!Scene3DSnapshot::Create(desc,error),"scene rejects simultaneous Gaussian and mesh geometry");
+    desc.objects[0]=object;
+    desc.objects[0].material.color_texture=Scene3DTexture::Create(Size(1,1),{255,255,255,255},Scene3DTextureColorSpace::Srgb,error);
+    Check(!Scene3DSnapshot::Create(desc,error),"Gaussian scene rejects an inapplicable mesh texture");
+    desc.objects[0]=object; desc.objects[0].parent_id="group";
+    auto group=Object("group",{}); group.local=Scene3DMatrix::Translation({.5,0,0})*Scene3DMatrix::Scale({2,3,1});
+    desc.objects.push_back(group);
+    auto parented=Scene3DSnapshot::Create(desc,error);
+    Check(parented && parented->GetObjects()[1].bounds.empty &&
+          parented->PickScreen(Pointf(125,50),Size(200,100),camera).id==object.id,
+          "geometry-free grouping preserves actual transformed Gaussian picks");
+    desc.objects[1].visible=false;
+    auto hidden=Scene3DSnapshot::Create(desc,error);
+    Check(hidden && hidden->GetBounds().empty && !hidden->PickScreen(Pointf(125,50),Size(200,100),camera).hit,
+          "hidden Gaussian parent removes fitting and picking without source edits");
+    std::vector<Scene3DSplat> half(Scene3DMaxSplats/2,point);
+    object.splats=Scene3DSplats::Create(half,error); object.parent_id.Clear();
+    desc.objects={object,object}; desc.objects[1].id="instance:second";
+    Check(bool(Scene3DSnapshot::Create(desc,error)),"exact instanced Gaussian scene budget is admitted");
+    Scene3DObjectDesc extra; extra.id="one-too-many"; extra.splats=cloud; desc.objects.push_back(extra);
+    Check(!Scene3DSnapshot::Create(desc,error),"shared-resource Gaussian instances count toward the aggregate draw budget");
+}
+
 }
 
 CONSOLE_APP_MAIN
 {
-	MatrixTests(); MeshTests(); SceneTests(); CameraTests(); CameraAxisTests(); CameraProjectionTests(); PickTests();
+	MatrixTests(); MeshTests(); SceneTests(); CameraTests(); CameraAxisTests(); CameraProjectionTests(); PickTests(); MaterialCameraTests(); MaterialPickTests();
+	GaussianResourceTests(); GaussianProjectionTests(); GaussianScenePickTests();
 	Cout() << "RenderSceneTest: " << checks << " checks, " << failures << " failures" << EOL;
 	if(!checks || failures) SetExitCode(1);
 }

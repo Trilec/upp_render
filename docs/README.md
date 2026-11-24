@@ -7,7 +7,6 @@
 - [Release checklist](RELEASE_CANDIDATE.md)
 - [Exact executable and qualification](qualification/README.md)
 - [Physical AA, OS IME and DPI checks](WINDOWS_VULKAN_MANUAL_ACCEPTANCE.md)
-- [Current work](ACTIVE_WORK.md)
 - [Qualified Ui dependency correction](dependencies/README.md)
 
 ## Application and drawing guides
@@ -24,7 +23,9 @@
 
 [Ui3DView — objective, API, usage, gotchas, build and tested status](UI3DVIEW.md)
 
-The latest Release demo is `bin/win64/Ui3DViewDemo.exe`. The linked guide is the
+[Build and test the embedded viewer on macOS](UI3DVIEW.md#first-macos-run).
+
+The Windows Release demo is `bin/win64/Ui3DViewDemo.exe`. The linked guide is the
 single maintained document for the 3D control and its optional native UI.
 
 ## Design and later work

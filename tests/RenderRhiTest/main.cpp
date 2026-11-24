@@ -140,6 +140,12 @@ static bool TestHandles()
 	GpuNativeWindowDesc win32_window;
 	win32_window.kind = GpuNativeWindowKind::Win32;
 	win32_window.handle = 1;
+	GpuNativeWindowDesc metal_layer;
+	metal_layer.kind = GpuNativeWindowKind::MetalLayer;
+	if(!Check(!metal_layer.IsValid(), "Metal layer requires a handle")) return false;
+	metal_layer.handle = 1;
+	if(!Check(metal_layer.IsValid() && DumpGpuNativeWindowDesc(metal_layer) == "MetalLayer handle=set",
+	          "Metal layer descriptor identifies its kind without exposing the pointer")) return false;
 	return Check(!buffer.IsValid(), "default buffer invalid") &&
 	       Check(!texture.IsValid(), "default texture invalid") &&
 	       Check(!shader.IsValid(), "default shader invalid") &&

@@ -6,7 +6,7 @@ keep detailed test output with build artifacts instead of adding handoff or qual
 
 **Repository:** `E:\apps\github\upp_render`  
 **Latest demo:** `E:\apps\github\upp_render\bin\win64\Ui3DViewDemo.exe`  
-**Implementation and test status checked:** 1 November 2026.
+**Platform preparation checked:** 23 November 2026. Windows results and earlier qualifications are dated below.
 
 [Quick start](#quick-start) · [API](#core-api) · [Events and selection](#events-and-selection) ·
 [Native UI](#optional-native-ui) · [Gotchas](#gotchas-and-rendering-contracts) ·
@@ -15,16 +15,17 @@ keep detailed test output with build artifacts instead of adding handoff or qual
 ## Objective and boundaries
 
 Provide a reusable native U++ control for a depth-tested Vulkan scene, with
-orbit/pan/zoom, perspective and orthographic cameras, geometric picking, display
-modes and optional standard viewport controls. An application can embed one view
+orbit/pan/zoom, perspective and orthographic cameras, immutable textured materials,
+material-aware geometric picking, immutable covariance Gaussian clouds, authored
+camera roll/film gates, display modes and optional standard viewport controls. An application can embed one view
 or several views of the same immutable scene.
 
 | Layer | Responsibility and source |
 | --- | --- |
-| `RenderScene` | Immutable meshes/snapshots, hierarchy, transforms, bounds, camera mathematics and CPU picking. [Scene3D.h](../render/RenderScene/Scene3D.h); depends on `Core`, with no GUI or GPU ownership. |
+| `RenderScene` | Immutable meshes/textures/Gaussian resources and material snapshots, hierarchy, transforms, bounds, camera mathematics and CPU picking. [Scene3D.h](../render/RenderScene/Scene3D.h); depends on `Core`, with no GUI or GPU ownership. |
 | `Ui3DView` | One view's camera, options, selection highlight, navigation and retained GPU content. [Ui3DView.h](../render/Ui3DView/Ui3DView.h); usable without the `Ui` library. |
 | `Ui3DViewUi` | Optional `Ui3DViewport` wrapper with toolbar, orientation/navigation controls and annotations. [Ui3DViewport.h](../render/Ui3DViewUi/Ui3DViewport.h). |
-| Renderer | `GpuRender` owns native hosting/presentation; `RenderRhi` owns backend-neutral graphics contracts; `RenderVulkan` implements the current Windows backend. Reuse these layers when extending the view. |
+| Renderer | `GpuRender` owns native hosting/presentation; `RenderRhi` owns backend-neutral graphics contracts; `RenderVulkan` creates Win32 and Metal-layer surfaces through the same Vulkan renderer. Reuse these layers when extending the view. |
 | Application | Document, selection decisions, saved cameras, undo, import, animation/playback clock, persistence, inspector and pane layout. The [demo](../examples/Ui3DViewDemo/) demonstrates this ownership. |
 
 All control methods and callbacks run on the GUI thread. Immutable scene
@@ -128,13 +129,13 @@ value snapshots, except that `GetScene()` returns shared immutable ownership.
 | --- | --- |
 | `SetScene(scene, error)` / `GetScene()` | Binds `std::shared_ptr<const Scene3DSnapshot>`. Same pointer is a no-op except that it cancels an active pointer tool; a different pointer changes binding identity and cancels navigation. Null explicitly clears the scene. |
 | `SetCamera(camera, error)` / `GetCamera()` | Validates a complete `Scene3DCamera`, cancels an active drag and advances the control's camera revision. Even identical values advance that revision; avoid calling from every paint or poll. |
-| `SetOptions(options, error)` / `GetOptions()` | Controls palette, grid/axes/selection visibility, grid plane/spacing, lighting and legacy display flags. Invalid options preserve the previous state. |
+| `SetOptions(options, error)` / `GetOptions()` | Controls palette, grid/axes/selection visibility, grid plane/spacing, lighting, physical film/safe guides and legacy display flags. Invalid options preserve the previous state. |
 | `SetDisplayMode(mode, error)` / `GetDisplayMode()` | `Ui3DDisplayMode::{Solid, Wireframe, SolidEdges}`. Prefer this to manipulating the legacy flags; `wireframe` wins when both legacy flags are set. |
 | `SetViewDirection(direction, error)` | Applies an exact canonical pose, orthographic projection and matching grid atomically: Front/Back → XY, Right/Left → YZ, Top/Bottom → XZ. `User` is a classification, not an assignable preset. |
 | `SetOrthographic(on, error)` | Switches projection while preserving vertical framing at the target plane. |
 | `SetNavigationTool(tool, error)` / `GetNavigationTool()` | `Ui3DNavigationTool::{Select, Orbit, Pan}` determines future left presses. An existing gesture or pending click keeps the mode selected at its original press. |
 | `SetSelection(ids, error)` / `GetSelection()` | Projects accepted `std::vector<String>` IDs into this view. IDs must exist in the current scene and be unique. Does not send a selection request. |
-| `FitAll()` / `FitSelection()` / `FitBounds(bounds)` | Return `bool`; require usable viewport dimensions and bounds. Selection framing uses selected objects' own visible mesh bounds and falls back to scene bounds if none remain. |
+| `FitAll()` / `FitSelection()` / `FitBounds(bounds)` | Return `bool`; require usable viewport dimensions and bounds. Selection framing uses selected objects' own visible mesh or Gaussian bounds and falls back to scene bounds if none remain. |
 | `Pick(Pointf)` / `IsCurrentPick(pick)` | Returns a geometric hit or miss and validates that the result still belongs to this view, scene binding, camera and viewport size. |
 | `GetSceneBindingRevision()` | Per-view binding identity; independent of the application's scene revision. |
 | `IsNavigating()` / `CancelNavigation(reason)` | Queries or cancels the active navigation transaction, restoring its starting camera. |
@@ -143,12 +144,25 @@ value snapshots, except that `GetScene()` returns shared immutable ownership.
 `Ui3DViewOptions` contains `background`, `grid_color`, `selection_color`,
 `edge_color`; `show_grid`, `show_axes`, `show_selection`, `lighting`;
 `wireframe`, `solid_edges`; `adaptive_grid`, `grid_plane`, `grid_extent` and
-`grid_spacing`. Decoration colours are sRGB bytes with alpha **255**. Extent is
-1–100 cells each side; fixed spacing is finite 0.001–10000 metres.
+`grid_spacing`; `show_gate`, `show_safe`, `matte_opacity`, `action_safe`,
+`title_safe`, `matte_color`, `gate_color` and `safe_color`. Decoration colours
+are sRGB bytes with alpha **255**. Extent is 1–100 cells each side; fixed spacing
+is finite 0.001–10000 metres. The independent matte opacity is finite 0–1;
+safe fractions satisfy `0 < title_safe <= action_safe <= 1`.
 `Light()` and `Dark()` return complete initial option values.
 
 `Ui3DViewStats` exposes `rendered_frames`, `mesh_uploads`, `uploaded_bytes`,
-`depth_rebuilds`, `resident_meshes`, `draws_last_frame`, `target_size` and `depth_active`.
+`depth_rebuilds`, `resident_meshes`, `draws_last_frame`, `target_size` and
+`depth_active`. Material diagnostics add `texture_uploads`, `resident_textures`,
+`resident_texture_bytes`, `working_target_rebuilds`, `blended_draws_last_frame`,
+`textured_draws_last_frame` and `gate_draws_last_frame`. Resident texture bytes
+count immutable asset pixels; they exclude the neutral white texel and working
+color/depth targets.
+Gaussian diagnostics add `splat_uploads`, `splat_sort_updates`,
+`splat_sort_us_last_frame`, `resident_splat_bytes`, `resident_splat_resources`,
+`resident_splat_instances`, `splat_draws_last_frame` and `splats_last_frame`.
+The byte count covers actual retained vertex/index buffers; sort duration is
+native CPU time and does not measure GPU execution or scan-out.
 
 ### Scene and camera values
 
@@ -156,7 +170,8 @@ value snapshots, except that `GetScene()` returns shared immutable ownership.
   `MakeBox(full_size, error)`. Factories validate and copy arrays; published data
   has no mutable alias. Reuse shared const meshes in later snapshots.
 - A `Scene3DObjectDesc` contains stable `id`, optional `parent_id`, `local`
-  transform, shared mesh, `visible`, `selectable` and linear RGBA. Transform-only
+  transform, shared mesh or Gaussian resource, `visible`, `selectable`, linear
+  material RGBA, independent `opacity` and mesh-only `Scene3DMaterial`. Transform-only
   parent nodes are supported. `Scene3DSceneDesc` contains a nonzero revision and
   ordered objects; `Scene3DSnapshot::Create` validates the complete candidate.
 - Coordinates are **metres, right-handed, Y up**, with asset forward +Z. Matrices
@@ -164,9 +179,10 @@ value snapshots, except that `GetScene()` returns shared immutable ownership.
   Camera yaw zero looks toward −Z. Angles are radians; screen origin is upper-left
   and projected depth is Vulkan 0–1. Do not add an extra OpenGL-style Y/depth conversion.
 - `Scene3DCamera` exposes `target`, `yaw`, `pitch`, `distance`, `orthographic`,
-  `fov_y`, `ortho_height`, `near_plane`, `far_plane` and `revision`.
-  `Validate`, `GetEye`, `GetBasis`, `Project`, `WorldRay`, `Orbit`, `Pan`, `Dolly`,
-  `Fit`, `AlignTo`, `SetOrthographic` and `GetViewDirection` provide the value API.
+  `fov_y`, `ortho_height`, `near_plane`, `far_plane`, `roll`, `gate_aspect` and
+  `revision`. `Validate`, `GetEye`, `GetBasis`, `Project`, `WorldRay`, `Orbit`,
+  `Pan`, `Dolly`, `Fit`, `AlignTo`, `SetOrthographic`, `SetLookAt`, `GetGateRect`
+  and `GetViewDirection` provide the value API.
   Pan uses screen pixels; positive logarithmic dolly moves closer.
 - `Scene3DCamera::AlignTo` changes pose only. The control's `SetViewDirection`
   additionally applies projection/grid policy. Projection conversion preserves
@@ -174,11 +190,115 @@ value snapshots, except that `GetScene()` returns shared immutable ownership.
   necessary; dolly preserves authored near/far planes. Neutral camera mutators
   advance revision only for actual changes; control/model revisions are separate.
 
+
+### Textures, coverage and camera gates
+
+Create a `Scene3DTexture` from a complete top-down array of straight RGBA8 bytes:
+
+`Scene3DTexture::Create(Size, const std::vector<byte>&, Scene3DTextureColorSpace, error)`
+
+The immutable factory copies the array. `GetSize()`, `GetPixels()` and
+`GetColorSpace()` expose only read access; an importer may discard its original
+buffer. `Srgb` decodes RGB for linear shading, while `Linear` leaves RGB linear.
+Alpha is linear in either encoding. Mesh UV coordinates are V-up. The native
+sampler uses bilinear filtering and either clamp-to-edge or `repeat_uv`.
+The renderer performs no file access, image decoding or asset resolution.
+
+A material contains `color_texture`, `alpha_mode`, `alpha_cutoff`, `unlit`,
+`repeat_uv` and `double_sided`. An absent texture is white. The object and
+vertex RGB factors are linear; the sampled material is multiplied by both.
+Coverage has a deliberate order:
+
+| Material mode | Material coverage before independent object opacity |
+| --- | --- |
+| `Opaque` | 1, ignoring texture, vertex and material-factor alpha |
+| `Mask` | Discard when combined material alpha is below the cutoff; survivors have coverage 1 |
+| `Blend` | Combined texture × vertex × material-factor alpha |
+
+The resulting coverage is multiplied by the object's independent `opacity`.
+This lets an opaque character fade without changing its imported material and
+lets a cutout retain its holes while fading. Cutoff equality survives; at cutoff
+zero, a zero-alpha texel survives. Zero final coverage neither draws nor picks.
+
+Opaque and masked surfaces with opacity 1 write depth. Blended or faded surfaces
+test depth without writing it and are stably sorted far to near by object-bounds
+centre. This is ordinary surface compositing, not order-independent transparency:
+split intersecting translucent meshes into suitable surfaces in the host.
+A false `double_sided` culls back-facing triangles in both rasterization and CPU
+picking. The default is true for compatibility with earlier snapshots.
+
+Shading and composition happen in linear space. An sRGB target encodes in the
+attachment. An UNORM display target uses a retained sRGB working attachment plus
+a GPU-only encoding resolve; the renderer never substitutes a CPU-rendered image.
+The standard decorations are sRGB palette bytes and are converted consistently.
+
+`camera.SetLookAt(eye, aim, up, error)` retains authored up/roll, including exact
+pole views, and rejects parallel/zero up atomically. A positive `gate_aspect`
+fits a centred physical gate in the viewport; zero uses the full viewport.
+`fov_y` and `ortho_height` describe the physical gate, and the viewport may show
+overscan. Projection, picking rays, panning and fitting use the same gate rule.
+`GetGateRect(size)` provides its bounded pixel rectangle.
+
+Set `show_gate` for matte/film-boundary display and `show_safe` for action/title
+guides. These view-only decorations do not change the camera or document.
+`ComputeUi3DViewGateLayout` provides the same pure bounded rectangles used by the
+GPU renderer. Guides load the completed target and use the retained native 2D
+renderer; they are not GDI overlays over the 3D window.
+
+### Gaussian covariance resources
+
+`Scene3DSplats::Create(const std::vector<Scene3DSplat>&, String& error)` validates
+and copies its input into shared immutable ownership. `GetSplats()` and
+`GetBounds()` are read-only. Each `Scene3DSplat` contains its local `position`,
+six covariance values in **xx, xy, xz, yy, yz, zz** order and straight linear
+`r/g/b/a`. Covariance is in squared metres; it is not an axis-aligned radius
+or a proxy mesh. RGB/alpha must be finite 0–1. The factory checks finite,
+positive-semidefinite covariance, allowing zero/rank-deficient density.
+
+Set `Scene3DObjectDesc::splats` to that resource. A node may contain a mesh or
+splats, never both; a transform-only parent remains valid. The scene admits at
+most `Scene3DMaxSplats` (150,000) **instanced** points, so two instances of an
+80,000-point resource exceed the budget even though source storage is shared.
+The renderer performs no PLY/file decoding or asset lookup.
+
+Projection uses the complete local-to-camera transform and its perspective
+Jacobian: parent/nonuniform scale, camera up/roll and the physical gate all affect
+the same screen covariance. `Scene3DProjectSplat` provides the CPU projection
+and `Scene3DSplatProjection::Coverage(Pointf)` evaluates its density.
+`Scene3DSplatPixelVariance` adds 0.25 squared pixels for raster filtering.
+The native shader expands the exact projected ellipse into a GPU quad and
+discards density below `Scene3DSplatAlphaCutoff` (1/255). It computes eigenvalues
+in scale-normalized covariance to avoid overflowing valid large float products.
+Source RGB is multiplied by the object's linear factor; coverage is density ×
+point alpha × object alpha × independent object opacity.
+
+Use `Scene3DSnapshot::PickScreen(point, viewport, camera)` for a mixed mesh/cloud
+scene. It applies the same projection, clipping and effective coverage and
+compares visible/selectable hits with the ordinary mesh ray result.
+`Scene3DPick::splat` is the original resource point index, independent of GPU
+sorting; mesh hits retain `triangle`. The control's `Pick` uses this route and
+also respects an opaque film matte. These remain CPU analytic picks, not GPU
+readback or physical contact results.
+
+Gaussian fragments test mesh depth without writing depth. Each instance has a
+stable far-to-near index order; immutable source vertex data is reused within
+a view. A changed transformed view direction re-sorts. Pure camera translation,
+FOV or roll does not alter depth order. Hide/delete/replacement/close releases
+unused resources even if another CPU owner still retains the source.
+At the limit the current four-vertex/six-index representation uses 264 bytes per
+point (39,600,000 bytes for one 150,000-point instance). Additional instances
+share source vertices but need their own sorted indices.
+
+Transparent scene objects are still ordered by their bounds centres. Separate
+intersecting clouds are not globally interleaved order-independent transparency.
+The finite admission limits are not precision or frame-rate guarantees: the CPU
+uses doubles and GPU attributes/calculations use float32.
+
 ## Events and selection
 
 `WhenSelectionRequest(const Ui3DSelectionRequest&)` asks the application to decide.
 Its `pick` contains `hit`, `id`, `world_point`, `world_normal`, `distance`,
-`triangle`, scene/camera revisions, the scene binding and sampled viewport size.
+`triangle`, `splat`, scene/camera revisions, the scene binding and sampled viewport size.
 Use `IsCurrentPick()` before accepting delayed results, including misses.
 Interpret `extend` (Shift) and `toggle` (Ctrl) against your own selection model;
 the quick-start example intentionally implements replacement selection only.
@@ -244,9 +364,11 @@ Destruction releases capture and suppresses pending callbacks; the host must
 discard its preview when disposing the control. Callbacks may destroy/rebind the
 view. Frozen scene ownership remains valid through the terminal notification.
 
-This seam adds no manipulation drawing or renderer behavior. **Source-only:
-new pointer-tool coverage has been authored in Ui3DViewTest but has not yet
-been compiled or executed.** Earlier qualification counts below predate it.
+This seam adds no manipulation drawing or renderer behavior. Its existing
+pointer-tool/preview cases passed in the 18 November Release `Ui3DViewTest`
+285-check run. Those cases use direct control handlers; the separate guarded
+OS-input portion records actual paired presses and releases. Historical Debug
+counts below predate this coverage and the owned native host.
 
 ### Input
 
@@ -336,26 +458,33 @@ implement disk persistence or general document undo; those remain application re
    selection when switching documents. A reused ID can immediately highlight a
    different document's object. Transform-only parents do not implicitly select
    or frame their descendants; expand group selection in the application.
-3. **Picking is geometric.** It is two-sided CPU triangle picking with bounds
-   rejection, including in wireframe. Nonselectable objects are skipped and do
-   not block selection of selectable geometry behind them. It is not rendered-pixel,
-   material-alpha, physics or contact picking.
+3. **Picking is material-aware geometric picking.** CPU triangles use bounds
+   rejection, the material's face-culling rule and bilinearly sampled alpha
+   coverage, including in wireframe. Nonselectable objects are skipped and do
+   not block selection of selectable geometry behind them. This remains CPU
+   geometry picking; Gaussian hits use transformed analytic screen coverage.
+   It is not GPU rendered-pixel, physics or contact picking.
 4. **Fit after layout.** The control needs nonzero dimensions. `SetCamera` can
    trigger cancellation callbacks and advances the control revision; avoid
    camera feedback loops and do not equate its revision with your model revision.
-5. **Rendering is currently opaque and untextured.** Vertex/object RGB is linear
-   0–1 and alpha must be 1. UVs are retained but unused by this renderer. SolidEdges
-   draws all solid depth before neutral edges; selection adds uniform mesh-edge
+5. **Keep material alpha and object opacity separate.** Vertex/object RGBA
+   factors are finite linear 0–1. Opaque, Mask and Blend resolve material coverage
+   before independent object opacity; see the table above. SolidEdges and
+   selection respect the material's alpha test/fade and use uniform mesh-edge
    highlighting without recolouring faces. Triangulation edges can be visible;
    this is not a silhouette or authored-quad edge extractor.
 6. **Keep geometry local.** CPU calculations use doubles and GPU data uses
    float32. Large coordinates with small details can diverge visually from CPU
    picking. Validation budgets are not precision or frame-rate guarantees.
    Snapshot limits are 100,000 objects, 2 million instanced vertices and 6 million
-   instanced indices. Per-view depth targets are limited to 16,777,216 pixels.
+   instanced indices, 150,000 instanced Gaussian points and 512 MiB of distinct
+   immutable texture pixels. Each texture
+   is at most 16384 pixels per dimension and 32 million pixels total. Per-view
+   color/depth targets are limited to 16,777,216 pixels.
 7. **Retain resources and invalidate deliberately.** Camera/selection changes do
-   not reupload unchanged meshes. GPU buffers are cached per view, not shared
-   across views merely because CPU meshes/context are shared. Adaptive grids use
+   not reupload unchanged meshes or immutable textures. GPU resources are cached
+   per view, not shared across views merely because CPU scene values/context are
+   shared. Gaussian source and per-instance ordering follow the same ownership rule. Unreferenced asset buffers/textures are released on scene rebinding. Adaptive grids use
    bounded 1/2/5 spacing and a cell-snapped centre; unchanged layout retains buffers.
    There is no idle animation timer; publish evaluated scene snapshots from the
    application's playback clock. Presentation is synchronous, including queue
@@ -373,25 +502,50 @@ implement disk persistence or general document undo; those remain application re
    refreshes use equality guards/selective repaint. See
    [Ui3DViewport.cpp](../render/Ui3DViewUi/Ui3DViewport.cpp) and
    [GpuCtrl.cpp](../render/GpuRender/GpuCtrl.cpp).
+   Both surfaces use the reusable public-`Ctrl` host
+   [Win32ChildSurface](../render/RenderPlatformWin32/Win32ChildSurface.h).
+   It keeps the full logical surface size and clips only its owned HWND region.
+   In U++18468 the old `DHCtrl` GDI exclusion used the whole logical rectangle,
+   which suppressed fixed-header painting when a child scrolled behind it.
+   The owned Win32 class avoids that exclusion without modifying the installed
+   framework or copying private U++ registration. Normal `WS_CLIPCHILDREN`
+   clipping honors the actual region. Lifecycle and fixed chrome must be checked
+   with absolute composed pixels, not only differences between two screenshots.
 
-Transform/manipulation gizmos, textures/transparency, import adapters,
-deformation/skinning, accelerated picking, depth/normal/ID export and additional
-backends require further implementation. The orientation control already exists.
-The [HTML mockup](ui3dview-design/Ui3DView-Mockup.html) is a visual reference;
-current headers and this guide describe the implemented contract.
+The view exposes host-owned pointer-tool and preview-scene seams; importer,
+deformation/skinning and document commands remain host responsibilities. Native
+accelerated picking, depth/normal/ID export and additional backends require
+further implementation. Gaussian rendering is implemented as described above. The orientation control already exists.
+The headers and this guide describe the implemented control.
+
+## First macOS run
+
+The first target is the embedded Ui3DView used by CineStage. The Cocoa host attaches a Metal layer to the U++ window. Vulkan creates a surface from that layer and uses the same scene, materials and SPIR-V as Windows. The Windows whole-window compositor, its DirectWrite provider and its native screen-capture tests have separate platform requirements.
+
+1. Use the existing Cocoa U++ installation with `umk`, the `uppsrc` directory and a configured Apple Clang build method supporting C++17. The Windows reference used U++ 18468. The local handoff ZIP contains the working renderer and the Ui and Animation source packages as siblings. For separate checkouts the reference revisions are Ui `cce7ecd25f72be926204beb4ea35a6ed550991a4` and Animation `4a01b6f4e2a9f122ea1a93457b62a4054d01f970`.
+2. Install the macOS Vulkan SDK with the loader and a compatible driver, then source its `setup-env.sh` in Terminal. The renderer requires Vulkan 1.3, dynamic rendering and synchronization2. On Apple Silicon with macOS 26 or later the SDK offers KosmicKrisp. MoltenVK is the SDK option for compatible older Macs. Driver choice and SDK environment setup are described in the [LunarG macOS guide](https://vulkan.lunarg.com/doc/view/latest/mac/getting_started.html).
+3. From the extracted `upp_render` directory, run the following commands. Set `UMK` if the tool is outside PATH and `UPP_METHOD` if the installed build method has another name. The script also accepts `UPP_UI` and `UPP_ANIMATION` for separate checkout roots.
+
+```bash
+export UPP_SRC="/path/to/upp/uppsrc"
+bash tools/test-macos.sh --validation
+```
+
+The script builds and runs the scene, camera and RHI checks, creates a Vulkan device, exercises two independent GPU controls through hide/show and teardown, and verifies depth-tested presentation in the actual demo in single- and four-pane layouts. Build output and runtime logs go under `build/macos`. Omit `--validation` to run without the SDK validation layer. A local run works before the Klick tunnel is connected.
+
+For visual acceptance, run `build/macos/Ui3DViewDemo.app/Contents/MacOS/Ui3DViewDemo` from the same SDK shell. Check that the scene appears before clicking Fit, orbit through the orientation overlay, switch between single and four panes, resize, and reopen the window. Check label visibility, picking under the cursor and flicker on each available display scale. Capture the Mac model, OS, selected Vulkan driver and the first failing log or visual observation before promoting the build to CineStage.
 
 ## Build and run
 
 The recorded Windows toolchain is C++17, `E:/upp-18468/umk.exe`,
 `CLANGx64_Vulkan.bm` and Vulkan SDK `C:/VulkanSDK/1.4.350.0`.
-The demo builds against `build/qualified-ui-main-text`, including its refreshed
-UiIcons catalogue. Confirm those paths exist when moving to another machine.
+The 23 November viewer build used the Ui and Animation revisions listed above. The older Windows whole-UI showcase uses a separately pinned Ui export.
 
 ```powershell
 $ui3dRoot = 'E:/apps/github/upp_render'
 $ui3dUmk = 'E:/upp-18468/umk.exe'
 $ui3dMethod = "$ui3dRoot/CLANGx64_Vulkan.bm"
-$ui3dNests = 'E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/tests,E:/apps/github/upp_render/tools,E:/apps/github/upp_render/build/qualified-ui-main-text,E:/apps/github/upp_animation,E:/upp-18468/uppsrc'
+$ui3dNests = 'E:/apps/github/upp_render/render,E:/apps/github/upp_render/examples,E:/apps/github/upp_render/tests,E:/apps/github/upp_render/tools,E:/apps/github/upp_Ui,E:/apps/github/upp_animation,E:/upp-18468/uppsrc'
 
 & $ui3dUmk $ui3dNests Ui3DViewDemo $ui3dMethod --out-dir "$ui3dRoot/build/cache-ui3d-release" -rH4 +GUI "$ui3dRoot/build/Ui3DViewDemo.exe"
 ```
@@ -420,6 +574,23 @@ and `+CONSOLE`: `RenderSceneTest`, `Ui3DViewCameraTest`, `RenderRhiTest`,
 `RenderVulkan3DTest`, `RenderVulkanTest` and `RenderVulkanGraphicsTest`.
 Validation mode requires the developer validation layers.
 
+`Ui3DMaterialTest` exercises the production `Ui3DView` renderer on small owned
+Vulkan targets. It compares texture orientation, declared color spaces, each
+coverage mode, independent fade, depth/culling, camera roll, physical guides and
+retained allocations. Its Gaussian cases add covariance projection, anisotropic
+parent scale/roll, density/alpha, sorting, resource lifetime and the full point
+budget. `RenderSceneTest` separately checks immutable admission and analytic
+projection/picking against independent arithmetic. Optional `--output <build-folder>` writes bounded target
+images and a report. Those target pixels are separate evidence from desktop
+composition or final-screen capture.
+
+The five material/resolve shaders and two Gaussian shaders are checked-in GLSL
+plus SPIR-V word headers.
+Rebuild the headers with the existing UMK-built `RenderShaderBake` development
+utility and the pinned developer shaderc SDK, then review/patch the generated
+headers. The application links the word arrays and has no shaderc/SDK runtime
+DLL dependency.
+
 `--smoke` performs a finite readiness check; `--capture` saves four theme/layout
 images at 1440×900; `--capture-matrix` covers all four sizes below. Reports/captures
 normally go beside the executable; `--overlay-output` selects the motion-probe
@@ -433,9 +604,73 @@ reference checks; isolated icon swaps need compilation, not the complete runtime
 
 ## Tested status
 
-These are observed results as of 1 November 2026, not tests rerun by this
-documentation consolidation. Counts are per execution and all listed passes had
-zero failures. Windows qualification covers the connected system at its session DPI.
+### 23 November 2026 — Windows verification for macOS preparation
+
+The installed ordinary Windows Release is `bin/win64/Ui3DViewDemo.exe`, **6,893,568 bytes**, SHA-256 `e05ff750520a6cded1f9e245c4adfbdf753ba89b0886d92221ac2b063acac40b`. The ordinary and BLITZ Release builds both presented a depth-tested frame in all four panes with Vulkan validation enabled.
+
+| Windows check | Result |
+| --- | --- |
+| Scene, camera catalogue and RHI | 342, 183 and 196 checks passed, respectively. |
+| VulkanProbe and GpuCtrlPresentationTest | Device creation passed with validation. Embedded presentation, continuous refresh, hide/show and final resource release passed. |
+| Ui3DViewTest | 285 checks passed with 12 paired native presses and releases. |
+| Ui3DMaterialTest | 469 checks passed, including 105 pixel comparisons across 82 GPU frames. |
+| Installed demo workspace and overlay motion | 90 workspace checks and 25 overlay checks passed. The ordinary build sampled 35 frames with zero blank projection or caption samples. An earlier overlay invocation stopped at its foreground guard before injecting input. |
+
+The user-reported flicker remains open. The next hardware qualification is the [first macOS run](#first-macos-run).
+
+### 18 November 2026: Gaussian features and native composition
+
+These are actual Release UMK18468/bundled-Clang Windows runs against the current
+source, with no Python, CMake or shader compiler runtime in the application.
+Counts are per execution and describe distinct suites.
+
+| Test | Result | Scope |
+| --- | --- | --- |
+| `RenderSceneTest` | **342 checks, zero failures** | Gaussian immutable admission, finite/PSD covariance, independent projection arithmetic, coverage picking, source indices and instance budgets, plus existing mesh/camera tests. Runtime `exec-39568F511C15FFF0BB5A9F647966F75B`. |
+| `Ui3DMaterialTest` | **469 checks, 105 pixel comparisons, 82 GPU frames, zero failures** | Actual production Vulkan targets, including 38 Gaussian pixel cases, depth/sort/cache/cleanup and 150,000-point workload. Validation enabled with no warnings/errors. Runtime `exec-4EB925C1F2180EFDAF1B9459AE911D51`. |
+| `Ui3DViewTest` | **285 checks, zero failures** | Existing native suite with the public Win32ChildSurface host lookup; 12 actual OS presses, 12 matching releases, one owned-caption activation, cancellation/callback destruction and Vulkan cleanup. Runtime `exec-8163B148C4851DFF5B18DCC3BF79E3E1`. |
+| CineStage `UiNative` r20 | **770 checks, zero failures** | Five-mode dark/light compact/wide shell; native child clipping, actual composed pixels, four-view/close/reopen, responsive XYZ, measured scroll and shared dialogs. 94 PNGs: 64 native captures plus 30 ordinary-control reference images. Runtime `exec-CC6F1C7D0D652AAACE46FD68D232986D`. |
+
+The first GPU run exposed covariance-product overflow; the scale-normalized
+shader repair is included above. A separate uniform-mesh probe established
+attachment blend-factor precision for two low-alpha pixel cases. The oracle
+accepts ideal blending or an explicitly calculated 8-bit blend factor using the
+same original ±2 encoded-value tolerance; it does not apply a generic tolerance
+increase. See the [Vulkan blending precision contract](https://docs.vulkan.org/spec/latest/chapters/framebuffer.html#framebuffer-blending).
+Both earlier failed snapshots remain retained.
+
+The full point workload retained 39,600,000 GPU buffer bytes. Its first
+publication/render/readback took 49.6723 ms; the CPU sort was 13,147 microseconds.
+Twelve steady submissions totaled 104.5937 ms, with a largest submission of
+8.782 ms. These are native CPU wall times for one synthetic workload, not GPU
+timestamps, sustained FPS or scan-out measurements.
+
+CineStage's 30 absolute fixed-chrome comparisons each had zero differing pixels;
+60 native-region observations had no fixed-header intrusion. Quad/single,
+hide/show, destruction and facade reopen retained actual GPU content. The
+owned-window test observed display OFF to ON after a scoped display-awake request
+and restored prior thread execution flags. No power policy was changed.
+The composition suite drives handlers/projections and does not establish OS
+pointer routing. The separately rerun guarded `Ui3DViewTest` closes that native
+host risk: 12 inserted presses have 12 matching releases, including nine owned
+cleanup releases, with one successful fixture-caption activation. All existing
+foreground, target, coordinate, lifetime and paired-input guards remain intact.
+Only its test host cast/include changed from `DHCtrl` to the public
+`Win32ChildSurface` API. The 285-check total also includes direct handler/value
+cases; no new Debug/BLITZ or other-platform execution is implied.
+
+Detailed current reports, source hashes, executable identities and earlier
+failures live under `E:/apps/github/upp_cinespace/build/CineStage/unification`
+in `gaussian-review-r1`/`r2`/`r3` and `ui-review-r19`/`r20`. The installed demo was
+not rebuilt by these gates. Linux/macOS, other hardware and DPI transitions are
+not covered.
+
+### Historical 1 November 2026 baseline
+
+The following results predate the new material/Gaussian/owned-native-host work.
+They are retained history, not evidence that those later changes passed these
+specific configurations. Counts are per execution; each recorded pass had zero
+failures.
 
 | Test | Configurations and result | Coverage |
 | --- | --- | --- |
@@ -450,16 +685,16 @@ zero failures. Windows qualification covers the connected system at its session 
 | Demo overlay motion | Release + ordinary Debug: 25 each | Guarded orbit, stable HUD pixels, changing axes/text and settled idle. Pre-icon-update demo; finite sampling. |
 | Installed demo captures | Release: 16 scenarios passed and visually inspected | Dark/light × single/quad × 1440×900, 1222×773, 900×650 and 720×600. Pre-icon-update demo. |
 
-The earlier Debug+BLITZ foreground/input gap is **closed**. Both current native
+The historical Debug+BLITZ foreground/input gap was **closed**. Both recorded native
 runs exercised caption activation and deliberately armed click suppression,
 with **12 successful presses and 12 matching releases**. The harness now verifies
 client motion, positions button events explicitly and cleans up only owned input.
 Final runs: Release `exec-7BCAFBCE1865DDDCE2FE592467D8EC85`;
 Debug+BLITZ `exec-23D2661FD1406845F05685B58F90FD23`.
 
-### Current demo identity and limits
+### Historical installed demo identity and limits
 
-The installed **6,789,120-byte** demo is the icon-selector compile/link update:
+The **6,789,120-byte** demo installed on 1 November was the icon-selector compile/link update:
 
 ```text
 E:\apps\github\upp_render\bin\win64\Ui3DViewDemo.exe
@@ -472,9 +707,10 @@ results above belong to the preceding flicker-fix demo
 The later native-harness correction did not rebuild or rerun the demo.
 
 Other DPI scales, monitor transitions, other hardware, non-Windows hosting and
-screen-reader behaviour are outside these runs. Core close/reopen tests do not
-establish a separate facade close/reopen result. The overlay supports its fixed
-annotation vocabulary; the motion probe does not sample every presented frame.
+screen-reader behaviour are outside these runs. The 18 November CineStage gate
+adds facade close/reopen and contained native composition evidence, separately
+from this historical installed demo. The overlay supports its fixed annotation
+vocabulary; the motion probe does not sample every presented frame.
 
 ## Continuing development
 

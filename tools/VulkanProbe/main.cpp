@@ -12,9 +12,7 @@ static bool HasArg(const Vector<String>& args, const char *name)
 
 CONSOLE_APP_MAIN
 {
-	Vector<String> args;
-	for(int i = 1; i < __argc; ++i)
-		args.Add(__argv[i]);
+	const auto& args = CommandLine();
 
 	bool request_validation = HasArg(args, "--validation");
 	bool create_device = HasArg(args, "--create-device");

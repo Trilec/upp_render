@@ -254,20 +254,22 @@ void SetVulkanValidationTestInjection(const VulkanValidationTestInjection& injec
 void ClearVulkanValidationTestInjection();
 VulkanRuntimeDeviceDiagnostics GetVulkanRuntimeDeviceDiagnostics();
 void ClearVulkanRuntimeDeviceDiagnostics();
-VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool win32_surface,
-	bool has_surface_extension = true, bool has_win32_surface_extension = true,
+VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool native_surface,
+	bool has_surface_extension = true, bool has_native_surface_extension = true,
 	bool has_validation_layer = true, bool has_debug_utils_extension = true);
 bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool validation_b, bool surface_b,
 	const char *application_name_a = nullptr, const char *application_name_b = nullptr);
 bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
 	bool& out_debug_messenger_created, VulkanRuntimeDeviceDiagnostics& out_diag);
-bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface);
+bool TestVulkanInstanceOwnerCompatibility(bool validation, bool native_surface);
+#ifdef PLATFORM_WIN32
 bool TestVulkanSurfaceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
 	VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSurfaceOwnerCompatibility(bool validation);
 bool TestVulkanSurfaceSessionLifecycle(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result);
 bool TestVulkanSurfaceSessionPostCreateFailure(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result);
 bool TestVulkanSurfaceSessionCleanupFailure(bool validation, VulkanProcResolver resolver, VulkanSurfaceSessionAccountingResult& out_result);
+#endif
 bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag);
 bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_surface, bool test_validation, bool test_surface, VulkanRuntimeDeviceDiagnostics& out_diag);
@@ -276,9 +278,12 @@ bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, Vulk
 bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, VulkanSharedInstanceRegistryAcquireResult& dispatch_failure, VulkanSharedInstanceRegistryAcquireResult& instance_failure, VulkanSharedInstanceRegistryAcquireResult& cleanup_failure);
 bool TestVulkanSharedInstanceRegistryInvalidRelease(VulkanProcResolver resolver, VulkanSharedInstanceRegistryReleaseResult& result);
 bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInstanceLeaseTestResult& result);
+#ifdef PLATFORM_WIN32
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result);
 bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult& result);
 bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result);
+#endif
+
 
 }
 

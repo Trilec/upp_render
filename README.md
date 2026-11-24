@@ -53,13 +53,11 @@ bounds; failures in required-GPU mode are reported rather than hidden by fallbac
 [Package map](render/README.md) · [Examples](examples/README.md)
 
 For the embedded 3D viewer, use the [Ui3DView guide](docs/UI3DVIEW.md). It covers
-the control, optional native UI, demo, API, build commands and tested status.
+the control, optional native UI, demo, API and tested status. The [first macOS run](docs/UI3DVIEW.md#first-macos-run) builds the Cocoa viewport against the Vulkan SDK.
 
 ## Build and repository layout
 
-See [Windows build instructions](docs/BUILD_WINDOWS.md). Copy the
-`GitHubOut.var.example` and `CLANGx64_Vulkan.bm.example` templates into local
-configuration and set the dependency/toolchain paths. The qualified Ui revision
+See [Windows build instructions](docs/BUILD_WINDOWS.md). Use `CLANGx64_Vulkan.bm.example` for the local build method and configure the assembly nests listed in that guide. The qualified Ui revision
 is pinned in the candidate manifest; an unrelated Ui working tree is not a
 drop-in replacement for that snapshot.
 

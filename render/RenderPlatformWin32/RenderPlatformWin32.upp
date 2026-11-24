@@ -6,4 +6,8 @@ uses
 file
 	RenderPlatformWin32Internal.h,
 	RenderPlatformWin32.h,
-	RenderPlatformWin32.cpp;
+	RenderPlatformWin32.cpp,
+	Win32ChildSurface.h,
+	Win32ChildSurface.cpp,
+	Win32GpuSurface.h,
+	Win32GpuSurface.cpp;

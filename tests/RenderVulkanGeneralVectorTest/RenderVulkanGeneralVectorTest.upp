@@ -3,7 +3,7 @@ uses
 	RenderVulkan,
 	RenderSoftware;
 
-uses(CFONTS)
+uses(WIN32 CFONTS)
 	RenderFontWin32;
 
 file

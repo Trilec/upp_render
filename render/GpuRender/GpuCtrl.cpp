@@ -1,6 +1,10 @@
 #include "GpuCtrl.h"
 #include "GpuCtrlTestHooks.h"
-#include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
+#if defined(GUI_WIN)
+#include <RenderPlatformWin32/Win32GpuSurface.h>
+#elif defined(GUI_COCOA)
+#include <RenderPlatformCocoa/CocoaGpuSurface.h>
+#endif
 #include "RenderPresentation.h"
 
 namespace Upp {
@@ -26,66 +30,32 @@ bool BuildDefaultFrame(Size size, UiDisplayList& list, Rgba8& background, String
 }
 
 struct GpuCtrl::Impl {
-	class Host : public DHCtrl {
-	public:
-		Host(){NoWantFocus();} void Attach(Impl *p){impl=p;}
-		Image MouseEvent(int event, Point p, int zdelta, dword keyflags) override
-		{
-			// DHCtrl owns the native child, but semantic input belongs to the
-			// public control. Forward once, including wheel/cursor events.
-			Ptr<GpuCtrl> target = impl ? impl->owner : nullptr;
-			if(!target) return DHCtrl::MouseEvent(event, p, zdelta, keyflags);
-			const Point offset = GetScreenView().TopLeft() - target->GetScreenView().TopLeft();
-			// The callback may destroy both target and this host. No access after it.
-			return target->MouseEvent(event, p + offset, zdelta, keyflags);
-		}
-		void State(int reason) override
-		{
-			if(reason == CLOSE) {
-				if(impl) impl->OnHostState(reason);
-				DHCtrl::State(reason);
-				return;
-			}
-			DHCtrl::State(reason);
-			if(reason == OPEN && GetHWND()) {
-				// Native overlays are siblings under the U++ top window. Establish
-				// their clipping before creating the Vulkan presentation surface.
-				// Keep WS_DISABLED so semantic input stays with the Ctrl dispatcher.
-				LONG_PTR style = GetWindowLongPtr(GetHWND(), GWL_STYLE);
-				if(!(style & WS_CLIPSIBLINGS)) {
-					SetWindowLongPtr(GetHWND(), GWL_STYLE, style | WS_CLIPSIBLINGS);
-					SetWindowPos(GetHWND(), nullptr, 0, 0, 0, 0,
-					             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-				}
-			}
-			if(impl) impl->OnHostState(reason);
-		}
-		LRESULT WindowProc(UINT message,WPARAM wParam,LPARAM lParam) override { if(message==Win32GpuFrameClock::Message()){
-			if(impl&&impl->clock.Consume(wParam)) {
-				Ptr<Host> alive(this);
-				// Continuous paint can starve low-priority WM_TIMER on a vsynced surface.
-				// Service ordinary U++ timers before invalidating again, as GpuTopWindow does.
-				if(!impl->timer_callback_active) {
-					impl->timer_callback_active=true;
-					TimerProc(msecs());
-					if(alive&&alive->impl) alive->impl->timer_callback_active=false;
-				}
-				if(alive&&alive->impl&&IsWindowVisible(alive->GetHWND())&&
-				   !IsIconic(GetAncestor(alive->GetHWND(),GA_ROOT))) alive->Refresh();
-			}
-			return 0;
-		} if(message==WM_ERASEBKGND)return 1; if(message==WM_PAINT){PAINTSTRUCT ps;HWND hwnd=GetHWND();HDC dc=BeginPaint(hwnd,&ps);bool gpu_painted=impl&&impl->OnHostPaint();if(!gpu_painted)FillRect(dc,&ps.rcPaint,GetSysColorBrush(COLOR_WINDOW));EndPaint(hwnd,&ps);return 0;} return DHCtrl::WindowProc(message,wParam,lParam); }
-	private: Impl *impl=nullptr;
-	};
-	Impl(GpuCtrl& o):owner(&o){host.Attach(this);} ~Impl(){destroying=true;StopGpuSession();}
-	bool IsNativeHostReady() const { HWND hwnd=const_cast<Host&>(host).GetHWND();if(!hwnd||!IsWindow(hwnd))return false;DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);return pid==GetCurrentProcessId(); }
-	bool IsGpuReady() const { return gpu_ready&&presenter.IsReady(); }
-	String GetGpuError() const { if(!api_error.IsEmpty())return api_error;if(!session_error.IsEmpty())return session_error;if(!presentation_error.IsEmpty())return presentation_error;return presenter.GetError(); }
-	Size GetNativeHostSize() const { HWND hwnd=const_cast<Host&>(host).GetHWND();RECT r{};if(!hwnd||!GetClientRect(hwnd,&r))return Size(0,0);return Size(max(0,(int)(r.right-r.left)),max(0,(int)(r.bottom-r.top))); }
+#if defined(GUI_WIN)
+	using Host = Win32GpuSurface;
+#elif defined(GUI_COCOA)
+	using Host = CocoaGpuSurface;
+#endif
+	Impl(GpuCtrl& ctrl) : owner(&ctrl)
+	{
+		host.WhenState = [this](int reason) { OnHostState(reason); };
+		host.WhenPaint = [this] { return OnHostPaint(); };
+	}
+	~Impl() { destroying = true; StopGpuSession(); }
+	bool IsNativeHostReady() const { return host.IsNativeHostReady(); }
+	bool IsGpuReady() const { return gpu_ready && presenter.IsReady(); }
+	String GetGpuError() const
+	{
+		if(!host.GetSurfaceError().IsEmpty()) return host.GetSurfaceError();
+		if(!api_error.IsEmpty()) return api_error;
+		if(!session_error.IsEmpty()) return session_error;
+		if(!presentation_error.IsEmpty()) return presentation_error;
+		return presenter.GetError();
+	}
 	bool OnHostPaint()
 	{
+		host.SyncGeometry();
 		if(!IsGpuReady()) return false;
-		Size requested_size=GetNativeHostSize();
+		Size requested_size=host.GetDrawableSize();
 		if(custom_content) {
 			UiDisplayList empty; String error;
 			if(presenter.Present(requested_size, empty, Rgba8(), error)) { presentation_error.Clear(); return true; }
@@ -104,32 +74,71 @@ struct GpuCtrl::Impl {
 		if(presenter.Present(requested_size,list,background,error)){presentation_error.Clear();return true;}
 		presentation_error=error.IsEmpty()?presenter.GetError():error;return false;
 	}
-	void RequestGpuRefresh(){if(IsNativeHostReady())host.Refresh();}
+	void RequestGpuRefresh(){host.SyncGeometry();if(IsNativeHostReady())host.RequestNativeRefresh();}
 	void RetryGpuInit(){if(destroying)return;init_attempted=false;ClearError();if(host_ready&&!gpu_ready)StartGpuSession();}
 	void SetBackend(GpuBackendKind kind){if(kind==backend_kind)return;if(IsGpuReady()){SetApiError("backend change while open is not supported");return;}backend_kind=kind;init_attempted=false;if(kind==GpuBackendKind::Vulkan)ClearError();else if(kind!=GpuBackendKind::Unknown)SetApiError("backend not supported");else SetApiError("backend not selected");if(host_ready&&!gpu_ready&&kind==GpuBackendKind::Vulkan)StartGpuSession();}
 	void SetValidation(bool validation){if(validation_requested==validation)return;if(IsGpuReady()){SetApiError("validation change while open is not supported");return;}validation_requested=validation;init_attempted=false;ClearError();if(host_ready&&!gpu_ready)StartGpuSession();}
-	void OnHostState(int reason){if(destroying)return;switch(reason){case OPEN:case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:host_ready=IsNativeHostReady();if(host_ready&&!gpu_ready&&!init_attempted){ClearError();StartGpuSession();}SyncHostBounds();if(reason==SHOW&&IsGpuReady()){StartClock();presentation_error.Clear();host.Refresh();}break;case CLOSE:StopGpuSession();host_ready=false;break;}}
+	void OnHostState(int reason){if(destroying)return;switch(reason){case OPEN:case SHOW:case ENABLE:case POSITION:case LAYOUTPOS:host_ready=IsNativeHostReady();if(host_ready&&!gpu_ready&&!init_attempted){ClearError();StartGpuSession();}SyncHostBounds();if(reason==SHOW&&IsGpuReady()){StartClock();presentation_error.Clear();host.RequestNativeRefresh();}break;case CLOSE:StopGpuSession();host_ready=false;break;}}
 	void OnCtrlState(int reason){switch(reason){case CLOSE:StopGpuSession();host_ready=false;break;case SHOW:SyncHostBounds();if(IsGpuReady())StartClock();break;case ENABLE:case POSITION:case LAYOUTPOS:SyncHostBounds();break;}}
-	// Preserve DHCtrl's disabled native-child convention: native input reaches
-	// the top-level U++ dispatcher, which hit-tests this child and forwards once.
-	// Semantic enabled state is inherited through the Ctrl tree, not HWND input.
-	void SyncHostBounds(){Size sz=owner->GetSize();bool changed=sz!=last_host_size;if(changed)presentation_error.Clear();last_host_size=sz;host.SetRect(0,0,sz.cx,sz.cy);if(IsNativeHostReady())EnableWindow(host.GetHWND(),FALSE);if(changed&&IsGpuReady()&&sz.cx>0&&sz.cy>0)host.Refresh();}
-	void StartGpuSession(){if(destroying)return;init_attempted=true;if(backend_kind!=GpuBackendKind::Vulkan){gpu_ready=false;SetSessionError(backend_kind==GpuBackendKind::Unknown?"backend not selected":"backend not supported");return;}GpuNativeWindowDesc native_window;String native_error;if(!BuildWin32GpuNativeWindowDesc(const_cast<Host&>(host).GetHWND(),native_window,native_error)){SetSessionError(native_error);return;}String open_error;if(!presenter.Open(backend_kind,validation_requested,native_window,open_error)){SetSessionError(open_error.IsEmpty()?presenter.GetError():open_error);return;}gpu_ready=presenter.IsReady();if(gpu_ready){ClearError();StartClock();host.Refresh();}else SetSessionError(presenter.GetError());}
-	void StopGpuSession(){clock.Stop();presenter.Close();ClearError();session_error.Clear();presentation_error.Clear();host_ready=false;gpu_ready=false;init_attempted=false;}
+	void SyncHostBounds()
+	{
+		Size size = owner->GetSize();
+		const bool resized = size != last_host_size;
+		last_host_size = size;
+		host.SetRect(0, 0, size.cx, size.cy);
+		host.SyncGeometry();
+		if(resized && IsGpuReady() && !size.IsEmpty()) {
+			presentation_error.Clear();
+			host.RequestNativeRefresh();
+		}
+	}
+	void StartGpuSession()
+	{
+		if(destroying) return;
+		init_attempted = true;
+		if(backend_kind != GpuBackendKind::Vulkan) {
+			SetSessionError(backend_kind == GpuBackendKind::Unknown ? "backend not selected" : "backend not supported");
+			return;
+		}
+		GpuNativeWindowDesc window;
+		String error;
+		if(!host.Describe(window, error) || !presenter.Open(backend_kind, validation_requested, window, error)) {
+			SetSessionError(error.IsEmpty() ? presenter.GetError() : error);
+			return;
+		}
+		gpu_ready = presenter.IsReady();
+		if(gpu_ready) {
+			ClearError();
+			StartClock();
+			host.RequestNativeRefresh();
+		}
+		else SetSessionError(presenter.GetError());
+	}
+	void StopGpuSession()
+	{
+		host.SetFrameRate(0);
+		presenter.Close();
+		ClearError();
+		host_ready = gpu_ready = init_attempted = false;
+	}
 	void SetApiError(const String& m){api_error=m;} void SetSessionError(const String& m){session_error=m;gpu_ready=false;} void ClearError(){api_error.Clear();session_error.Clear();presentation_error.Clear();}
 	void StartClock() {
-		clock.Stop();
-		if(continuous_fps && IsGpuReady() && owner->IsVisible() && !clock.Start(host.GetHWND(), continuous_fps))
-			SetApiError("GPU continuous refresh clock could not start");
+		int fps = IsGpuReady() && owner->IsVisible() ? continuous_fps : 0;
+		if(!host.SetFrameRate(fps)) SetApiError("GPU continuous refresh clock could not start");
 	}
-	Win32GpuFrameClock clock;
 	int continuous_fps = 0;
-	bool custom_content = false, timer_callback_active = false;
+	bool custom_content = false;
 	GpuCtrl *owner=nullptr; Host host; GpuDisplayPresenter presenter; GpuBackendKind backend_kind=GpuBackendKind::Vulkan; String api_error,session_error,presentation_error; Size last_host_size=Size(-1,-1); bool validation_requested=false,host_ready=false,gpu_ready=false,init_attempted=false,destroying=false;
 };
 
 GpuCtrl::GpuCtrl(){BackPaint(EXCLUDEPAINT);impl.Create(*this);Add(impl->host.SizePos());}
 GpuCtrl::~GpuCtrl(){if(impl){impl->destroying=true;impl->StopGpuSession();}}
+#ifdef GUI_COCOA
+void GpuCtrl::SetCocoaOverlayRects(const Vector<Rect>& rects)
+{
+	if(impl) impl->host.SetOverlayRects(rects);
+}
+#endif
 GpuCtrl& GpuCtrl::SetGpuContent(std::unique_ptr<GpuSurfaceContent> content)
 {
 	if(!impl) return *this;

@@ -1,4 +1,6 @@
 #include "Ui3DViewDemo.h"
+#ifdef GUI_WIN
+#include <plugin/png/png.h>
 #include <windows.h>
 #include <cmath>
 
@@ -492,4 +494,57 @@ bool Ui3DViewDemo::QualifyWorkspace(String& report)
 	return failures == 0;
 }
 
+
+// OS observation of this foreground client, including native child HWNDs. This
+// is a diagnostic screenshot, not a renderer export/readback API.
+bool Ui3DViewDemo::Capture(const String& file, String& error)
+{
+	error.Clear();
+	RECT rect;
+	if(GetForegroundWindow() != GetHWND()) { error = "capture requires the demo foreground window"; return false; }
+	if(!GetClientRect(GetHWND(), &rect)) { error = "cannot read native client rectangle"; return false; }
+	const int width = rect.right, height = rect.bottom;
+	if(width <= 0 || height <= 0 || (int64)width * height > 16000000) return false;
+	POINT origin = {0,0};
+	if(!ClientToScreen(GetHWND(), &origin)) return false;
+	// Foreground alone does not exclude an unrelated topmost window. Sample the
+	// actual hit-tested surface (invisible/cloaked HWND bounds are not evidence
+	// of occlusion). Captures are additionally inspected before publication.
+	for(int row = 0; row <= 10; ++row) for(int column = 0; column <= 10; ++column) {
+		POINT point = { origin.x + 2 + (width - 5) * column / 10,
+		                origin.y + 2 + (height - 5) * row / 10 };
+		if(GetAncestor(WindowFromPoint(point), GA_ROOT) != GetHWND()) {
+			error = Format("capture client is occluded or off-screen at sample %d,%d", column, row);
+			return false;
+		}
+	}
+	HDC screen = GetDC(nullptr), memory = CreateCompatibleDC(screen);
+	BITMAPINFO info {};
+	info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	info.bmiHeader.biWidth = width; info.bmiHeader.biHeight = -height;
+	info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
+	void *pixels = nullptr;
+	HBITMAP bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
+	bool ok = memory && bitmap && pixels;
+	HGDIOBJ old = nullptr;
+	if(ok) { old = SelectObject(memory, bitmap); ok = BitBlt(memory,0,0,width,height,screen,origin.x,origin.y,SRCCOPY|CAPTUREBLT); }
+	if(ok) {
+		ImageBuffer image(width,height);
+		const byte *source = static_cast<const byte *>(pixels);
+		for(int y = 0; y < height; ++y) for(int x = 0; x < width; ++x) {
+			const byte *p = source + ((int64)y * width + x) * 4;
+			RGBA& target = image[y][x];
+			target.r = p[2]; target.g = p[1]; target.b = p[0]; target.a = 255;
+		}
+		image.SetKind(IMAGE_OPAQUE); ok = PNGEncoder().SaveFile(file, Image(image));
+	}
+	if(old) SelectObject(memory, old);
+	if(bitmap) DeleteObject(bitmap);
+	if(memory) DeleteDC(memory);
+	if(screen) ReleaseDC(nullptr, screen);
+	if(!ok) error = "native client capture or PNG write failed";
+	return ok;
 }
+
+}
+#endif

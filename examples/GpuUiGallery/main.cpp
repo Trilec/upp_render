@@ -4,7 +4,7 @@
 #include "GpuControls.h"
 #include "GpuMetrics.h"
 #include "GpuWidgets.h"
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
 #include <Ui/Ui.h>
@@ -1410,7 +1410,7 @@ GUI_APP_MAIN
 		              qualification ? GetExeDirFile("GpuUiGallery-qualification.txt") : BenchmarkReportPath(heavy, soak, require_gpu);
 		String report = LoadFile(path);
 		report << "final_native_ownership=" << (zero ? "ZERO" : "NONZERO") << "\n";
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 		const auto fonts = GetRenderFontWin32Stats();
 		report << "font_backend=DirectWrite legacy_gdi_font_requests=" << AsString(fonts.legacy_gdi_font_requests)
 		       << " face_cache_entries=" << fonts.face_cache_entries << "/" << fonts.face_cache_limit

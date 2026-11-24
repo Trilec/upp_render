@@ -2,8 +2,8 @@ description "Native four-view Vulkan viewport and application-owned camera catal
 uses
 	Ui3DViewUi,
 	Ui,
-	Painter,
-	plugin/png;
+	Painter;
+uses(WIN32) plugin/png;
 file
 	Ui3DViewDemo.h,
 	Ui3DViewDemo.cpp,

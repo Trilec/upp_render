@@ -77,10 +77,17 @@ struct Ui3DViewOptions {
 	bool solid_edges = false;
 	bool show_selection = true;
 	bool adaptive_grid = true;
+	bool orbit_leaves_axis_view = false; // Middle-drag from an aligned orthographic view matches framing at the pivot.
 	Ui3DGridPlane grid_plane = Ui3DGridPlane::XZ;
 	bool lighting = true;
 	int grid_extent = 10;     // 1..100 cells on either side of the origin.
 	double grid_spacing = 1; // Metres, finite 0.001..10000.
+	// Film/safe guides use the camera's physical gate, independent of viewport aspect.
+	bool show_gate = false, show_safe = false;
+	double matte_opacity = 1, action_safe = .90, title_safe = .80;
+	Rgba8 matte_color = Rgba8(0, 0, 0, 255);
+	Rgba8 gate_color = Rgba8(190, 194, 201, 255);
+	Rgba8 safe_color = Rgba8(145, 151, 161, 255);
 	static Ui3DViewOptions Light();
 	static Ui3DViewOptions Dark();
 };
@@ -94,6 +101,14 @@ struct Ui3DViewStats {
 	int draws_last_frame = 0;
 	Size target_size = Size(0, 0);
 	bool depth_active = false;
+	uint64 texture_uploads = 0, working_target_rebuilds = 0;
+	int resident_textures = 0;
+	uint64 resident_texture_bytes = 0; // Immutable asset pixels, excluding neutral/working targets.
+	int blended_draws_last_frame = 0, textured_draws_last_frame = 0, gate_draws_last_frame = 0;
+	uint64 splat_uploads = 0, splat_sort_updates = 0, splat_sort_us_last_frame = 0;
+	uint64 resident_splat_bytes = 0; // Actual retained vertex/index buffers.
+	int resident_splat_resources = 0, resident_splat_instances = 0;
+	int splat_draws_last_frame = 0, splats_last_frame = 0;
 };
 
 // Reusable native Vulkan viewport. All methods/events run on the GUI thread.

@@ -78,14 +78,90 @@ private:
 	Scene3DBounds bounds;
 };
 
+
+// Object-local Gaussian density. Covariance is symmetric xx,xy,xz,yy,yz,zz
+// in squared scene units; linear RGB and straight opacity are finite in 0..1.
+// Zero/planar positive-semidefinite densities remain valid; rasterization adds
+// a documented quarter-pixel variance without changing these authored values.
+struct Scene3DSplat {
+    Scene3DVec3 position;
+    double covariance[6] = {1, 0, 0, 1, 0, 1};
+    float r = 1, g = 1, b = 1, a = 1;
+};
+constexpr int Scene3DMaxSplats = 150000;
+constexpr double Scene3DSplatAlphaCutoff = 1.0 / 255.0;
+constexpr double Scene3DSplatPixelVariance = 0.25;
+
+// Immutable source values; input is copied so no mutable array alias survives.
+// Bounds conservatively enclose the density's 1/255 coverage contour.
+class Scene3DSplats {
+public:
+    static std::shared_ptr<const Scene3DSplats> Create(
+        const std::vector<Scene3DSplat>& splats, String& error);
+    const std::vector<Scene3DSplat>& GetSplats() const { return splats; }
+    const Scene3DBounds& GetBounds() const { return bounds; }
+private:
+    Scene3DSplats() = default;
+    std::vector<Scene3DSplat> splats;
+    Scene3DBounds bounds;
+};
+
+// Same screen covariance and Gaussian coverage used by the native renderer.
+// Projection includes the supplied complete local-to-clip matrix, so parent
+// transforms, camera roll and physical gate share one coordinate contract.
+struct Scene3DSplatProjection {
+    Pointf center;
+    double covariance_xx = 0, covariance_xy = 0, covariance_yy = 0;
+    double depth = 0; // Vulkan normalized depth, 0..1.
+    double Coverage(Pointf point) const; // Unit peak, truncated below 1/255.
+};
+bool Scene3DProjectSplat(const Scene3DSplat&, const Scene3DMatrix& clip_from_local,
+                         Size viewport, Scene3DSplatProjection& output);
+
+enum class Scene3DTextureColorSpace { Srgb, Linear };
+
+// Immutable, top-down, straight RGBA8 pixels. UV coordinates are V-up.
+// The factory copies its input; rendering never decodes files or retains an
+// application-owned mutable image buffer.
+class Scene3DTexture {
+public:
+	static std::shared_ptr<const Scene3DTexture> Create(Size size,
+	    const std::vector<byte>& straight_rgba, Scene3DTextureColorSpace color_space, String& error);
+	Size GetSize() const { return size; }
+	const std::vector<byte>& GetPixels() const { return pixels; }
+	Scene3DTextureColorSpace GetColorSpace() const { return color_space; }
+	// Matches a linear GPU sampler with clamp-to-edge or repeat addressing.
+	double SampleAlpha(double u, double v, bool repeat_uv) const;
+private:
+	Scene3DTexture() = default;
+	Size size = Size(0, 0);
+	std::vector<byte> pixels;
+	Scene3DTextureColorSpace color_space = Scene3DTextureColorSpace::Srgb;
+};
+
+enum class Scene3DAlphaMode { Opaque, Mask, Blend };
+
+struct Scene3DMaterial {
+	std::shared_ptr<const Scene3DTexture> color_texture;
+	Scene3DAlphaMode alpha_mode = Scene3DAlphaMode::Opaque;
+	float alpha_cutoff = 0.5f;
+	bool unlit = false, repeat_uv = false;
+	bool double_sided = true; // Preserve the original viewport's unculled surfaces.
+	bool Validate(String& error) const;
+};
+
 struct Scene3DObjectDesc {
 	String id, parent_id;
 	Scene3DMatrix local;
 	std::shared_ptr<const Scene3DMesh> mesh;
 	bool visible = true, selectable = true;
-	float r = 1, g = 1, b = 1, a = 1;
+	float r = 1, g = 1, b = 1, a = 1; // Linear material/base-color factor.
 	// Hosts can supply joint/element highlighting while retaining object selection and framing.
 	bool selection_outline = true;
+	// Appended fields preserve earlier positional aggregate initializers.
+	float opacity = 1; // Independent object fade, after resolving material coverage.
+	Scene3DMaterial material; // Mesh-only material; Gaussian coverage is intrinsic.
+	std::shared_ptr<const Scene3DSplats> splats; // May not coexist with mesh.
 };
 
 struct Scene3DSceneDesc {
@@ -99,9 +175,13 @@ struct Scene3DObject {
 	std::shared_ptr<const Scene3DMesh> mesh;
 	Scene3DBounds bounds;
 	bool visible = true, selectable = true;
-	float r = 1, g = 1, b = 1, a = 1;
+	float r = 1, g = 1, b = 1, a = 1; // Linear material/base-color factor.
 	// Hosts can supply joint/element highlighting while retaining object selection and framing.
 	bool selection_outline = true;
+	// Appended fields preserve earlier positional aggregate initializers.
+	float opacity = 1; // Independent object fade, after resolving material coverage.
+	Scene3DMaterial material; // Mesh-only material; Gaussian coverage is intrinsic.
+	std::shared_ptr<const Scene3DSplats> splats; // May not coexist with mesh.
 };
 
 struct Scene3DRay {
@@ -116,14 +196,19 @@ struct Scene3DPick {
 	double distance = 0;
 	uint64 scene_revision = 0, camera_revision = 0;
 	int triangle = -1;
+	int splat = -1; // Resource point index for a screen-space Gaussian hit.
 };
+
+struct Scene3DCamera;
 
 // Validates the complete candidate before publication, preserving descriptor order.
 // Stable IDs are opaque byte strings, unique within this snapshot; use app prefixes
 // (e.g. actor:123). Visibility inherits through parents, selection does not.
 // Bounds/positive-determinant affine transforms are prepared once. No mutable scene
-// data is exposed. Baseline: opaque RGB, 100000 nodes, at most 2M instanced vertices
-// and 6M instanced indices. No importer, animation clock, document or undo authority.
+// data is exposed. Linear RGBA factors; opaque, masked or blended surfaces.
+// At most 100000 nodes, 2M instanced vertices, 6M instanced indices and 512 MiB
+// of distinct immutable texture pixels and 150000 instanced Gaussian points. No importer, animation clock, document
+// or undo authority.
 class Scene3DSnapshot {
 public:
 	static std::shared_ptr<const Scene3DSnapshot> Create(const Scene3DSceneDesc& desc, String& error);
@@ -136,6 +221,9 @@ public:
 	// Miss always returns hit=false and current revisions. Equal-distance ties keep
 	// descriptor order. No authoritative application selection is changed.
 	Scene3DPick Pick(const Scene3DRay& ray, uint64 camera_revision) const;
+	// Exact projected Gaussian coverage plus the existing mesh ray test. The
+	// camera provides near/far clips, roll and gate; misses retain revisions.
+	Scene3DPick PickScreen(Pointf screen, Size viewport, const Scene3DCamera&) const;
 private:
 	Scene3DSnapshot() = default;
 	uint64 revision = 0;
@@ -155,6 +243,15 @@ struct Scene3DCamera {
 	bool orthographic = false;
 	double fov_y = 0.7853981633974483, ortho_height = 8.0;
 	double near_plane = 0.01, far_plane = 10000.0;
+	// Roll is right-handed about the viewing direction. A zero gate aspect uses
+	// the whole viewport; a positive aspect fits a centered physical film gate.
+	// fov_y/ortho_height describe that gate, while the viewport may show overscan.
+	double roll = 0, gate_aspect = 0;
+	Rect GetGateRect(Size size) const;
+	// Sets eye/aim/up atomically, including exact pole poses. Parallel/zero up
+	// and exhausted revisions reject without changing the last valid camera.
+	bool SetLookAt(const Scene3DVec3& eye, const Scene3DVec3& aim,
+	               const Scene3DVec3& up, String& error);
 	bool Validate(String& error) const;
 	Scene3DVec3 GetEye() const;
 	// Defined at exact poles. At Top screen-up is -Z; at Bottom it is +Z when

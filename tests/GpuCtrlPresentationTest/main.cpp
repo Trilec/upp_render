@@ -9,10 +9,10 @@ static bool Check(bool condition, const char *message) { if(!condition) Cout() <
 static void PumpEvents(int count) { for(int i = 0; i < count; ++i) { Ctrl::ProcessEvents(); Ctrl::GuiSleep(2); } }
 class PresentationWindow : public TopWindow {
 public:
-	PresentationWindow()
+	explicit PresentationWindow(bool validation)
 	{
 		Title("GpuCtrlPresentationTest"); SetRect(100, 100, 900, 360);
-		first.SetValidation(true).SetContinuousRefresh(120); second.SetValidation(true); fallback.SetBackend(GpuBackendKind::Null);
+		first.SetValidation(validation).SetContinuousRefresh(120); second.SetValidation(validation); fallback.SetBackend(GpuBackendKind::Null);
 		Add(first); Add(second); Add(fallback);
 	}
 	void Layout() override
@@ -28,7 +28,8 @@ GUI_APP_MAIN
 {
 	VulkanTestHooks::ClearVulkanRuntimeDeviceDiagnostics(); bool ok = true;
 	{
-		PresentationWindow win; win.Open(); ok &= Check(win.IsOpen(), "test window should open"); if(!win.IsOpen()) { SetExitCode(1); return; }
+		const bool validation = FindIndex(CommandLine(), "--no-validation") < 0;
+		PresentationWindow win(validation); win.Open(); ok &= Check(win.IsOpen(), "test window should open"); if(!win.IsOpen()) { SetExitCode(1); return; }
 		VulkanTestHooks::VulkanRuntimeDeviceDiagnostics active;
 		for(int i = 0; i < 500; ++i) { Ctrl::ProcessEvents(); active = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics(); if(win.first.IsGpuReady() && win.second.IsGpuReady() && win.fallback.IsNativeHostReady() && active.swapchain_live_count == 2) break; Ctrl::GuiSleep(2); }
 		ok &= Check(win.first.IsGpuReady(), "first Vulkan control should be ready");
@@ -42,6 +43,7 @@ GUI_APP_MAIN
 		ok &= Check(active.swapchain_live_count == 2, "two Vulkan swapchains should be live while the window is open");
 		ok &= Check(active.surface_live_count == 2, "two Vulkan controls should retain independent surfaces");
 		ok &= Check(active.device_create_count == 1 && active.device_live_count == 1, "compatible Vulkan controls should share one logical device");
+#ifdef GUI_WIN
 		// Exclude WM_TIMER to reproduce starvation by continuously pending paint.
 		// Nonqueued frame notifications must still service ordinary U++ callbacks.
 		int ticks = 0;
@@ -58,7 +60,7 @@ GUI_APP_MAIN
 		ok &= Check(ticks >= 3, "embedded frame clock services timers when WM_TIMER is starved");
 		win.first.SetContinuousRefresh(0);
 		One<GpuCtrl> transient;
-		transient.Create().SetValidation(true).SetContinuousRefresh(120);
+		transient.Create().SetValidation(validation).SetContinuousRefresh(120);
 		win.Add(transient->LeftPos(0, 80).TopPos(0, 60));
 		timer.Set(10, [&] { transient.Clear(); });
 		deadline = GetTickCount() + 250;
@@ -72,6 +74,7 @@ GUI_APP_MAIN
 		ok &= Check(!transient, "timer may destroy an embedded host during its frame notification");
 		transient.Clear();
 		win.first.SetContinuousRefresh(120);
+#endif
 		active = VulkanTestHooks::GetVulkanRuntimeDeviceDiagnostics();
 		uint64_t stable_swapchain_creates = active.swapchain_create_count;
 		uint64_t stable_device_creates = active.device_create_count;

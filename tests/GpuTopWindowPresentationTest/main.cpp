@@ -4,7 +4,7 @@
 #include <RenderPlatformWin32/RenderPlatformWin32Internal.h>
 #include <chrono>
 #include <thread>
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 #include <RenderFontWin32/RenderFontWin32.h>
 #endif
 
@@ -157,7 +157,7 @@ static bool CheckOwnedStandardDialogs()
 	root.SetRequireGpu();
 	root.Open();
 	PumpEvents(20);
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 	const uint64 gdi_before = GetRenderFontWin32Stats().legacy_gdi_font_requests;
 #endif
 	TopWindow dialog;
@@ -183,7 +183,7 @@ static bool CheckOwnedStandardDialogs()
 	nested.Close();
 	dialog.SetRect(180, 180, 480, 280);
 	PumpEvents(20);
-#ifdef flagCFONTS
+#if defined(PLATFORM_WIN32) && defined(flagCFONTS)
 	ok &= Check(GetRenderFontWin32Stats().legacy_gdi_font_requests == gdi_before,
 	            "owned standard dialog text must not request native GDI fonts");
 #endif

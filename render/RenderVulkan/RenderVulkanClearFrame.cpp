@@ -364,6 +364,8 @@ bool VulkanSurfaceSession::PresentClearFrameImpl(float red, float green, float b
 	present_info.pSwapchains = &swapchain;
 	present_info.pImageIndices = &present_index;
 	vr = queue_present(interop.present_queue, &present_info);
+	frame_report.present_result = (int)vr;
+	frame_report.present_result_valid = true;
 
 	String idle_error;
 	bool idle_ok = WaitFrameIdle(idle_error);

@@ -38,6 +38,8 @@ After the current consolidated Windows/Vulkan acceptance, Vulkan follow-up shoul
 
 ### macOS
 
+The embedded Ui3DView now has a Cocoa host for the existing Vulkan provider. The [Mac test procedure](UI3DVIEW.md#first-macos-run) covers the first hardware run. The following design describes a future direct Metal provider.
+
 Metal maps naturally to the current separation between application context and presentation surface:
 
 - shared `MTLDevice`/queue/resource domain behind a Metal provider context;

@@ -5,10 +5,7 @@
 #include <atomic>
 #include <type_traits>
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#define VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan_win32.h>
+#include "VulkanPlatform.h"
 
 namespace Upp {
 
@@ -310,26 +307,26 @@ static const char *g_registry_test_missing_proc = nullptr;
 
 struct VulkanInstanceOptions {
 	bool validation = false;
-	bool win32_surface = false;
+	bool native_surface = false;
 	const char *application_name = nullptr;
 };
 
 struct VulkanInstanceCompatibility {
 	bool validation = false;
-	bool win32_surface = false;
+	bool native_surface = false;
 };
 
 static VulkanInstanceCompatibility GetVulkanInstanceCompatibility(const VulkanInstanceOptions& options)
 {
 	VulkanInstanceCompatibility key;
 	key.validation = options.validation;
-	key.win32_surface = options.win32_surface;
+	key.native_surface = options.native_surface;
 	return key;
 }
 
 static bool IsVulkanInstanceCompatible(const VulkanInstanceCompatibility& a, const VulkanInstanceCompatibility& b)
 {
-	return a.validation == b.validation && a.win32_surface == b.win32_surface;
+	return a.validation == b.validation && a.native_surface == b.native_surface;
 }
 
 static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
@@ -369,17 +366,17 @@ static bool ResolveVulkanInstanceOptions(const VulkanInstanceOptions& options,
 		tmp_extensions.Add(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 
-	if(options.win32_surface) {
+	if(options.native_surface) {
 		if(!has_extension(VK_KHR_SURFACE_EXTENSION_NAME)) {
 			error = "VK_KHR_surface not present";
 			return false;
 		}
-		if(!has_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
-			error = "VK_KHR_win32_surface not present";
+		if(!has_extension(VulkanPlatform::SurfaceExtension)) {
+			error = String(VulkanPlatform::SurfaceExtension) + " not present";
 			return false;
 		}
 		tmp_extensions.Add(VK_KHR_SURFACE_EXTENSION_NAME);
-		tmp_extensions.Add(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		tmp_extensions.Add(VulkanPlatform::SurfaceExtension);
 	}
 
 	enabled_layers = pick(tmp_layers);
@@ -442,7 +439,7 @@ static bool ResolveDeviceProc(T& out, VulkanProcResolver filter, PFN_vkGetDevice
 }
 
 template <class T>
-static bool ResolveGlobalProc(T& out, VulkanProcResolver filter, HMODULE module, const char *name, String& error)
+static bool ResolveGlobalProc(T& out, VulkanProcResolver filter, VulkanPlatform::Module module, const char *name, String& error)
 {
 	if(filter && !filter(module, name)) {
 		error = name;
@@ -452,7 +449,7 @@ static bool ResolveGlobalProc(T& out, VulkanProcResolver filter, HMODULE module,
 		error = name;
 		return false;
 	}
-	out = reinterpret_cast<T>(GetProcAddress(module, name));
+	out = reinterpret_cast<T>(VulkanPlatform::Symbol(module, name));
 	if(!out) {
 		error = name;
 		return false;
@@ -506,7 +503,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(VkDebugUtilsMessageSev
 }
 
 struct VulkanDispatch {
-	HMODULE module = nullptr;
+	VulkanPlatform::Module module = nullptr;
 	VulkanProcResolver proc_filter = nullptr;
 	PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
 	PFN_vkEnumerateInstanceVersion enumerate_instance_version = nullptr;
@@ -533,7 +530,7 @@ struct VulkanDispatch {
 		enumerate_instance_extension_properties = nullptr;
 		create_instance = nullptr;
 		if(module) {
-			if(!FreeLibrary(module))
+			if(!VulkanPlatform::Unload(module))
 				ok = false;
 			module = nullptr;
 		}
@@ -545,7 +542,7 @@ struct VulkanDispatch {
 		return cleanup_ok;
 	}
 
-	bool Open(String& error, VulkanProcResolver resolver = &GetProcAddress)
+	bool Open(String& error, VulkanProcResolver resolver = nullptr)
 	{
 		Close();
 		cleanup_ok = true;
@@ -554,16 +551,16 @@ struct VulkanDispatch {
 		g_runtime_device_stats.runtime_live_count.fetch_add(1, std::memory_order_relaxed);
 		g_runtime_device_stats.runtime_last_id.store(diagnostic_id, std::memory_order_relaxed);
 		proc_filter = resolver;
-		module = LoadLibraryW(L"vulkan-1.dll");
+		module = VulkanPlatform::Load();
 		if(!module) {
-			error = "LoadLibraryW(vulkan-1.dll) failed";
+			error = VulkanPlatform::LoaderError;
 			return false;
 		}
 		if(!ResolveGlobalProc(get_instance_proc_addr, proc_filter, module, "vkGetInstanceProcAddr", error)) {
 			Close();
 			return false;
 		}
-		enumerate_instance_version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(GetProcAddress(module, "vkEnumerateInstanceVersion"));
+		enumerate_instance_version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(VulkanPlatform::Symbol(module, "vkEnumerateInstanceVersion"));
 		if(!ResolveGlobalProc(enumerate_instance_layer_properties, proc_filter, module, "vkEnumerateInstanceLayerProperties", error)) {
 			Close();
 			return false;
@@ -705,6 +702,13 @@ struct VulkanInstanceContext {
 		if(!ResolveVulkanInstanceOptions(options, preflight.instance_extensions, preflight.instance_layers, enabled_layer_names, enabled_extension_names, error))
 			return fail(error);
 
+		VkInstanceCreateFlags instance_flags = 0;
+#ifdef PLATFORM_OSX
+		if(HasExtension(preflight.instance_extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+			enabled_extension_names.Add(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		}
+#endif
 		Vector<const char*> enabled_layers;
 		Vector<const char*> enabled_exts;
 		for(const String& name : enabled_layer_names)
@@ -714,6 +718,7 @@ struct VulkanInstanceContext {
 
 		VkInstanceCreateInfo create_info{};
 		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		create_info.flags = instance_flags;
 		create_info.pApplicationInfo = &app_info;
 		create_info.enabledLayerCount = enabled_layers.GetCount();
 		create_info.ppEnabledLayerNames = enabled_layers.IsEmpty() ? nullptr : enabled_layers.Begin();
@@ -1168,6 +1173,18 @@ static_assert(!std::is_copy_assignable<VulkanSharedInstanceLease>::value, "share
 static_assert(std::is_move_constructible<VulkanSharedInstanceLease>::value, "shared instance lease must be movable");
 static_assert(!std::is_move_assignable<VulkanSharedInstanceLease>::value, "shared instance lease move assignment must remain disabled");
 
+static void SelectDeviceExtensions(const VulkanDeviceInfo& device, bool present,
+                                   Vector<const char *>& names, VkDeviceCreateInfo& info)
+{
+	if(present)
+		names.Add(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	// Vulkan requires this device extension to be enabled whenever advertised.
+	if(HasExtension(device.device_extensions, "VK_KHR_portability_subset"))
+		names.Add("VK_KHR_portability_subset");
+	info.enabledExtensionCount = names.GetCount();
+	info.ppEnabledExtensionNames = names.IsEmpty() ? nullptr : names.Begin();
+}
+
 struct VulkanDeviceContext {
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
@@ -1312,6 +1329,8 @@ struct VulkanDeviceContext {
 		dci.pNext = &features2;
 		dci.queueCreateInfoCount = 1;
 		dci.pQueueCreateInfos = &qci;
+		Vector<const char *> extensions;
+		SelectDeviceExtensions(device_info, false, extensions, dci);
 
 		auto fail = [&](const String& message) {
 			error = message;
@@ -1395,14 +1414,14 @@ struct VulkanDeviceContext {
 		VkPhysicalDeviceFeatures2 features2{};
 		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		features2.pNext = &f13;
-		const char *swapchain_extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+
 		VkDeviceCreateInfo dci{};
 		dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		dci.pNext = &features2;
 		dci.queueCreateInfoCount = qcis.GetCount();
 		dci.pQueueCreateInfos = qcis.Begin();
-		dci.enabledExtensionCount = 1;
-		dci.ppEnabledExtensionNames = &swapchain_extension;
+		Vector<const char *> extensions;
+		SelectDeviceExtensions(device_info, true, extensions, dci);
 
 		auto fail = [&](const String& message) {
 			error = message;
@@ -1681,7 +1700,7 @@ struct VulkanSharedDeviceLease {
 
 struct VulkanSurfaceContext {
 	VulkanInstanceOwner *instance_owner = nullptr;
-	PFN_vkCreateWin32SurfaceKHR create_win32_surface = nullptr;
+	VulkanPlatform::CreateSurfaceProc create_surface = nullptr;
 	PFN_vkDestroySurfaceKHR destroy_surface = nullptr;
 	PFN_vkGetPhysicalDeviceSurfaceSupportKHR get_surface_support = nullptr;
 	PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR get_surface_capabilities = nullptr;
@@ -1701,7 +1720,7 @@ struct VulkanSurfaceContext {
 
 	bool IsCleared() const
 	{
-		return instance_owner == nullptr && create_win32_surface == nullptr && destroy_surface == nullptr && get_surface_support == nullptr && get_surface_capabilities == nullptr && get_surface_formats == nullptr && get_surface_present_modes == nullptr && surface == VK_NULL_HANDLE && !capabilities_valid && raw_surface_formats.IsEmpty() && raw_present_modes.IsEmpty();
+		return instance_owner == nullptr && create_surface == nullptr && destroy_surface == nullptr && get_surface_support == nullptr && get_surface_capabilities == nullptr && get_surface_formats == nullptr && get_surface_present_modes == nullptr && surface == VK_NULL_HANDLE && !capabilities_valid && raw_surface_formats.IsEmpty() && raw_present_modes.IsEmpty();
 	}
 
 	bool Close()
@@ -1715,7 +1734,7 @@ struct VulkanSurfaceContext {
 			ok = false;
 			surface = VK_NULL_HANDLE;
 		}
-		create_win32_surface = nullptr;
+		create_surface = nullptr;
 		destroy_surface = nullptr;
 		get_surface_support = nullptr;
 		get_surface_capabilities = nullptr;
@@ -1753,12 +1772,7 @@ struct VulkanSurfaceContext {
 			return false;
 		};
 
-		if(native_window.kind != GpuNativeWindowKind::Win32) {
-			error = "surface requires Win32 native window";
-			failure_stage = VulkanInstanceOwnerOpenFailure::None;
-			return fail(error);
-		}
-		if(native_window.handle == 0) {
+		if(!VulkanPlatform::IsNativeWindow(native_window)) {
 			error = "invalid native handle";
 			failure_stage = VulkanInstanceOwnerOpenFailure::None;
 			return fail(error);
@@ -1766,30 +1780,18 @@ struct VulkanSurfaceContext {
 
 		report.validation_available = report.preflight.validation_available;
 		report.debug_utils_available = report.preflight.debug_utils_available;
-		surface_available = HasExtension(report.preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME) && HasExtension(report.preflight.instance_extensions, VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		surface_available = HasExtension(report.preflight.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME) && HasExtension(report.preflight.instance_extensions, VulkanPlatform::SurfaceExtension);
 
-		if(!ResolveInstanceProc(create_win32_surface, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkCreateWin32SurfaceKHR", error)) return fail(error);
+		if(!ResolveInstanceProc(create_surface, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, VulkanPlatform::CreateSurfaceName, error)) return fail(error);
 		if(!ResolveInstanceProc(destroy_surface, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkDestroySurfaceKHR", error)) return fail(error);
 		if(!ResolveInstanceProc(get_surface_support, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkGetPhysicalDeviceSurfaceSupportKHR", error)) return fail(error);
 		if(!ResolveInstanceProc(get_surface_capabilities, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", error)) return fail(error);
 		if(!ResolveInstanceProc(get_surface_formats, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkGetPhysicalDeviceSurfaceFormatsKHR", error)) return fail(error);
 		if(!ResolveInstanceProc(get_surface_present_modes, owner.dispatch.proc_filter, owner.dispatch.get_instance_proc_addr, owner.instance.instance, "vkGetPhysicalDeviceSurfacePresentModesKHR", error)) return fail(error);
 
-		VkWin32SurfaceCreateInfoKHR surface_info{};
-		surface_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surface_info.hwnd = (HWND)(uintptr_t)native_window.handle;
-		if(!IsWindow(surface_info.hwnd)) {
-			error = "invalid native handle";
-			return fail(error);
-		}
-		surface_info.hinstance = (HINSTANCE)GetWindowLongPtr(surface_info.hwnd, GWLP_HINSTANCE);
-		if(!surface_info.hinstance) {
-			error = "invalid native handle";
-			return fail(error);
-		}
-		VkResult vr = create_win32_surface(owner.instance.instance, &surface_info, nullptr, &surface);
+		VkResult vr = VulkanPlatform::CreateSurface(create_surface, owner.instance.instance, native_window, surface);
 		if(vr != VK_SUCCESS) {
-			error = String("vkCreateWin32SurfaceKHR failed: ") + AsString((int)vr);
+			error = String(VulkanPlatform::CreateSurfaceName) + " failed: " + AsString((int)vr);
 			return fail(error);
 		}
 		report.surface_created = true;
@@ -2352,7 +2354,7 @@ static VulkanProbeStatus MapDeviceError(const String& error)
 
 static VulkanProbeStatus MapDispatchError(const String& error)
 {
-	if(error == "LoadLibraryW(vulkan-1.dll) failed")
+	if(error == VulkanPlatform::LoaderError)
 		return VulkanProbeStatus::RuntimeUnavailable;
 	return VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
 }
@@ -2445,8 +2447,8 @@ void ClearVulkanRuntimeDeviceDiagnostics()
 	g_runtime_device_stats.swapchain_last_id.store(0, std::memory_order_relaxed);
 }
 
-VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool win32_surface,
-	bool has_surface_extension, bool has_win32_surface_extension,
+VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bool native_surface,
+	bool has_surface_extension, bool has_native_surface_extension,
 	bool has_validation_layer, bool has_debug_utils_extension)
 {
 	Vector<VulkanExtensionInfo> extensions;
@@ -2455,14 +2457,14 @@ VulkanInstanceOptionsTestResult RunVulkanInstanceOptionsTest(bool validation, bo
 		extensions.Add().name = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	if(has_surface_extension)
 		extensions.Add().name = VK_KHR_SURFACE_EXTENSION_NAME;
-	if(has_win32_surface_extension)
-		extensions.Add().name = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+	if(has_native_surface_extension)
+		extensions.Add().name = VulkanPlatform::SurfaceExtension;
 	if(has_validation_layer)
 		layers.Add().name = "VK_LAYER_KHRONOS_validation";
 
 	VulkanInstanceOptions options;
 	options.validation = validation;
-	options.win32_surface = win32_surface;
+	options.native_surface = native_surface;
 	options.application_name = "VulkanInstanceOptionsTest";
 	Vector<String> enabled_layers;
 	Vector<String> enabled_extensions;
@@ -2484,11 +2486,11 @@ bool TestVulkanInstanceCompatibility(bool validation_a, bool surface_a, bool val
 {
 	VulkanInstanceOptions opts_a;
 	opts_a.validation = validation_a;
-	opts_a.win32_surface = surface_a;
+	opts_a.native_surface = surface_a;
 	opts_a.application_name = application_name_a;
 	VulkanInstanceOptions opts_b;
 	opts_b.validation = validation_b;
-	opts_b.win32_surface = surface_b;
+	opts_b.native_surface = surface_b;
 	opts_b.application_name = application_name_b;
 	return IsVulkanInstanceCompatible(GetVulkanInstanceCompatibility(opts_a), GetVulkanInstanceCompatibility(opts_b));
 }
@@ -2520,12 +2522,12 @@ bool TestVulkanInstanceOwner(bool validation, VulkanProcResolver resolver, int& 
 	return ok;
 }
 
-bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface)
+bool TestVulkanInstanceOwnerCompatibility(bool validation, bool native_surface)
 {
 	VulkanInstanceOwner owner;
 	VulkanInstanceOptions options;
 	options.validation = validation;
-	options.win32_surface = win32_surface;
+	options.native_surface = native_surface;
 	options.application_name = "RenderVulkanTest";
 	VulkanPreflightReport preflight;
 	bool debug_messenger_created = false;
@@ -2533,11 +2535,12 @@ bool TestVulkanInstanceOwnerCompatibility(bool validation, bool win32_surface)
 	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
 	if(!owner.Open(options, preflight, debug_messenger_created, error, failure_stage))
 		return false;
-	bool match = owner.GetCompatibility().validation == validation && owner.GetCompatibility().win32_surface == win32_surface;
+	bool match = owner.GetCompatibility().validation == validation && owner.GetCompatibility().native_surface == native_surface;
 	owner.Close();
 	return match;
 }
 
+#ifdef PLATFORM_WIN32
 bool TestVulkanSurfaceOwner(bool validation, VulkanProcResolver resolver, int& out_failure_stage,
 	VulkanRuntimeDeviceDiagnostics& out_diag)
 {
@@ -2547,7 +2550,7 @@ bool TestVulkanSurfaceOwner(bool validation, VulkanProcResolver resolver, int& o
 	VulkanInstanceOwner owner;
 	VulkanInstanceOptions instance_options;
 	instance_options.validation = validation;
-	instance_options.win32_surface = true;
+	instance_options.native_surface = true;
 	instance_options.application_name = "VulkanSurfaceProbe";
 	GpuNativeWindowDesc window;
 	window.kind = GpuNativeWindowKind::Win32;
@@ -2587,7 +2590,7 @@ bool TestVulkanSurfaceOwnerCompatibility(bool validation)
 	VulkanInstanceOwner owner;
 	VulkanInstanceOptions instance_options;
 	instance_options.validation = validation;
-	instance_options.win32_surface = true;
+	instance_options.native_surface = true;
 	instance_options.application_name = "VulkanSurfaceProbe";
 	GpuNativeWindowDesc window;
 	window.kind = GpuNativeWindowKind::Win32;
@@ -2597,7 +2600,7 @@ bool TestVulkanSurfaceOwnerCompatibility(bool validation)
 	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
 	bool debug = false;
 	bool ok = owner.Open(instance_options, report.preflight, debug, error, failure_stage) && ctx.Open(owner, validation, window, report, error, failure_stage);
-	bool match = ok && owner.GetCompatibility().validation == validation && owner.GetCompatibility().win32_surface == true;
+	bool match = ok && owner.GetCompatibility().validation == validation && owner.GetCompatibility().native_surface == true;
 	ctx.Close();
 	owner.Close();
 	DestroyWindow(hwnd);
@@ -2713,6 +2716,8 @@ bool TestVulkanSurfaceSessionCleanupFailure(bool validation, VulkanProcResolver 
 	return true;
 }
 
+#endif
+
 bool TestVulkanSharedInstanceEntryLifecycle(VulkanProcResolver resolver, VulkanRuntimeDeviceDiagnostics& out_diag)
 {
 	out_diag = VulkanRuntimeDeviceDiagnostics();
@@ -2799,7 +2804,7 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 	if(!entry.opened || !entry.cleanup_ok)
 		return false;
-	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.win32_surface != compatibility.win32_surface)
+	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.native_surface != compatibility.native_surface)
 		return false;
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
 	if(out_diag.runtime_create_count != 1 || out_diag.instance_create_count != 1)
@@ -2827,7 +2832,7 @@ bool TestVulkanSharedInstanceEntrySafety(VulkanProcResolver resolver, VulkanRunt
 		return false;
 	if(!entry.opened || !entry.cleanup_ok)
 		return false;
-	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.win32_surface != compatibility.win32_surface)
+	if(entry.compatibility.validation != compatibility.validation || entry.compatibility.native_surface != compatibility.native_surface)
 		return false;
 	out_diag = GetVulkanRuntimeDeviceDiagnostics();
 	if(out_diag.runtime_create_count != 1 || out_diag.instance_create_count != 1)
@@ -2936,7 +2941,7 @@ bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_s
 	VulkanSharedInstanceEntry entry;
 	VulkanInstanceOptions opts;
 	opts.validation = base_validation;
-	opts.win32_surface = base_surface;
+	opts.native_surface = base_surface;
 	opts.application_name = "SharedEntryTest";
 	VulkanPreflightReport preflight;
 	bool debug_messenger_created = false;
@@ -2950,7 +2955,7 @@ bool TestVulkanSharedInstanceEntryIncompatible(bool base_validation, bool base_s
 
 	VulkanInstanceOptions test_opts;
 	test_opts.validation = test_validation;
-	test_opts.win32_surface = test_surface;
+	test_opts.native_surface = test_surface;
 	test_opts.application_name = "DifferentApp";
 
 	if(entry.Acquire(test_opts)) {
@@ -3051,7 +3056,7 @@ bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, Vulk
 	VulkanSharedInstanceRegistry registry;
 	VulkanInstanceOptions opts;
 	opts.validation = true;
-	opts.win32_surface = false;
+	opts.native_surface = false;
 	opts.application_name = "RegistryStable";
 	VulkanInstanceOwnerOpenFailure first_stage = VulkanInstanceOwnerOpenFailure::None;
 	VulkanSharedInstanceEntry *first_entry = nullptr;
@@ -3089,7 +3094,7 @@ bool TestVulkanSharedInstanceRegistryStability(VulkanProcResolver resolver, Vulk
 	if(!first.identity_after_first_removal)
 		return false;
 	VulkanInstanceOptions surface_mismatch = opts;
-	surface_mismatch.win32_surface = true;
+	surface_mismatch.native_surface = true;
 	incompatible_entry = nullptr;
 	if(!registry.Acquire(surface_mismatch, incompatible.preflight, incompatible.debug_messenger_created, incompatible.error, incompatible_stage, resolver, incompatible_entry, incompatible.newly_created) || !incompatible_entry || incompatible_entry == saved_first_entry)
 		return false;
@@ -3202,7 +3207,7 @@ bool TestVulkanSharedInstanceRegistryFailures(VulkanProcResolver resolver, Vulka
 		return false;
 	cleanup_failure.replacement_refused = true;
 	VulkanInstanceOptions incompatible_opts = opts;
-	incompatible_opts.win32_surface = true;
+	incompatible_opts.native_surface = true;
 	VulkanSharedInstanceEntry *incompatible_entry = nullptr;
 	if(!registry.Acquire(incompatible_opts, recovery_preflight, recovery_debug, recovery_error, recovery_stage, resolver, incompatible_entry, recovery_new) || !incompatible_entry || !registry.Release(incompatible_entry) || registry.GetEntryCount() != 1 || retained != cleanup_entry || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared() || !IsVulkanInstanceCompatible(retained->compatibility, retained_key))
 		return false;
@@ -3447,7 +3452,7 @@ bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInst
 		result.same_key_refused = result.refusal_diagnostics_unchanged;
 		result.refusal_registry_entry_count = registry.GetEntryCount();
 		VulkanInstanceOptions incompatible_opts = opts;
-		incompatible_opts.win32_surface = true;
+		incompatible_opts.native_surface = true;
 		VulkanSharedInstanceLease incompatible_lease;
 		if(!incompatible_lease.Acquire(registry, incompatible_opts, refused_p, refused_debug, refused_error, refused_stage, resolver, &refused_new) || !incompatible_lease.Reset() || registry.GetEntryCount() != 1 || retained->acquire_count != 0 || retained->opened || retained->cleanup_ok || !retained->owner.IsCleared()) return false;
 		result.incompatible_lease_succeeded = true;
@@ -3494,6 +3499,7 @@ bool TestVulkanSharedInstanceLease(VulkanProcResolver resolver, VulkanSharedInst
 	return result.automatic_release && result.two_lease_reuse && result.non_final_release && result.final_release && result.reset_idempotent && result.move_transfer && result.occupied_refused && result.dispatch_failure_empty && result.instance_failure_empty && result.recovery && result.cleanup_failure_empty && result.no_double_release && result.detailed_outcomes && result.diag.runtime_live_count == 0 && result.diag.instance_live_count == 0 && result.diag.debug_messenger_live_count == 0 && result.diag.surface_live_count == 0 && result.diag.device_live_count == 0;
 }
 
+#ifdef PLATFORM_WIN32
 bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGroupedSurfaceSessionTestResult& result)
 {
 	result = VulkanGroupedSurfaceSessionTestResult();
@@ -3596,7 +3602,7 @@ bool TestVulkanGroupedSurfaceSessions(VulkanProcResolver resolver, VulkanGrouped
 		VulkanSurfaceSessionGroup group;
 		VulkanSurfaceSession first(group), second(group);
 		if(!first.Open(true, first_window, resolver)) return false;
-		g_registry_test_missing_proc = "vkCreateWin32SurfaceKHR";
+		g_registry_test_missing_proc = VulkanPlatform::CreateSurfaceName;
 		bool failed_open = second.Open(true, second_window, resolver);
 		if(failed_open || second.IsReady() || !second.GetReport().shared_instance_released || !first.IsReady()) return false;
 		result.failure_registry_entries = group.impl->registry.GetEntryCount();
@@ -3803,6 +3809,8 @@ bool TestVulkanSwapchain(VulkanProcResolver resolver, VulkanSwapchainTestResult&
 	result.final_diag = GetVulkanRuntimeDeviceDiagnostics();
 	return result.created && result.destroyed && result.idempotent && result.invalid_size_refused && result.already_created_refused && result.missing_procedure_recovered && result.rollback && result.device_cleanup_does_not_poison_swapchain && result.destructor_cleanup && result.transient_incomplete_recovered && result.persistent_incomplete_rolled_back && result.rollback_cleanup_independent && result.final_diag.runtime_live_count == 0 && result.final_diag.instance_live_count == 0 && result.final_diag.debug_messenger_live_count == 0 && result.final_diag.surface_live_count == 0 && result.final_diag.device_live_count == 0 && result.final_diag.swapchain_live_count == 0;
 }
+
+#endif
 
 } // namespace VulkanTestHooks
 
@@ -4644,10 +4652,10 @@ bool VulkanSurfaceSession::CreateSwapchain(Size requested_size)
 			continue;
 		}
 		else
-			enumeration_error = vr == VK_SUCCESS ? "vkGetSwapchainImagesKHR returned no images" : String("vkGetSwapchainImagesKHR failed: ") + AsString((int)vr);
+			enumeration_error = vr == VK_SUCCESS ? String("vkGetSwapchainImagesKHR returned no images") : String("vkGetSwapchainImagesKHR failed: ") + AsString((int)vr);
 	}
 	if(!enumeration_ok)
-		enumeration_error = enumeration_error.IsEmpty() ? "vkGetSwapchainImagesKHR enumeration did not stabilize" : enumeration_error;
+		enumeration_error = enumeration_error.IsEmpty() ? String("vkGetSwapchainImagesKHR enumeration did not stabilize") : enumeration_error;
 	bool images_valid = enumeration_ok;
 	for(const VkImage image : images) if(image == VK_NULL_HANDLE) images_valid = false;
 	if(!images_valid) {
@@ -4771,11 +4779,11 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	};
 
 	VulkanInstanceOwnerOpenFailure failure_stage = VulkanInstanceOwnerOpenFailure::None;
-	if(native_window.kind != GpuNativeWindowKind::Win32 || native_window.handle == 0 || !IsWindow((HWND)(uintptr_t)native_window.handle))
+	if(!VulkanPlatform::IsNativeWindow(native_window))
 		return fail("invalid native handle");
 	VulkanInstanceOptions instance_options;
 	instance_options.validation = request_validation;
-	instance_options.win32_surface = true;
+	instance_options.native_surface = true;
 	instance_options.application_name = "VulkanSurfaceProbe";
 	bool debug_messenger_created = false;
 	bool newly_created = false;
@@ -4797,7 +4805,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 			impl->report.instance_error = impl->error;
 		}
 		else {
-			if(impl->error.StartsWith("vkCreateWin32SurfaceKHR failed"))
+			if(impl->error.StartsWith(String(VulkanPlatform::CreateSurfaceName) + " failed"))
 				impl->report.status = VulkanProbeStatus::SurfaceCreationFailed;
 			else
 				impl->report.status = VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
@@ -4815,7 +4823,7 @@ bool VulkanSurfaceSession::Open(bool request_validation, const GpuNativeWindowDe
 	impl->report.debug_utils_available = impl->report.preflight.debug_utils_available;
 	VulkanInstanceOwner *owner = impl->lease.GetOwner();
 	if(!owner || !impl->ctx.Open(*owner, request_validation, native_window, impl->report, impl->error, failure_stage, resolver)) {
-		impl->report.status = impl->error.StartsWith("vkCreateWin32SurfaceKHR failed") ? VulkanProbeStatus::SurfaceCreationFailed : VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
+		impl->report.status = impl->error.StartsWith(String(VulkanPlatform::CreateSurfaceName) + " failed") ? VulkanProbeStatus::SurfaceCreationFailed : VulkanProbeStatus::RequiredLoaderFunctionUnavailable;
 		impl->report.surface_error = impl->error;
 		impl->report.status_text = StatusText(impl->report.status);
 		impl->report.preflight.status = impl->report.status;

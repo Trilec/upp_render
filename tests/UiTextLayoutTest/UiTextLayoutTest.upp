@@ -8,7 +8,7 @@ uses
 	RenderGpu2D,
 	RenderVulkan,
 	plugin/png;
-uses(CFONTS)
+uses(WIN32 CFONTS)
 	RenderFontWin32;
 file main.cpp, NativeReference.cpp, Editing.cpp, Styled.cpp, Document.cpp, Ime.cpp, FontLayers.cpp;
 mainconfig

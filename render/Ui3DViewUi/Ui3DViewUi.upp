@@ -2,6 +2,7 @@ description "Optional native Ui chrome around the renderer-owned Ui3DView";
 uses
 	Ui3DView,
 	Ui;
+uses(WIN32) RenderPlatformWin32;
 file
 	Ui3DViewport.h,
 	Ui3DViewport.cpp;

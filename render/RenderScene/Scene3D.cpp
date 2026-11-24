@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 
 namespace Upp {
 
@@ -13,13 +14,18 @@ double Clamp(double x, double low, double high) { return std::max(low, std::min(
 bool ColorValid(float r, float g, float b, float a)
 {
 	return Finite(r) && Finite(g) && Finite(b) && Finite(a) &&
-	       r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1 && a == 1;
+	       r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1 && a >= 0 && a <= 1;
 }
 bool Bounded(const Scene3DVec3& v, double limit = 1e9)
 {
 	return v.IsFinite() && std::abs(v.x) <= limit && std::abs(v.y) <= limit && std::abs(v.z) <= limit;
 }
 bool ValidSize(Size size) { return size.cx > 0 && size.cy > 0; }
+double GateOverscan(const Scene3DCamera& camera, Size size)
+{
+	return camera.gate_aspect > 0
+	     ? std::max(1.0, camera.gate_aspect * size.cy / size.cx) : 1.0;
+}
 bool AdvanceRevision(Scene3DCamera& camera)
 {
 	if(camera.revision == std::numeric_limits<uint64>::max()) return false;
@@ -189,8 +195,9 @@ std::shared_ptr<const Scene3DMesh> Scene3DMesh::Create(const std::vector<Scene3D
 	}
 	for(const auto& vertex : input_vertices) {
 		if(!Bounded(vertex.position) || !Bounded(vertex.normal) || vertex.normal.Length() < 1e-12 ||
-		   !Finite(vertex.u) || !Finite(vertex.v) || !ColorValid(vertex.r,vertex.g,vertex.b,vertex.a)) {
-			error = "Mesh contains invalid position, normal, UV or opaque colour"; return {};
+		   !Finite(vertex.u) || !Finite(vertex.v) || std::abs(vertex.u)>1e9 || std::abs(vertex.v)>1e9 ||
+		   !ColorValid(vertex.r,vertex.g,vertex.b,vertex.a)) {
+			error = "Mesh contains invalid position, normal, UV or linear RGBA colour"; return {};
 		}
 	}
 	for(uint32 index : input_indices) if(index >= input_vertices.size()) { error = "Mesh index outside vertex array"; return {}; }
@@ -240,21 +247,38 @@ std::shared_ptr<const Scene3DSnapshot> Scene3DSnapshot::Create(const Scene3DScen
 	const int count = (int)desc.objects.size();
 	std::vector<int> parents(count, -1), queue;
 	std::vector<std::vector<int>> children(count);
-	size_t vertices = 0, indices = 0;
+	size_t vertices = 0, indices = 0, texture_bytes = 0, splat_count = 0;
+	std::set<const Scene3DTexture*> textures;
 	for(int i=0; i<count; ++i) {
 		const auto& source = desc.objects[i];
 		Scene3DMatrix inverse;
 		if(!ValidId(source.id) || scene->ids.Find(source.id) >= 0) { error = "Scene object IDs must be nonempty, unique and at most 256 bytes"; return {}; }
 		if(!source.local.InverseAffine(inverse)) { error = "Scene transform must be finite, nonsingular affine with positive determinant"; return {}; }
-		if(!ColorValid(source.r,source.g,source.b,source.a)) { error = "Scene material must be an opaque RGB colour in 0..1"; return {}; }
+		if(!ColorValid(source.r,source.g,source.b,source.a) || !Finite(source.opacity) || source.opacity<0 || source.opacity>1) {
+			error = "Scene colour factors and independent opacity must be finite in 0..1"; return {};
+		}
+		if(!source.material.Validate(error)) return {};
+		if(source.mesh && source.splats) { error = "A scene node cannot contain both a mesh and Gaussian points"; return {}; }
+		if(source.splats) {
+			if(source.material.color_texture) { error = "Gaussian colour is per point; mesh textures are not supported on Gaussian nodes"; return {}; }
+			splat_count += source.splats->GetSplats().size();
+			if(splat_count > Scene3DMaxSplats) { error = "Scene exceeds the 150000 instanced Gaussian point budget"; return {}; }
+		}
+		if(source.material.color_texture && textures.insert(source.material.color_texture.get()).second) {
+			texture_bytes += source.material.color_texture->GetPixels().size();
+			if(texture_bytes > size_t(512) * 1024 * 1024) {
+				error = "Scene exceeds the 512 MiB distinct texture pixel budget"; return {};
+			}
+		}
 		if(source.mesh) {
 			vertices += source.mesh->GetVertices().size(); indices += source.mesh->GetIndices().size();
 			if(vertices > 2000000 || indices > 6000000) { error = "Scene exceeds the bounded instanced geometry budget"; return {}; }
 		}
 		scene->ids.Add(source.id);
 		auto& object = scene->objects[i];
-		object.id=source.id; object.parent_id=source.parent_id; object.mesh=source.mesh;
+		object.id=source.id; object.parent_id=source.parent_id; object.mesh=source.mesh; object.splats=source.splats;
 		object.selection_outline=source.selection_outline;
+		object.material=source.material; object.opacity=source.opacity;
 		object.selectable=source.selectable; object.r=source.r; object.g=source.g; object.b=source.b; object.a=source.a;
 	}
 	for(int i=0; i<count; ++i) {
@@ -272,8 +296,8 @@ std::shared_ptr<const Scene3DSnapshot> Scene3DSnapshot::Create(const Scene3DScen
 		object.world=parent<0 ? source.local : scene->objects[parent].world*source.local;
 		object.visible=source.visible && (parent<0 || scene->objects[parent].visible);
 		if(!object.world.InverseAffine(object.inverse_world)) { error = "Composed scene transform exceeds the valid affine range"; return {}; }
-		if(object.mesh) {
-			const auto& b=object.mesh->GetBounds();
+		if(object.mesh || object.splats) {
+			const auto& b=object.mesh ? object.mesh->GetBounds() : object.splats->GetBounds();
 			for(int corner=0; corner<8; ++corner) {
 				Scene3DVec3 point=object.world.TransformPoint({corner&1?b.max.x:b.min.x,corner&2?b.max.y:b.min.y,corner&4?b.max.z:b.min.z});
 				if(!Bounded(point,1e12)) { error = "Scene world bounds exceed the finite coordinate range"; return {}; }
@@ -299,7 +323,8 @@ Scene3DPick Scene3DSnapshot::Pick(const Scene3DRay& ray, uint64 camera_revision)
 	   !Finite(ray.min_distance) || !Finite(ray.max_distance) || ray.min_distance<0 || ray.max_distance<ray.min_distance) return result;
 	double nearest=ray.max_distance;
 	for(const auto& object : objects) {
-		if(!object.visible || !object.selectable || !object.mesh || !IntersectBounds(object.bounds,ray,nearest)) continue;
+		if(!object.visible || !object.selectable || !object.mesh || object.opacity<=0 ||
+		   !IntersectBounds(object.bounds,ray,nearest)) continue;
 		const auto& vertices=object.mesh->GetVertices(); const auto& indices=object.mesh->GetIndices();
 		Scene3DVec3 origin=object.inverse_world.TransformPoint(ray.origin);
 		Scene3DVec3 direction=object.inverse_world.TransformVector(ray.direction);
@@ -307,13 +332,23 @@ Scene3DPick Scene3DSnapshot::Pick(const Scene3DRay& ray, uint64 camera_revision)
 			const auto& a=vertices[indices[i]]; const auto& b=vertices[indices[i+1]]; const auto& c=vertices[indices[i+2]];
 			Scene3DVec3 e1=b.position-a.position, e2=c.position-a.position;
 			Scene3DVec3 p=direction.Cross(e2); double determinant=e1.Dot(p);
-			if(std::abs(determinant)<=e1.Length()*e2.Length()*direction.Length()*1e-12) continue;
+			const double epsilon=e1.Length()*e2.Length()*direction.Length()*1e-12;
+			if(std::abs(determinant)<=epsilon || (!object.material.double_sided && determinant<=epsilon)) continue;
 			Scene3DVec3 delta=origin-a.position; double u=delta.Dot(p)/determinant;
 			if(u<0 || u>1) continue;
 			Scene3DVec3 q=delta.Cross(e1); double v=direction.Dot(q)/determinant;
 			if(v<0 || u+v>1) continue;
 			double distance=e2.Dot(q)/determinant;
 			if(distance<ray.min_distance || distance>nearest || (result.hit && distance==nearest)) continue;
+			if(object.material.alpha_mode != Scene3DAlphaMode::Opaque) {
+				double alpha=object.a*(a.a*(1-u-v)+b.a*u+c.a*v);
+				if(object.material.color_texture)
+					alpha *= object.material.color_texture->SampleAlpha(
+					    a.u*(1-u-v)+b.u*u+c.u*v, a.v*(1-u-v)+b.v*u+c.v*v,
+					    object.material.repeat_uv);
+				if((object.material.alpha_mode==Scene3DAlphaMode::Mask && alpha<object.material.alpha_cutoff) ||
+				   (object.material.alpha_mode==Scene3DAlphaMode::Blend && alpha<=0)) continue;
+			}
 			Scene3DVec3 normal=a.normal*(1-u-v)+b.normal*u+c.normal*v;
 			if(normal.Length()<1e-12) normal=e1.Cross(e2);
 			// Inverse-transpose from the already prepared inverse avoids reinversion.
@@ -334,8 +369,10 @@ bool Scene3DCamera::Validate(String& error) const
 	if(!revision || !Bounded(target) || !Finite(yaw) || std::abs(yaw)>1e6 || !Finite(pitch) ||
 	   std::abs(pitch)>kPitchLimit || !Finite(distance) || distance<1e-6 || distance>1e9 ||
 	   !Finite(fov_y) || fov_y<0.01 || fov_y>kPi-0.01 || !Finite(ortho_height) || ortho_height<1e-6 || ortho_height>1e9 ||
-	   !Finite(near_plane) || !Finite(far_plane) || near_plane<1e-6 || far_plane<=near_plane || far_plane>1e12) {
-		error="Invalid camera: require finite position, pitch in [-pi/2,pi/2], positive scale and 0<near<far"; return false;
+	   !Finite(near_plane) || !Finite(far_plane) || near_plane<1e-6 || far_plane<=near_plane || far_plane>1e12 ||
+	   !Finite(roll) || std::abs(roll)>1e6 || !Finite(gate_aspect) ||
+	   (gate_aspect!=0 && (gate_aspect<1e-6 || gate_aspect>1e6))) {
+		error="Invalid camera: require finite position, pitch in [-pi/2,pi/2], positive scale, valid roll/gate and 0<near<far"; return false;
 	}
 	return true;
 }
@@ -350,6 +387,52 @@ void Scene3DCamera::GetBasis(Scene3DVec3& right, Scene3DVec3& up, Scene3DVec3& f
 	// at +/-Y, and avoids loss of direction precision at a large translated target.
 	double sy,cy,sp,cp; CameraSinCos(yaw,sy,cy); CameraSinCos(pitch,sp,cp);
 	right={cy,0,-sy}; up={-sy*sp,cp,-cy*sp}; forward={-sy*cp,-sp,-cy*cp};
+	double sr,cr; CameraSinCos(roll,sr,cr);
+	const auto base_right=right, base_up=up;
+	right=base_right*cr-base_up*sr;
+	up=base_right*sr+base_up*cr;
+}
+Rect Scene3DCamera::GetGateRect(Size size) const
+{
+	String error;
+	if(!ValidSize(size) || !Validate(error)) return Rect(0,0,0,0);
+	if(gate_aspect==0) return Rect(size);
+	const double height=size.cy/GateOverscan(*this,size);
+	const int h=std::max(1,std::min(size.cy,(int)std::lround(height)));
+	const int w=std::max(1,std::min(size.cx,(int)std::lround(height*gate_aspect)));
+	return RectC((size.cx-w)/2,(size.cy-h)/2,w,h);
+}
+bool Scene3DCamera::SetLookAt(const Scene3DVec3& eye, const Scene3DVec3& aim,
+                            const Scene3DVec3& wanted_up, String& error)
+{
+	error.Clear();
+	if(!Validate(error)) return false;
+	if(!Bounded(eye) || !Bounded(aim) || !wanted_up.IsFinite()) {
+		error="Camera eye, aim and up must be finite and bounded"; return false;
+	}
+	const auto delta=aim-eye;
+	const double length=delta.Length();
+	if(!Finite(length) || length<1e-6 || length>1e9 || wanted_up.Length()<1e-12) {
+		error="Camera eye and aim must differ, with a nonzero up direction"; return false;
+	}
+	const auto forward=delta/length;
+	const auto projected_up=wanted_up-forward*wanted_up.Dot(forward);
+	if(!Finite(projected_up.Length()) || projected_up.Length()<wanted_up.Length()*1e-12) {
+		error="Camera up cannot be parallel to its viewing direction"; return false;
+	}
+	Scene3DCamera next=*this;
+	next.target=aim; next.distance=length;
+	const double horizontal=std::hypot(forward.x,forward.z);
+	next.yaw=horizontal>1e-12?std::atan2(-forward.x,-forward.z):0;
+	next.pitch=std::atan2(-forward.y,horizontal); next.roll=0;
+	Scene3DVec3 right,up,ignored; next.GetBasis(right,up,ignored);
+	const auto unit_up=projected_up.Normalized();
+	next.roll=std::atan2(unit_up.Dot(right),unit_up.Dot(up));
+	if(!next.Validate(error)) return false;
+	if(next.target.x==target.x && next.target.y==target.y && next.target.z==target.z &&
+	   next.distance==distance && next.yaw==yaw && next.pitch==pitch && next.roll==roll) return true;
+	if(!AdvanceRevision(next)) { error="Camera revision is exhausted"; return false; }
+	*this=next; return true;
 }
 Scene3DMatrix Scene3DCamera::GetViewProjection(Size size) const
 {
@@ -360,12 +443,12 @@ Scene3DMatrix Scene3DCamera::GetViewProjection(Size size) const
 	view.m[1]=up.x; view.m[5]=up.y; view.m[9]=up.z; view.m[13]=-up.Dot(eye);
 	view.m[2]=-forward.x; view.m[6]=-forward.y; view.m[10]=-forward.z; view.m[14]=forward.Dot(eye);
 	Scene3DMatrix projection; for(double& value:projection.m) value=0;
-	double aspect=(double)size.cx/size.cy;
+	double aspect=(double)size.cx/size.cy, overscan=GateOverscan(*this,size);
 	if(orthographic) {
-		projection.m[0]=2/(ortho_height*aspect); projection.m[5]=-2/ortho_height;
+		projection.m[0]=2/(ortho_height*overscan*aspect); projection.m[5]=-2/(ortho_height*overscan);
 		projection.m[10]=1/(near_plane-far_plane); projection.m[14]=near_plane/(near_plane-far_plane); projection.m[15]=1;
 	} else {
-		double cotangent=1/std::tan(fov_y*0.5);
+		double cotangent=1/(std::tan(fov_y*0.5)*overscan);
 		projection.m[0]=cotangent/aspect; projection.m[5]=-cotangent;
 		projection.m[10]=far_plane/(near_plane-far_plane); projection.m[14]=far_plane*near_plane/(near_plane-far_plane); projection.m[11]=-1;
 	}
@@ -378,7 +461,7 @@ bool Scene3DCamera::Project(const Scene3DVec3& world, Size size, Pointf& screen,
 	Scene3DVec3 right,up,forward; GetBasis(right,up,forward); Scene3DVec3 delta=world-GetEye();
 	double z=delta.Dot(forward); if(z<near_plane || z>far_plane) return false;
 	double aspect=(double)size.cx/size.cy;
-	double half_height=orthographic?ortho_height*0.5:z*std::tan(fov_y*0.5);
+	double half_height=(orthographic?ortho_height*0.5:z*std::tan(fov_y*0.5))*GateOverscan(*this,size);
 	screen.x=(1+delta.Dot(right)/(half_height*aspect))*size.cx*0.5;
 	screen.y=(1-delta.Dot(up)/half_height)*size.cy*0.5;
 	depth=orthographic?(z-near_plane)/(far_plane-near_plane):far_plane*(z-near_plane)/(z*(far_plane-near_plane));
@@ -390,12 +473,13 @@ bool Scene3DCamera::WorldRay(Pointf screen, Size size, Scene3DRay& ray) const
 	if(!Finite(screen.x) || !Finite(screen.y) || !ValidSize(size) || !Validate(error)) return false;
 	Scene3DVec3 right,up,forward; GetBasis(right,up,forward);
 	double x=2*screen.x/size.cx-1, y=1-2*screen.y/size.cy, aspect=(double)size.cx/size.cy;
+	double overscan=GateOverscan(*this,size);
 	ray.origin=GetEye();
 	if(orthographic) {
-		ray.origin=ray.origin+right*(x*ortho_height*0.5*aspect)+up*(y*ortho_height*0.5); ray.direction=forward;
+		ray.origin=ray.origin+right*(x*ortho_height*0.5*overscan*aspect)+up*(y*ortho_height*0.5*overscan); ray.direction=forward;
 		ray.min_distance=near_plane; ray.max_distance=far_plane;
 	} else {
-		double tangent=std::tan(fov_y*0.5); ray.direction=(forward+right*(x*tangent*aspect)+up*(y*tangent)).Normalized();
+		double tangent=std::tan(fov_y*0.5)*overscan; ray.direction=(forward+right*(x*tangent*aspect)+up*(y*tangent)).Normalized();
 		double cosine=ray.direction.Dot(forward); if(cosine<=0 || !Finite(cosine)) return false;
 		ray.min_distance=near_plane/cosine; ray.max_distance=far_plane/cosine;
 	}
@@ -417,7 +501,7 @@ bool Scene3DCamera::Pan(double dx, double dy, Size size)
 	String error; if(!Validate(error) || !ValidSize(size) || !Finite(dx) || !Finite(dy)) return false;
 	if(dx==0 && dy==0) return true;
 	Scene3DVec3 right,up,forward; GetBasis(right,up,forward);
-	double scale=(orthographic?ortho_height:2*distance*std::tan(fov_y*0.5))/size.cy;
+	double scale=(orthographic?ortho_height:2*distance*std::tan(fov_y*0.5))*GateOverscan(*this,size)/size.cy;
 	Scene3DCamera next=*this; next.target=target-right*(dx*scale)+up*(dy*scale);
 	if(next.target.x==target.x && next.target.y==target.y && next.target.z==target.z) return true;
 	if(!AdvanceRevision(next) || !next.Validate(error)) return false;
@@ -429,7 +513,8 @@ bool Scene3DCamera::AlignTo(Scene3DViewDirection direction)
 	String error; if(!Validate(error)) return false;
 	Scene3DCamera next=*this;
 	if(!ViewAngles(direction,next.yaw,next.pitch)) return false;
-	if(next.yaw==yaw && next.pitch==pitch) return true;
+	next.roll=0;
+	if(next.yaw==yaw && next.pitch==pitch && roll==0) return true;
 	if(!AdvanceRevision(next)) return false;
 	*this=next;
 	return true;
@@ -482,7 +567,8 @@ bool Scene3DCamera::Fit(const Scene3DBounds& bounds, Size size)
 	String error;
 	if(!Validate(error) || !ValidSize(size) || bounds.empty || !Bounded(bounds.min) || !Bounded(bounds.max) ||
 	   bounds.max.x<bounds.min.x || bounds.max.y<bounds.min.y || bounds.max.z<bounds.min.z) return false;
-	double radius=std::max(bounds.GetSize().Length()*0.5,1e-5), aspect=(double)size.cx/size.cy;
+	double radius=std::max(bounds.GetSize().Length()*0.5,1e-5);
+	double aspect=gate_aspect>0?gate_aspect:(double)size.cx/size.cy;
 	Scene3DCamera next=*this; next.target=bounds.GetCenter();
 	double half_angle=std::atan(std::tan(fov_y*0.5)*std::min(1.0,aspect));
 	next.distance=radius/std::sin(half_angle)*1.1;

@@ -2,6 +2,8 @@ uses
 	Ui3DView,
 	RenderVulkan;
 
+uses(WIN32) RenderPlatformWin32;
+
 file
 	main.cpp;
 

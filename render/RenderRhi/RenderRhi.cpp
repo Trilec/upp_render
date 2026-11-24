@@ -24,6 +24,7 @@ bool GpuNativeWindowDesc::IsValid() const
 	case GpuNativeWindowKind::None:
 		return handle == 0;
 	case GpuNativeWindowKind::Win32:
+	case GpuNativeWindowKind::MetalLayer:
 		return handle != 0;
 	}
 	return false;
@@ -46,6 +47,7 @@ String DumpGpuNativeWindowKind(GpuNativeWindowKind kind)
 {
 	switch(kind) {
 	case GpuNativeWindowKind::None: return "None";
+	case GpuNativeWindowKind::MetalLayer: return "MetalLayer";
 	case GpuNativeWindowKind::Win32: return "Win32";
 	}
 	return String("Unknown(") + AsString((int)kind) + ")";
@@ -180,6 +182,7 @@ String DumpGpuVertexLayout(GpuVertexLayout layout)
 	case GpuVertexLayout::Position2Uv2Color4F: return "Position2Uv2Color4F";
 	case GpuVertexLayout::Position3Normal3Uv2Color4F: return "Position3Normal3Uv2Color4F";
 	case GpuVertexLayout::Position3Normal3Color4F: return "Position3Normal3Color4F";
+	case GpuVertexLayout::Position3Covariance6Corner2Color4F: return "Position3Covariance6Corner2Color4F";
 	}
 	return String("Unknown(") + AsString((int)layout) + ")";
 }

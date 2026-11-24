@@ -60,6 +60,7 @@ static int VertexStride(GpuVertexLayout layout)
 	case GpuVertexLayout::Position2Uv2Color4F: return 32;
 	case GpuVertexLayout::Position3Normal3Uv2Color4F: return 48;
 	case GpuVertexLayout::Position3Normal3Color4F: return 40;
+	case GpuVertexLayout::Position3Covariance6Corner2Color4F: return 60;
 	default: return 0;
 	}
 }
@@ -960,6 +961,37 @@ VulkanGpuDevice::~VulkanGpuDevice()
 
 bool VulkanGpuDevice::IsReady() const { return impl && impl->ready && impl->session && impl->session->IsReady(); }
 const String& VulkanGpuDevice::GetError() const { return impl->error; }
+bool VulkanGpuDevice::QueryPresentationState(VulkanPresentationState& out) const
+{
+	out = VulkanPresentationState();
+	if(!impl || !impl->session) return false;
+	out.surface = impl->session->GetReport();
+	out.frame = impl->session->GetFrameReport();
+	if(!impl->ready || !impl->get_instance_proc_addr ||
+	   impl->instance == VK_NULL_HANDLE || impl->physical_device == VK_NULL_HANDLE) {
+		out.device_identity_error = "The actual Vulkan device is not ready for identity query.";
+		return true;
+	}
+	const auto get_properties = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+		impl->get_instance_proc_addr(impl->instance, "vkGetPhysicalDeviceProperties2"));
+	if(!get_properties) {
+		out.device_identity_error = "vkGetPhysicalDeviceProperties2 is unavailable.";
+		return true;
+	}
+	VkPhysicalDeviceIDProperties identity{};
+	identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+	VkPhysicalDeviceProperties2 properties{};
+	properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	properties.pNext = &identity;
+	get_properties(impl->physical_device, &properties);
+	out.device_identity_available = true;
+	out.device_luid_valid = identity.deviceLUIDValid == VK_TRUE;
+	out.device_node_mask = identity.deviceNodeMask;
+	std::memcpy(out.device_luid, identity.deviceLUID, VK_LUID_SIZE);
+	std::memcpy(out.device_uuid, identity.deviceUUID, VK_UUID_SIZE);
+	return true;
+}
+
 uint64 VulkanGpuDevice::GetLiveAllocationBytes() const
 {
 	uint64 bytes = 0;
@@ -1389,8 +1421,8 @@ GpuResult VulkanGpuDevice::CreateSurface(const GpuSurfaceDesc& desc, GpuSurfaceI
 {
 	out = GpuSurfaceId();
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
-	if(desc.size.cx <= 0 || desc.size.cy <= 0 || !desc.native_window.IsValid() || desc.native_window.kind != GpuNativeWindowKind::Win32) {
-		impl->error = "CreateSurface requires positive size and a valid Win32 native window";
+	if(desc.size.cx <= 0 || desc.size.cy <= 0 || !desc.native_window.IsValid() || desc.native_window.kind == GpuNativeWindowKind::None) {
+		impl->error = "CreateSurface requires positive size and a valid native presentation surface";
 		return GpuResult::InvalidArgument;
 	}
 	const GpuNativeWindowDesc& session_window = impl->session->GetReport().native_window;
@@ -1649,7 +1681,8 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	if(impl->shaders[vi].desc.stage != GpuShaderStage::Vertex || impl->shaders[fi].desc.stage != GpuShaderStage::Fragment) { impl->error = "CreatePipeline shader stages do not match"; return GpuResult::InvalidArgument; }
 	if((desc.vertex_layout != GpuVertexLayout::Position2Color4F &&
 	    desc.vertex_layout != GpuVertexLayout::Position3Normal3Uv2Color4F &&
-	    desc.vertex_layout != GpuVertexLayout::Position3Normal3Color4F) ||
+	    desc.vertex_layout != GpuVertexLayout::Position3Normal3Color4F &&
+	    desc.vertex_layout != GpuVertexLayout::Position3Covariance6Corner2Color4F) ||
 	   ToVkFormat(desc.color_format) == VK_FORMAT_UNDEFINED || IsDepthFormat(desc.color_format) || !ValidDepthState(desc) ||
 	   (desc.topology != GpuPrimitiveTopology::TriangleList && desc.topology != GpuPrimitiveTopology::LineList)) {
 		impl->error = "CreatePipeline received invalid layout, format, topology, depth, cull or parameter state";
@@ -1679,15 +1712,21 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = impl->shaders[fi].module; stages[1].pName = impl->shaders[fi].desc.entry_point.Begin();
 	VkVertexInputBindingDescription binding {}; binding.binding = 0; binding.stride = VertexStride(desc.vertex_layout); binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	const bool mesh_uv = desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F;
-	const bool mesh = mesh_uv || desc.vertex_layout == GpuVertexLayout::Position3Normal3Color4F;
-	VkVertexInputAttributeDescription attrs[4] {};
-	for(uint32_t i = 0; i < 4; ++i) { attrs[i].location = i; attrs[i].binding = 0; }
+	const bool gaussian = desc.vertex_layout == GpuVertexLayout::Position3Covariance6Corner2Color4F;
+	const bool mesh = mesh_uv || gaussian || desc.vertex_layout == GpuVertexLayout::Position3Normal3Color4F;
+	VkVertexInputAttributeDescription attrs[5] {};
+	for(uint32_t i = 0; i < 5; ++i) { attrs[i].location = i; attrs[i].binding = 0; }
 	attrs[0].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32_SFLOAT;
 	attrs[1].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT;
 	attrs[1].offset = mesh ? 12 : 8;
 	attrs[2].format = mesh_uv ? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT; attrs[2].offset = 24;
 	attrs[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[3].offset = 32;
-	VkPipelineVertexInputStateCreateInfo vertex {}; vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding; vertex.vertexAttributeDescriptionCount = mesh_uv ? 4 : mesh ? 3 : 2; vertex.pVertexAttributeDescriptions = attrs;
+	if(gaussian) {
+		attrs[2].format = VK_FORMAT_R32G32B32_SFLOAT; attrs[2].offset = 24;
+		attrs[3].format = VK_FORMAT_R32G32_SFLOAT; attrs[3].offset = 36;
+		attrs[4].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[4].offset = 44;
+	}
+	VkPipelineVertexInputStateCreateInfo vertex {}; vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; vertex.vertexBindingDescriptionCount = 1; vertex.pVertexBindingDescriptions = &binding; vertex.vertexAttributeDescriptionCount = gaussian ? 5 : mesh_uv ? 4 : mesh ? 3 : 2; vertex.pVertexAttributeDescriptions = attrs;
 	VkPipelineInputAssemblyStateCreateInfo assembly {}; assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO; assembly.topology = ToVkTopology(desc.topology);
 	VkPipelineViewportStateCreateInfo viewport {}; viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO; viewport.viewportCount = 1; viewport.scissorCount = 1;
 	VkPipelineRasterizationStateCreateInfo raster {}; raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = desc.cull_mode == GpuCullMode::Back ? VK_CULL_MODE_BACK_BIT : desc.cull_mode == GpuCullMode::Front ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE; raster.frontFace = desc.front_face == GpuFrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0f;

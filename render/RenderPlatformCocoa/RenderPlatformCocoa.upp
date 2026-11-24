@@ -1,0 +1,8 @@
+description "Native Cocoa child surface for embedded GPU controls";
+uses
+	CtrlCore,
+	RenderRhi;
+link(OSX) "-framework QuartzCore -framework Metal";
+file
+	CocoaGpuSurface.h,
+	CocoaGpuSurface.mm;

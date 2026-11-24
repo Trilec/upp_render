@@ -5,6 +5,20 @@
 
 namespace Upp {
 
+// Read-only snapshot of this adapter's existing surface session and actual
+// selected physical device. Call on the owning presentation thread while the
+// device is alive; it never acquires/presents, selects another GPU or changes WSI.
+struct VulkanPresentationState {
+	VulkanSurfaceReport surface;
+	VulkanFrameReport frame;
+	bool device_identity_available = false;
+	bool device_luid_valid = false;
+	byte device_luid[VK_LUID_SIZE]{};
+	byte device_uuid[VK_UUID_SIZE]{};
+	uint32_t device_node_mask = 0;
+	String device_identity_error;
+};
+
 // VulkanGpuDevice borrows Vulkan ownership from an already-open surface session.
 // Keep the session alive and ready until this adapter and its resources are destroyed.
 class VulkanGpuDevice final : public GpuDevice {
@@ -19,6 +33,7 @@ public:
 
 	bool IsReady() const;
 	const String& GetError() const;
+	bool QueryPresentationState(VulkanPresentationState& out) const;
 	// VkMemoryRequirements-sized exclusive allocations owned by this adapter.
 	// Shared immutable images are counted once by GetSharedImmutableAllocationBytes.
 	// Excludes driver/swapchain memory and temporary upload staging.

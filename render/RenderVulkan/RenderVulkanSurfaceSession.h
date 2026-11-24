@@ -36,6 +36,10 @@ struct VulkanFrameReport {
 	uint64_t acquire_count = 0;
 	uint64_t present_count = 0;
 	uint64_t swapchain_id = 0;
+	// Raw driver results, captured before any test-hook override. Valid is false
+	// when the corresponding driver call did not occur in this frame attempt.
+	bool acquire_result_valid = false, present_result_valid = false;
+	int acquire_result = 0, present_result = 0;
 	String error;
 };
 

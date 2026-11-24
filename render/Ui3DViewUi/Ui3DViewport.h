@@ -40,6 +40,9 @@ public:
 	Ui3DViewport& ShowOrientation(bool show = true);
 	Ui3DViewport& ShowNavigation(bool show = true);
 	Ui3DViewport& ShowAnnotations(bool show = true);
+	// Consolidate projection, display and units in the toolbar instead of corner labels.
+	// Opt-in; hidden toolbars retain the corner annotations.
+	Ui3DViewport& SetStatusInHeader(bool show = true);
 	Ui3DViewport& SetCompact(bool compact = true);
 	Ui3DViewport& SetCameraLabel(const String& label);
 	// Explicit lower bounds preserve the standard UiPanel setter vocabulary.
@@ -72,6 +75,9 @@ public:
 	// A fixed intrinsic floor: the current viewport rectangle must never feed
 	// back into the parent's next minimum-size measurement.
 	Size GetMinSize() const override;
+	Size MeasureSizeForWidth(int outer_width) const override;
+	Size GetMinWrapSize() const override;
+	bool HasWidthDependentContent() const override;
 	void Paint(Draw& draw) override;
 	void ChildGotFocus() override;
 	void LeftDown(Point point, dword flags) override;

@@ -1,5 +1,6 @@
 #include <Ui3DView/Ui3DView.h>
 #include <Ui3DView/Ui3DViewContent.h>
+#include <RenderPlatformWin32/Win32ChildSurface.h>
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include <windows.h>
 #include <cmath>
@@ -102,7 +103,7 @@ std::shared_ptr<const Scene3DSnapshot> Scene(uint64 revision, const String& id)
 }
 HWND Host(Ui3DView& view)
 {
-	auto *native = dynamic_cast<DHCtrl *>(view.GetFirstChild());
+	auto *native = dynamic_cast<Win32ChildSurface *>(view.GetFirstChild());
 	return native ? native->GetHWND() : nullptr;
 }
 struct NativeMotionProbe {

@@ -1,8 +1,7 @@
 #include "RenderVulkanSurfaceSession.h"
 #include "RenderVulkanTestHooks.h"
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+
 
 namespace Upp {
 
@@ -44,6 +43,7 @@ struct VulkanFrameTestInjection {
 };
 
 static VulkanFrameTestInjection g_frame_test_injection;
+#ifdef PLATFORM_WIN32
 static VulkanProcResolver g_frame_test_base_resolver = nullptr;
 static const char *g_frame_test_missing_proc = nullptr;
 
@@ -53,6 +53,8 @@ static FARPROC WINAPI FrameTestResolver(HMODULE module, LPCSTR name)
 		return nullptr;
 	return g_frame_test_base_resolver ? g_frame_test_base_resolver(module, name) : nullptr;
 }
+
+#endif
 
 template <class T, class Interop>
 static bool ResolveFrameProc(T& out, const Interop& interop, const char *name, String& error)
@@ -96,10 +98,13 @@ static void DestroyUnpublishedFrameState(VkDevice device, VulkanFrameState& stat
 	state.image_initialized.Clear();
 }
 
+#ifdef PLATFORM_WIN32
 static HWND CreateHiddenFrameTestWindow()
 {
 	return CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
 }
+
+#endif
 
 } // namespace
 
@@ -203,6 +208,7 @@ bool VulkanSurfaceSession::AcquireFrame()
 		frame_report.out_of_date = false;
 		frame_report.image_index = -1;
 		frame_report.swapchain_id = interop.swapchain_id;
+		frame_report.acquire_result_valid = frame_report.present_result_valid = false;
 		frame_report.error.Clear();
 	}
 	if(frame_report.out_of_date) {
@@ -310,11 +316,14 @@ bool VulkanSurfaceSession::AcquireFrame()
 	frame_report.suboptimal = false;
 	frame_report.image_index = -1;
 	frame_report.error.Clear();
+	frame_report.acquire_result_valid = frame_report.present_result_valid = false;
 	uint32_t image_index = 0;
 	if(g_frame_test_injection.acquire_out_of_date)
 		vr = VK_ERROR_OUT_OF_DATE_KHR;
 	else {
 		vr = state->acquire_next_image(interop.device, interop.swapchain, UINT64_MAX, VK_NULL_HANDLE, state->in_flight, &image_index);
+		frame_report.acquire_result = (int)vr;
+		frame_report.acquire_result_valid = true;
 		if(g_frame_test_injection.acquire_suboptimal && vr == VK_SUCCESS)
 			vr = VK_SUBOPTIMAL_KHR;
 	}
@@ -465,6 +474,8 @@ bool VulkanSurfaceSession::PresentFrameImpl(bool externally_rendered)
 		vr = VK_ERROR_OUT_OF_DATE_KHR;
 	else {
 		vr = state->queue_present(interop.present_queue, &present_info);
+		frame_report.present_result = (int)vr;
+		frame_report.present_result_valid = true;
 		if(g_frame_test_injection.present_suboptimal && vr == VK_SUCCESS)
 			vr = VK_SUBOPTIMAL_KHR;
 	}
@@ -491,6 +502,7 @@ bool VulkanSurfaceSession::PresentFrameImpl(bool externally_rendered)
 	return false;
 }
 
+#ifdef PLATFORM_WIN32
 namespace VulkanTestHooks {
 
 bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestResult& result)
@@ -643,5 +655,6 @@ bool TestVulkanFramePresentation(VulkanProcResolver resolver, VulkanFrameTestRes
 }
 
 } // namespace VulkanTestHooks
+#endif
 
 }

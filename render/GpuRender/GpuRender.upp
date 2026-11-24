@@ -6,9 +6,11 @@ uses
 	RenderCanvas,
 	RenderCtrlBridge,
 	RenderGpu2D,
-	RenderPlatformWin32,
 	RenderRhi,
 	RenderVulkan;
+
+uses(WIN32) RenderPlatformWin32;
+uses(OSX) RenderPlatformCocoa;
 
 file
 	GpuRender.h,

@@ -9,8 +9,7 @@ Building requires the toolchain/SDK; running the resulting application does not.
    export if the development Ui checkout contains unrelated edits.
 3. Copy `CLANGx64_Vulkan.bm.example` to `CLANGx64_Vulkan.bm`, replace the
    placeholder compiler/SDK paths, and configure it in TheIDE.
-4. Copy `GitHubOut.var.example` to `GitHubOut.var` and set the source nests.
-   These two workstation files are local and ignored by Git.
+4. Create a local assembly in TheIDE with the source nests listed below, or pass the nests directly to UMK. The workstation method and `GitHubOut.var` are ignored by Git.
 
 A release build may select the committed renderer snapshot at
 `build/qualified-render-main/render` while unrelated renderer edits are in progress.

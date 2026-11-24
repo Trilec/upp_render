@@ -73,6 +73,7 @@ Testing/
 
 # Local release output and workstation configuration
 /bin/
+.DS_Store
 /CLANGx64_Vulkan.bm
 /GitHubOut.var
 __pycache__/

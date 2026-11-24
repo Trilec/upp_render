@@ -1,4 +1,4 @@
-uses(CFONTS)
+uses(WIN32 CFONTS)
 	RenderFontWin32;
 
 uses

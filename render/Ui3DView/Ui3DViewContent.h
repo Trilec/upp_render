@@ -20,6 +20,13 @@ struct Ui3DViewGridLayout {
 bool ComputeUi3DViewGridLayout(const Scene3DCamera& camera, const Ui3DViewOptions& options,
                               Size viewport, Ui3DViewGridLayout& out);
 
+// Pure bounded guide layout shared by the GPU renderer and native qualification.
+struct Ui3DViewGateLayout {
+	Rect gate, action_safe, title_safe;
+};
+bool ComputeUi3DViewGateLayout(const Scene3DCamera&, const Ui3DViewOptions&,
+                              Size viewport, Ui3DViewGateLayout&);
+
 struct Ui3DViewState {
 	std::shared_ptr<const Scene3DSnapshot> scene;
 	std::shared_ptr<const Scene3DSnapshot> tool_preview_scene;

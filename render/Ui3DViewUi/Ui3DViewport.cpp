@@ -4,6 +4,9 @@
 #include <Ui/UiLabel.h>
 #include <Ui/UiTextLayout.h>
 #include <Ui/UiIcons.h>
+#ifdef GUI_WIN
+#include <RenderPlatformWin32/Win32ChildSurface.h>
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -215,16 +218,40 @@ struct Ui3DViewport::Impl {
 	};
 
 #ifdef GUI_WIN
-	class OverlayHost : public DHCtrl {
+	class OverlayHost : public Win32ChildSurface {
 	public:
 		Impl *impl = nullptr;
 		OverlayHost() { NoWantFocus(); }
+		void ChildMouseEvent(Ctrl* child, int event, Point p, int delta, dword flags) override
+		{
+			Ptr<OverlayHost> alive(this);
+			Win32ChildSurface::ChildMouseEvent(child, event, p, delta, flags);
+			if(alive) alive->RequestNativeRefresh();
+		}
+		void ChildFrameMouseEvent(Ctrl* child, int event, Point p, int delta, dword flags) override
+		{
+			Ptr<OverlayHost> alive(this);
+			Win32ChildSurface::ChildFrameMouseEvent(child, event, p, delta, flags);
+			if(alive) alive->RequestNativeRefresh();
+		}
+		void ChildGotFocus() override
+		{
+			Ptr<OverlayHost> alive(this);
+			Win32ChildSurface::ChildGotFocus();
+			if(alive) alive->RequestNativeRefresh();
+		}
+		void ChildLostFocus() override
+		{
+			Ptr<OverlayHost> alive(this);
+			Win32ChildSurface::ChildLostFocus();
+			if(alive) alive->RequestNativeRefresh();
+		}
 		void State(int reason) override
 		{
 			// Windows can recycle an HWND value after close/reopen. A matching
 			// handle and geometry must never reuse a region owned by the old window.
 			if(impl && (reason == OPEN || reason == CLOSE)) impl->region_hwnd = nullptr;
-			DHCtrl::State(reason);
+			Win32ChildSurface::State(reason);
 			if(reason == OPEN && GetHWND()) {
 				// Both native siblings honour their z-order when painting. This is
 				// a one-time window-style change, not a camera-frame reorder.
@@ -240,20 +267,27 @@ struct Ui3DViewport::Impl {
 		Image MouseEvent(int event, Point point, int delta, dword flags) override
 		{
 			return impl ? impl->ForwardToView(*this, event, point, delta, flags)
-			            : DHCtrl::MouseEvent(event, point, delta, flags);
+			            : Win32ChildSurface::MouseEvent(event, point, delta, flags);
 		}
 		LRESULT WindowProc(UINT message, WPARAM wp, LPARAM lp) override
 		{
 			GuiLock lock;
+			if(message == WM_WINDOWPOSCHANGED) {
+				Ptr<OverlayHost> alive(this);
+				const LRESULT result = Win32ChildSurface::WindowProc(message, wp, lp);
+				if(alive && alive->impl) alive->impl->SyncNativeOverlay();
+				return result;
+			}
 			if(message == WM_ERASEBKGND) return 1;
 			if(message == WM_PAINT) {
+				if(impl) impl->SyncNativeOverlay();
 				HWND hwnd = GetHWND();
 				PAINTSTRUCT paint;
 				HDC dc = BeginPaint(hwnd, &paint);
 				if(dc && impl) {
 					++impl->chrome_stats.native_paints;
 					SystemDraw draw(dc);
-					// Draw bounded ordinary children, never the DHCtrl itself.
+					// Draw bounded ordinary children, never the Win32ChildSurface itself.
 					// A full-viewport DrawCtrl would allocate a full-size U++
 					// backbuffer merely to update these small annotation regions.
 					Rect clip(paint.rcPaint.left, paint.rcPaint.top,
@@ -276,7 +310,7 @@ struct Ui3DViewport::Impl {
 				EndPaint(hwnd, &paint);
 				return 0;
 			}
-			return DHCtrl::WindowProc(message, wp, lp);
+			return Win32ChildSurface::WindowProc(message, wp, lp);
 		}
 	};
 #else
@@ -295,6 +329,7 @@ struct Ui3DViewport::Impl {
 	Ui3DViewport& owner;
 	Ui3DView view;
 	UiPanel bar;
+	UiLabel header_status;
 	UiToolButton direction, camera, wire, solid, edges, display, overlays, maximize;
 	UiMenu direction_menu, display_menu, overlay_menu, camera_menu;
 	OverlayHost overlay;
@@ -304,7 +339,7 @@ struct Ui3DViewport::Impl {
 	AnnotationLabel projection_label, view_label, units_label, mouse_hint;
 	bool active = false, dark = true, toolbar_visible = true;
 	bool orientation_visible = true, navigation_visible = true, annotations_visible = true, compact = false;
-	bool syncing_native = false;
+	bool syncing_native = false, status_in_header = false;
 	String camera_label = "Free camera";
 	int direction_icon = -1;
 	Size requested_minimum = Size(0, 0);
@@ -348,7 +383,7 @@ struct Ui3DViewport::Impl {
 Ui3DViewport::Impl::Impl(Ui3DViewport& viewport) : owner(viewport)
 {
 	owner.Add(view); owner.Add(bar); owner.Add(overlay);
-	bar.Add(direction); bar.Add(camera); bar.Add(wire); bar.Add(solid); bar.Add(edges);
+	bar.Add(direction); bar.Add(camera); bar.Add(header_status); bar.Add(wire); bar.Add(solid); bar.Add(edges);
 	bar.Add(display); bar.Add(overlays); bar.Add(maximize);
 	overlay.impl = this; overlay_panel.impl = this; axes.impl = this;
 	overlay.Add(overlay_panel);
@@ -356,7 +391,7 @@ Ui3DViewport::Impl::Impl(Ui3DViewport& viewport) : owner(viewport)
 	for(AnnotationLabel *label : labels) { label->impl = this; overlay.Add(*label); }
 	overlay_panel.Add(axes); overlay_panel.Add(orbit); overlay_panel.Add(pan);
 	overlay_panel.Add(zoom_in); overlay_panel.Add(zoom_out); overlay_panel.Add(fit);
-	bar.NoWantFocus(); overlay_panel.NoWantFocus();
+	bar.NoWantFocus(); overlay_panel.NoWantFocus(); header_status.NoWantFocus();
 	for(UiToolButton *button : { &direction, &camera }) {
 		button->SetText("").SetAlign(UiAlign::CENTER, UiAlign::CENTER).SetContentInset(0);
 		button->SetIconRenderMode(UiIconRenderMode::MonoTint);
@@ -615,6 +650,18 @@ void Ui3DViewport::Impl::ApplyStyle()
 	panel_style.transparent = false;
 	for(int i = 0; i < 4; ++i) panel_style.palette.face[i] = colors.bar;
 	bar.SetCustomStyle(panel_style);
+	UiLabel::Style status_style = header_status.GetStyle();
+	status_style.skin.enabled = false;
+	status_style.transparent = false; status_style.nowrap = true;
+	status_style.metrics.frame_enabled = false;
+	status_style.metrics.radius = 0;
+	status_style.metrics.content_margin = Rect(DPI(5), 0, DPI(5), 0);
+	status_style.font = StdFont().Height(DPI(12));
+	for(int i = 0; i < 4; ++i) {
+		status_style.palette.face[i] = colors.bar;
+		status_style.palette.ink[i] = colors.muted;
+	}
+	header_status.SetCustomStyle(status_style);
 	Rgba8 background = view.GetOptions().background;
 	overlay_background = Color(background.r, background.g, background.b);
 	for(int i = 0; i < 4; ++i) panel_style.palette.face[i] = overlay_background;
@@ -712,6 +759,8 @@ void Ui3DViewport::Impl::Layout()
 	Ui3DViewportShow(camera, camera_width >= DPI(20));
 	Ui3DViewportPlace(camera, RectC(camera_x, y, camera_width, button));
 	Ui3DViewportTip(camera, camera_label + " - choose a scene camera");
+	int status_x = camera_x + camera_width + gap;
+	Ui3DViewportPlace(header_status, RectC(status_x, y, max(0, right-status_x), button));
 	UpdateDirectionButton();
 	int side = DPI(compact ? 82 : 98);
 	int nav_button = DPI(27), nav_gap = DPI(4), margin = DPI(8);
@@ -807,12 +856,21 @@ void Ui3DViewport::Impl::UpdateAnnotations()
 	Ui3DViewportText(view_label, name);
 	Ui3DViewportText(units_label, "Y up  \xC2\xB7  metres");
 	Ui3DViewportText(mouse_hint, "MMB orbit  \xC2\xB7  Shift+MMB pan  \xC2\xB7  Wheel zoom");
+	bool header_mode = status_in_header && toolbar_visible;
+	String status = name;
+	if(direction != Scene3DViewDirection::User)
+		status += current.orthographic ? " (orthographic)" : " (perspective)";
+	status += " | " + display_name + " | Y up \xC2\xB7 metres";
+	Ui3DViewportText(header_status, status);
+	Ui3DViewportTip(header_status, status);
+	Ui3DViewportShow(header_status, header_mode && annotations_visible && header_status.GetSize().cx >= DPI(30));
 	bool show = annotations_visible && size.cx >= DPI(110) && size.cy >= DPI(70);
+	bool show_corners = show && !header_mode;
 	auto place_label = [&](AnnotationLabel& label, Size slot, Point origin, int maximum_width, bool visible) {
 		Ui3DViewportShow(label, visible && maximum_width >= DPI(30));
 		Ui3DViewportPlace(label, RectC(origin.x, origin.y, min(slot.cx, max(0, maximum_width)), slot.cy));
 	};
-	place_label(projection_label, projection_slot, Point(margin, margin), top_width, show);
+	place_label(projection_label, projection_slot, Point(margin, margin), top_width, show_corners);
 	Size units = units_slot, caption = view_slot;
 	int baseline = size.cy - margin;
 	int left_width = max(0, size.cx - 2*margin);
@@ -820,8 +878,8 @@ void Ui3DViewport::Impl::UpdateAnnotations()
 	if(overlay_panel.IsShown() && fit.IsShown() &&
 	   overlay_panel.GetRect().top + fit.GetRect().bottom > baseline - units.cy - caption.cy - gap)
 		left_width = max(0, overlay_panel.GetRect().left + fit.GetRect().left - 2*margin);
-	place_label(units_label, units_slot, Point(margin, baseline-units.cy), left_width, show);
-	place_label(view_label, view_slot, Point(margin, baseline-units.cy-gap-caption.cy), left_width, show);
+	place_label(units_label, units_slot, Point(margin, baseline-units.cy), left_width, show_corners);
+	place_label(view_label, view_slot, Point(margin, baseline-units.cy-gap-caption.cy), left_width, show_corners);
 	Size hint = hint_slot;
 	place_label(mouse_hint, hint_slot, Point(max(margin, size.cx-margin-hint.cx), baseline-hint.cy),
 	            max(0, size.cx-2*margin), show && !compact && size.cx >= DPI(620));
@@ -861,6 +919,9 @@ void Ui3DViewport::Impl::RefreshChrome()
 	axes.Update();
 	UpdateAnnotations();
 	SyncNativeOverlay();
+#ifdef GUI_WIN
+	overlay.RequestNativeRefresh();
+#endif
 }
 
 void Ui3DViewport::Impl::AxisCtrl::Update()
@@ -1021,7 +1082,11 @@ bool Ui3DViewport::Impl::AxisCtrl::Key(dword key, int count)
 {
 	if(key == K_LEFT || key == K_UP || key == K_RIGHT || key == K_DOWN) {
 		key_part = (key_part + ((key == K_LEFT || key == K_UP) ? 6 : 1)) % 7;
-		Refresh(); return true;
+		Refresh();
+#ifdef GUI_WIN
+		if(impl) impl->overlay.RequestNativeRefresh();
+#endif
+		return true;
 	}
 	if(key == K_ENTER || key == K_SPACE) { if(impl) impl->AxisCommand(key_part); return true; }
 	if(key == K_ESCAPE && impl) { impl->view.SetFocus(); return true; }
@@ -1034,6 +1099,13 @@ void Ui3DViewport::Impl::SyncNativeOverlay()
 	if(syncing_native || !overlay.GetHWND()) return;
 	syncing_native = true;
 	HWND hwnd = overlay.GetHWND();
+	RECT native_rect;
+	if(!GetWindowRect(hwnd, &native_rect)) { syncing_native = false; return; }
+	const Rect native_bounds(native_rect.left, native_rect.top,
+	                         native_rect.right, native_rect.bottom);
+	const Rect visible = overlay.GetVisibleScreenRect() & native_bounds;
+	const Rect ancestor_clip = overlay.IsVisible() && !visible.IsEmpty()
+	                         ? visible - native_bounds.TopLeft() : Rect(0, 0, 0, 0);
 	uint64 key = 1469598103934665603ULL;
 	auto add_key = [&](int value) { key = (key ^ uint64(unsigned(value))) * 1099511628211ULL; };
 	auto add_rect = [&](const Rect& rect) {
@@ -1041,6 +1113,7 @@ void Ui3DViewport::Impl::SyncNativeOverlay()
 	};
 	Point panel_origin = overlay_panel.GetRect().TopLeft();
 	add_rect(overlay.GetRect());
+	add_rect(ancestor_clip);
 	add_key(overlay_panel.IsShown()); add_key(panel_origin.x); add_key(panel_origin.y);
 	add_key(axes.IsShown()); add_rect(axes.GetRect());
 	add_key(DPI(12)); add_key(DPI(7));
@@ -1077,6 +1150,15 @@ void Ui3DViewport::Impl::SyncNativeOverlay()
 		Rect r = label->GetRect();
 		add_region(CreateRectRgn(r.left, r.top, r.right, r.bottom));
 	}
+	// Native siblings do not inherit the U++ scroll/view ancestors. Intersect
+	// every overlay island with the same visible area as ordinary Ctrl painting.
+	HRGN limits = CreateRectRgn(ancestor_clip.left, ancestor_clip.top,
+	                           ancestor_clip.right, ancestor_clip.bottom);
+	if(!limits || CombineRgn(shape, shape, limits, RGN_AND) == ERROR) {
+		if(limits) DeleteObject(limits);
+		DeleteObject(shape); syncing_native = false; return;
+	}
+	DeleteObject(limits);
 	// On success Windows owns this stable union of bounded islands. Geometry
 	// remains visible outside the gizmo, buttons and fixed annotation slots.
 	if(SetWindowRgn(hwnd, shape, TRUE)) {
@@ -1090,6 +1172,20 @@ void Ui3DViewport::Impl::SyncNativeOverlay()
 	   SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE))
 		++chrome_stats.z_order_updates;
 	syncing_native = false;
+#elif defined(GUI_COCOA)
+	Vector<Rect> tiles;
+	if(overlay.IsShown()) {
+		const Point origin = overlay_panel.GetRect().TopLeft();
+		if(overlay_panel.IsShown()) {
+			Ctrl *controls[] = { &axes, &orbit, &pan, &zoom_in, &zoom_out, &fit };
+			for(Ctrl *control : controls)
+				if(control->IsShown()) tiles.Add(control->GetRect() + origin);
+		}
+		AnnotationLabel *labels[] = { &projection_label, &view_label, &units_label, &mouse_hint };
+		for(const auto *label : labels)
+			if(label->IsShown()) tiles.Add(label->GetRect());
+	}
+	view.SetCocoaOverlayRects(tiles);
 #endif
 }
 
@@ -1150,6 +1246,12 @@ Ui3DViewport& Ui3DViewport::ShowAnnotations(bool show)
 	return *this;
 }
 
+Ui3DViewport& Ui3DViewport::SetStatusInHeader(bool show)
+{
+	if(impl->status_in_header != show) { impl->status_in_header = show; Layout(); }
+	return *this;
+}
+
 Ui3DViewport& Ui3DViewport::SetCompact(bool compact)
 {
 	if(impl->compact != compact) { impl->compact = compact; Layout(); }
@@ -1192,6 +1294,13 @@ Size Ui3DViewport::GetMinSize() const
 	Size requested = impl ? impl->requested_minimum : Size(0, 0);
 	return Size(max(DPI(175), requested.cx), max(DPI(120), requested.cy));
 }
+
+// Native presentation and overlay rectangles follow the allocation; they are
+// never intrinsic content. Keep the complete UiPanel measurement contract on
+// the same floor when this subclass is measured through UiMeasureLayout.
+Size Ui3DViewport::MeasureSizeForWidth(int) const { return GetMinSize(); }
+Size Ui3DViewport::GetMinWrapSize() const { return GetMinSize(); }
+bool Ui3DViewport::HasWidthDependentContent() const { return false; }
 
 void Ui3DViewport::Paint(Draw& draw)
 {

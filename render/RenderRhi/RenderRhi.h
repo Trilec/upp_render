@@ -16,6 +16,7 @@ enum class GpuBackendKind {
 enum class GpuNativeWindowKind {
 	None,
 	Win32,
+	MetalLayer, // Borrowed CAMetalLayer, retained by the host through session close.
 };
 
 enum class GpuFormat {
@@ -89,6 +90,8 @@ enum class GpuVertexLayout {
 	Position3Normal3Uv2Color4F,
 	// Untextured position3, normal3, linear color4 (40-byte stride; locations 0/1/2).
 	Position3Normal3Color4F,
+	// Float position3, covariance6(xx,xy,xz,yy,yz,zz), corner2, linear RGBA4.
+	Position3Covariance6Corner2Color4F, // 60 bytes; unsampled Gaussian quads.
 };
 
 enum class GpuCompareOp { Never, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always };

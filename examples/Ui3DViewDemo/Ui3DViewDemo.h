@@ -24,10 +24,12 @@ public:
 	void ActivatePane(int pane);
 	void ResetDemo();
 	void SetValidation();
-	bool Capture(const String& file, String& error);
 	bool CheckReady(String& error) const;
+#ifdef GUI_WIN
+	bool Capture(const String& file, String& error);
 	bool QualifyWorkspace(String& report);
 	bool QualifyOverlays(String& report, const String& evidence_directory);
+#endif
 	Ui3DViewport& Pane(int i) { return panes.at(i); }
 	const Ui3DViewport& Pane(int i) const { return panes.at(i); }
 	int ActivePane() const { return active; }

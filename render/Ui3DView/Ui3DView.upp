@@ -3,6 +3,7 @@ uses
 	CtrlLib,
 	GpuRender,
 	RenderRhi,
+	RenderGpu2D,
 	RenderCore,
 	RenderScene;
 
@@ -10,4 +11,9 @@ file
 	Ui3DView.h,
 	Ui3DView.cpp,
 	Ui3DViewContent.h,
-	Ui3DViewContent.cpp;
+	Ui3DViewContent.cpp,
+	Ui3DViewRenderer.h,
+	Ui3DViewResources.cpp,
+	Ui3DViewSplats.cpp,
+	Ui3DViewGrid.cpp,
+	Ui3DViewGate.cpp;

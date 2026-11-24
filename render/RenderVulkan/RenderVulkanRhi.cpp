@@ -307,13 +307,19 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		return CreatePipelineBase(desc, out);
 	if(!impl->CheckReady())
 		return GpuResult::InvalidState;
-	if(desc.depth_format != GpuFormat::Unknown || desc.depth_test || desc.depth_write ||
-	   desc.parameter_bytes != 0 || desc.cull_mode != GpuCullMode::None || desc.front_face != GpuFrontFace::CounterClockwise) {
-		impl->error = "sampled pipelines do not implement depth, culling or graphics parameters"; return GpuResult::Unsupported;
-	}
-	if(desc.sampled_texture_count != 1 || desc.vertex_layout != GpuVertexLayout::Position2Uv2Color4F) {
-		impl->error = "sampled Vulkan pipeline requires one texture and Position2Uv2Color4F";
+	const bool mesh = desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F;
+	if(desc.sampled_texture_count != 1 ||
+	   (!mesh && desc.vertex_layout != GpuVertexLayout::Position2Uv2Color4F) ||
+	   !ValidDepthState(desc) ||
+	   (desc.topology != GpuPrimitiveTopology::TriangleList && desc.topology != GpuPrimitiveTopology::LineList)) {
+		impl->error = "sampled pipeline requires one texture, a supported UV layout and valid graphics state";
 		return GpuResult::InvalidArgument;
+	}
+	if(desc.depth_format != GpuFormat::Unknown) {
+		GpuTextureCapabilities caps;
+		GpuResult supported = GetTextureCapabilities(desc.depth_format, GpuTextureUsage_DepthAttachment, caps);
+		if(supported != GpuResult::Ok) return supported;
+		if(!caps.depth_attachment) return GpuResult::Unsupported;
 	}
 	if(desc.sampler_filter != GpuSamplerFilter::Nearest && desc.sampler_filter != GpuSamplerFilter::Linear) {
 		impl->error = "sampled Vulkan pipeline received an unsupported filter";
@@ -383,10 +389,17 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 		return GpuResult::InvalidState;
 	}
 
+	VkPushConstantRange parameters {};
+	parameters.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	parameters.size = (uint32_t)desc.parameter_bytes;
 	VkPipelineLayoutCreateInfo lci {};
 	lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	lci.setLayoutCount = 1;
 	lci.pSetLayouts = &state.descriptor_layout;
+	if(desc.parameter_bytes) {
+		lci.pushConstantRangeCount = 1;
+		lci.pPushConstantRanges = &parameters;
+	}
 	vr = impl->create_pipeline_layout(impl->device, &lci, nullptr, &state.layout);
 	if(vr != VK_SUCCESS) {
 		sampled.DestroyPipelineState(state);
@@ -406,17 +419,21 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 
 	VkVertexInputBindingDescription binding {};
 	binding.binding = 0;
-	binding.stride = 8 * sizeof(float);
+	binding.stride = VertexStride(desc.vertex_layout);
 	binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	VkVertexInputAttributeDescription attrs[3] {};
-	attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32_SFLOAT; attrs[0].offset = 0;
-	attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32_SFLOAT; attrs[1].offset = 2 * sizeof(float);
-	attrs[2].location = 2; attrs[2].binding = 0; attrs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[2].offset = 4 * sizeof(float);
+	VkVertexInputAttributeDescription attrs[4] {};
+	for(uint32_t i = 0; i < 4; ++i) { attrs[i].location = i; attrs[i].binding = 0; }
+	attrs[0].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32_SFLOAT;
+	attrs[1].format = mesh ? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R32G32_SFLOAT;
+	attrs[1].offset = mesh ? 12 : 8;
+	attrs[2].format = mesh ? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT;
+	attrs[2].offset = mesh ? 24 : 16;
+	attrs[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[3].offset = 32;
 	VkPipelineVertexInputStateCreateInfo vertex {};
 	vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertex.vertexBindingDescriptionCount = 1;
 	vertex.pVertexBindingDescriptions = &binding;
-	vertex.vertexAttributeDescriptionCount = 3;
+	vertex.vertexAttributeDescriptionCount = mesh ? 4 : 3;
 	vertex.pVertexAttributeDescriptions = attrs;
 	VkPipelineInputAssemblyStateCreateInfo assembly {};
 	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -428,9 +445,16 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	VkPipelineRasterizationStateCreateInfo raster {};
 	raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	raster.polygonMode = VK_POLYGON_MODE_FILL;
-	raster.cullMode = VK_CULL_MODE_NONE;
-	raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	raster.cullMode = desc.cull_mode == GpuCullMode::Back ? VK_CULL_MODE_BACK_BIT :
+	                  desc.cull_mode == GpuCullMode::Front ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_NONE;
+	raster.frontFace = desc.front_face == GpuFrontFace::Clockwise ?
+	                   VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	raster.lineWidth = 1.0f;
+	VkPipelineDepthStencilStateCreateInfo depth {};
+	depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth.depthTestEnable = desc.depth_test; depth.depthWriteEnable = desc.depth_write;
+	depth.depthCompareOp = (VkCompareOp)desc.depth_compare;
+	depth.minDepthBounds = 0.0f; depth.maxDepthBounds = 1.0f;
 	VkPipelineMultisampleStateCreateInfo ms {};
 	ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -470,6 +494,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 	rendering.colorAttachmentCount = 1;
 	rendering.pColorAttachmentFormats = &color_format;
+	rendering.depthAttachmentFormat = ToVkFormat(desc.depth_format);
 	VkGraphicsPipelineCreateInfo pci {};
 	pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pci.pNext = &rendering;
@@ -480,6 +505,7 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	pci.pViewportState = &viewport;
 	pci.pRasterizationState = &raster;
 	pci.pMultisampleState = &ms;
+	pci.pDepthStencilState = &depth;
 	pci.pColorBlendState = &blend;
 	pci.pDynamicState = &dynamic;
 	pci.layout = state.layout;
@@ -572,12 +598,13 @@ GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipe
 		return GpuResult::InvalidHandle;
 	}
 	Impl::CommandState& command = impl->commands[ci];
-	if(!command.pass_active || command.ended || sampled_pipeline->desc.color_format != command.color_format || command.depth_format != GpuFormat::Unknown) {
+	if(!command.pass_active || command.ended || sampled_pipeline->desc.color_format != command.color_format ||
+	   sampled_pipeline->desc.depth_format != command.depth_format) {
 		impl->error = "SetPipeline command/pass state or format is invalid";
 		return GpuResult::InvalidState;
 	}
 	impl->cmd_bind_pipeline(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, sampled_pipeline->pipeline);
-	command.pipeline = pipeline; command.parameters_set = true;
+	command.pipeline = pipeline; command.parameters_set = sampled_pipeline->desc.parameter_bytes == 0;
 	SampledImpl::CommandState& sampled_command = Sampled().GetCommand(list);
 	sampled_command.pipeline = pipeline;
 	sampled_command.bound_texture = GpuTextureId();
@@ -695,10 +722,16 @@ GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int fir
 		return GpuResult::InvalidArgument;
 	}
 	SampledImpl::CommandState *sampled_command = sampled_impl->FindCommand(list);
-	if(!command.pass_active || !command.vertex_buffer.IsValid() || !sampled_command ||
-	   sampled_command->pipeline != command.pipeline || !sampled_command->bound_texture.IsValid()) {
+	const int vi = impl->buffers.Find(command.vertex_buffer.value);
+	if(!command.pass_active || command.ended || !command.vertex_buffer.IsValid() || vi < 0 ||
+	   !command.parameters_set || !sampled_command || sampled_command->pipeline != command.pipeline ||
+	   !sampled_command->bound_texture.IsValid()) {
 		impl->error = "sampled Draw requires an active pass, pipeline, vertex buffer, and sampled texture";
 		return GpuResult::InvalidState;
+	}
+	const int stride = VertexStride(pipeline->desc.vertex_layout);
+	if(stride <= 0 || (int64)first_vertex + vertex_count > impl->buffers[vi].desc.size / stride) {
+		impl->error = "Sampled Draw exceeds the bound vertex buffer"; return GpuResult::InvalidArgument;
 	}
 	impl->cmd_draw(command.buffer, (uint32_t)vertex_count, 1, (uint32_t)first_vertex, 0);
 	return GpuResult::Ok;
@@ -742,14 +775,16 @@ GpuResult VulkanGpuDevice::SetGraphicsParameters(GpuCommandListId list, const vo
 	if(!list.IsValid() || ci < 0) { impl->error = "SetGraphicsParameters received an unknown command list"; return GpuResult::InvalidHandle; }
 	auto& command = impl->commands[ci];
 	const int pi = impl->pipelines.Find(command.pipeline.value);
-	if(!command.pass_active || command.ended || pi < 0) {
-		impl->error = "SetGraphicsParameters requires an active unsampled graphics pipeline"; return GpuResult::InvalidState;
+	const auto* sampled = sampled_impl ? sampled_impl->FindPipeline(command.pipeline) : nullptr;
+	if(!command.pass_active || command.ended || (pi < 0 && !sampled)) {
+		impl->error = "SetGraphicsParameters requires an active graphics pipeline"; return GpuResult::InvalidState;
 	}
-	const auto& pipeline = impl->pipelines[pi];
-	if(!data || size <= 0 || size != pipeline.desc.parameter_bytes || size % 4) {
+	const auto& desc = sampled ? sampled->desc : impl->pipelines[pi].desc;
+	const VkPipelineLayout layout = sampled ? sampled->layout : impl->pipelines[pi].layout;
+	if(!data || size <= 0 || size != desc.parameter_bytes || size % 4) {
 		impl->error = "SetGraphicsParameters must match the complete declared payload"; return GpuResult::InvalidArgument;
 	}
-	impl->cmd_push_constants(command.buffer, pipeline.layout,
+	impl->cmd_push_constants(command.buffer, layout,
 	                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, (uint32_t)size, data);
 	command.parameters_set = true;
 	return GpuResult::Ok;
@@ -763,16 +798,23 @@ GpuResult VulkanGpuDevice::DrawIndexed(GpuCommandListId list, int index_count, i
 	auto& command = impl->commands[ci];
 	if(index_count <= 0 || first_index < 0) { impl->error = "DrawIndexed received an invalid index range"; return GpuResult::InvalidArgument; }
 	const int pi = impl->pipelines.Find(command.pipeline.value);
+	const auto* sampled = sampled_impl ? sampled_impl->FindPipeline(command.pipeline) : nullptr;
 	const int vi = impl->buffers.Find(command.vertex_buffer.value), ii = impl->buffers.Find(command.index_buffer.value);
-	if(!command.pass_active || command.ended || pi < 0 || vi < 0 || ii < 0 || !command.parameters_set) {
-		impl->error = "DrawIndexed requires an active unsampled pipeline, parameters, vertices and indices"; return GpuResult::InvalidState;
+	if(!command.pass_active || command.ended || (pi < 0 && !sampled) || vi < 0 || ii < 0 || !command.parameters_set) {
+		impl->error = "DrawIndexed requires an active pipeline, parameters, vertices and indices"; return GpuResult::InvalidState;
+	}
+	if(sampled) {
+		const auto* bound = sampled_impl->FindCommand(list);
+		if(!bound || bound->pipeline != command.pipeline || !bound->bound_texture.IsValid()) {
+			impl->error = "Sampled DrawIndexed requires a bound texture"; return GpuResult::InvalidState;
+		}
 	}
 	auto& indices = impl->buffers[ii];
 	const int width = command.index_type == GpuIndexType::UInt16 ? 2 : 4;
 	if((int64)first_index + index_count > indices.desc.size / width || indices.index_bytes.GetCount() != indices.desc.size) {
 		impl->error = "DrawIndexed range exceeds initialized index buffer"; return GpuResult::InvalidArgument;
 	}
-	const int stride = VertexStride(impl->pipelines[pi].desc.vertex_layout);
+	const int stride = VertexStride(sampled ? sampled->desc.vertex_layout : impl->pipelines[pi].desc.vertex_layout);
 	if(stride <= 0) return GpuResult::InvalidState;
 	uint32 maximum = 0; bool cached = false;
 	for(const auto& range : indices.index_ranges)
@@ -783,7 +825,7 @@ GpuResult VulkanGpuDevice::DrawIndexed(GpuCommandListId list, int index_count, i
 		const byte *data = indices.index_bytes.Begin() + (int64)first_index * width;
 		for(int i = 0; i < index_count; ++i) {
 			uint32 value = 0;
-			if(width == 2) { uint16 small; std::memcpy(&small, data + (int64)i * width, 2); value = small; }
+			if(width == 2) { uint16 narrow_index; std::memcpy(&narrow_index, data + (int64)i * width, 2); value = narrow_index; }
 			else std::memcpy(&value, data + (int64)i * width, 4);
 			maximum = max(maximum, value);
 		}
