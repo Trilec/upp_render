@@ -14,6 +14,7 @@ enum class Ui3DNavigationPhase { Begin, Update, Commit, Cancel };
 enum class Ui3DNavigationMode { None, Orbit, Pan, Dolly };
 enum class Ui3DDisplayMode { Solid, Wireframe, SolidEdges };
 enum class Ui3DGridPlane { XY, YZ, XZ };
+enum class Ui3DFramingGuide { SafeAreas, TitleSafe, ActionSafe, Crosshair, Thirds, GoldenRatio };
 enum class Ui3DNavigationTool { Select, Orbit, Pan };
 
 struct Ui3DViewState;
@@ -27,6 +28,13 @@ private:
 	friend class Ui3DView;
 	std::weak_ptr<const Ui3DViewState> source_view;
 	std::weak_ptr<const Scene3DSnapshot> sampled_scene;
+};
+
+// Carries exactly the same scene/control/projection provenance as Pick().
+// Validate sample.pick with IsCurrentPick before accepting a queued result.
+struct Ui3DSplatSurfaceSample {
+	Ui3DViewPick pick;
+	Scene3DSplatSurfaceSupport support;
 };
 
 struct Ui3DNavigationEvent {
@@ -67,6 +75,7 @@ struct Ui3DSelectionRequest {
 // These palette bytes are sRGB. Explicit Light/Dark snapshots do not alter a
 // global Ui theme. Hosts can map their own theme roles into the same options.
 struct Ui3DViewOptions {
+	bool gpu_splat_sort = true; // Capability-gated; the former path remains a diagnostic reference.
 	Rgba8 background = Rgba8(34, 39, 47, 255);
 	Rgba8 grid_color = Rgba8(79, 87, 101, 255);
 	Rgba8 selection_color = Rgba8(255, 182, 67, 255);
@@ -84,10 +93,14 @@ struct Ui3DViewOptions {
 	double grid_spacing = 1; // Metres, finite 0.001..10000.
 	// Film/safe guides use the camera's physical gate, independent of viewport aspect.
 	bool show_gate = false, show_safe = false;
-	double matte_opacity = 1, action_safe = .90, title_safe = .80;
+	Ui3DFramingGuide framing_guide = Ui3DFramingGuide::SafeAreas;
+	double matte_opacity = 1, guide_opacity = 1, action_safe = .90, title_safe = .80;
 	Rgba8 matte_color = Rgba8(0, 0, 0, 255);
 	Rgba8 gate_color = Rgba8(190, 194, 201, 255);
 	Rgba8 safe_color = Rgba8(145, 151, 161, 255);
+	bool show_grid_origin = false; // Subtle three-pixel X/Z lines in the active grid plane.
+	bool orbit_about_eye = false;  // Authoring a camera turns its head at a fixed optical origin.
+	bool translation_locked = false;
 	static Ui3DViewOptions Light();
 	static Ui3DViewOptions Dark();
 };
@@ -105,8 +118,9 @@ struct Ui3DViewStats {
 	int resident_textures = 0;
 	uint64 resident_texture_bytes = 0; // Immutable asset pixels, excluding neutral/working targets.
 	int blended_draws_last_frame = 0, textured_draws_last_frame = 0, gate_draws_last_frame = 0;
-	uint64 splat_uploads = 0, splat_sort_updates = 0, splat_sort_us_last_frame = 0;
-	uint64 resident_splat_bytes = 0; // Actual retained vertex/index buffers.
+	uint64 splat_uploads = 0, splat_sort_updates = 0, splat_sort_us_last_frame = 0; // Actual uploads, not shared leases.
+	bool global_splat_order = false; // Last render used the global GPU sequence.
+	uint64 resident_splat_bytes = 0; // Retained by this view, including shared vertex bytes.
 	int resident_splat_resources = 0, resident_splat_instances = 0;
 	int splat_draws_last_frame = 0, splats_last_frame = 0;
 };
@@ -140,6 +154,10 @@ public:
 	~Ui3DView() override;
 
 	Function<void(const Ui3DNavigationEvent&)> WhenNavigation;
+	// Optionally constrain a native motion preview before publication. The host
+	// may adjust the value or reject the gesture without changing the model.
+	Function<bool(Scene3DCamera&, Ui3DNavigationMode)> WhenNavigationPreview;
+	Event<Point> WhenContextMenu;
 	Function<void(const Ui3DSelectionRequest&)> WhenSelectionRequest;
 	// Offered before left navigation/selection, including double press.
 	// False at Begin falls through; false at Update cancels. Terminal returns
@@ -181,6 +199,11 @@ public:
 	bool FitSelection();
 	bool FitBounds(const Scene3DBounds& bounds);
 	Ui3DViewPick Pick(Pointf point) const;
+	// Target-only on-demand Gaussian patch sample; see Scene3DSnapshot. The
+	// opaque film matte clips the circle; the reported radius is the one used.
+	// No scene, camera, selection or GPU state is changed.
+	Ui3DSplatSurfaceSample SampleSplatSurface(Pointf point, double radius_pixels,
+	                                         const String& object_id) const;
 	bool IsCurrentPick(const Ui3DViewPick& pick) const;
 	uint64 GetSceneBindingRevision() const { return scene_binding_revision; }
 

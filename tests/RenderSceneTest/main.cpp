@@ -1,4 +1,5 @@
 #include <RenderScene/Scene3D.h>
+#include <RenderScene/Scene3DGaussianRecord.h>
 #include <cmath>
 #include <limits>
 
@@ -554,7 +555,8 @@ void GaussianResourceTests()
     std::vector<Scene3DSplat> maximum(Scene3DMaxSplats,GaussianPoint());
     Check(bool(Scene3DSplats::Create(maximum,error)),"exact Gaussian resource point budget is admitted");
     maximum.push_back(GaussianPoint());
-    Check(!Scene3DSplats::Create(maximum,error),"Gaussian resource point budget plus one rejects");
+    Check(!Scene3DSplats::Create(maximum,error) && error.Find(AsString(Scene3DMaxSplats))>=0,
+          "Gaussian resource point budget plus one rejects with the actual limit");
 }
 void GaussianProjectionTests()
 {
@@ -687,7 +689,185 @@ void GaussianScenePickTests()
     desc.objects={object,object}; desc.objects[1].id="instance:second";
     Check(bool(Scene3DSnapshot::Create(desc,error)),"exact instanced Gaussian scene budget is admitted");
     Scene3DObjectDesc extra; extra.id="one-too-many"; extra.splats=cloud; desc.objects.push_back(extra);
-    Check(!Scene3DSnapshot::Create(desc,error),"shared-resource Gaussian instances count toward the aggregate draw budget");
+    Check(!Scene3DSnapshot::Create(desc,error) && error.Find(AsString(Scene3DMaxSplats))>=0,
+          "shared-resource Gaussian instances count toward the reported aggregate draw budget");
+}
+
+void GaussianSurfaceSampleTests()
+{
+    String error;
+    auto camera=Camera(); camera.orthographic=true; camera.ortho_height=2;
+    camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error); camera.revision=87;
+    const Size viewport(200,100);
+    const Pointf centre(100,50);
+    std::vector<Scene3DSplat> plane;
+    for(int y=-5;y<=5;++y) for(int x=-5;x<=5;++x) {
+        Scene3DSplat point; point.position={x*.1,y*.1,0};
+        point.covariance[0]=point.covariance[3]=point.covariance[5]=.0004;
+        plane.push_back(point);
+    }
+    Scene3DObjectDesc object; object.id="surface:target";
+    object.splats=Scene3DSplats::Create(plane,error);
+    Scene3DSceneDesc desc; desc.revision=43; desc.objects={object};
+    auto scene=Scene3DSnapshot::Create(desc,error);
+    Check(bool(scene),"Gaussian surface-sample fixture is valid");
+    if(!scene) return;
+    const auto direct=scene->PickScreen(centre,viewport,camera);
+    auto sample=scene->SampleSplatSurface(centre,0,viewport,camera,object.id);
+    Check(sample.pick.hit && sample.pick.id==direct.id && sample.pick.splat==direct.splat &&
+          Near(sample.pick.world_point,direct.world_point) && Near(sample.pick.distance,direct.distance) &&
+          sample.pick.scene_revision==43 && sample.pick.camera_revision==87,
+          "zero-radius target sampling preserves exact single-hit depth and revisions");
+    Check(sample.support.sample_count==1 && sample.support.hit_count==1 &&
+          sample.support.support_count==1 && sample.support.splat_count==1 &&
+          Near(sample.support.confidence,.25) && !sample.support.normal_valid &&
+          Near(sample.support.world_normal,{0,0,0}),
+          "single-hit evidence is sparse and never reports a fabricated surface normal");
+
+    sample=scene->SampleSplatSurface(centre,20,viewport,camera,object.id);
+    Check(sample.pick.hit && Near(sample.pick.world_point,{0,0,0}) &&
+          sample.support.sample_count==25 && sample.support.hit_count==25 &&
+          sample.support.support_count==25 && sample.support.splat_count>=9,
+          "uniform front surface returns a central observed hit with bounded distributed support");
+    Check(sample.support.screen_spread_pixels>15 && sample.support.world_spread>.3 &&
+          Near(sample.support.depth_spread,0) && Near(sample.support.confidence,1),
+          "surface evidence reports independent screen/world spread and coherent depth");
+
+    const auto mesh=Scene3DMesh::MakeBox({2,2,.1},error);
+    auto foreground=Object("surface:occluder",mesh,{0,0,2});
+    desc.objects={object,foreground};
+    auto occluded=Scene3DSnapshot::Create(desc,error);
+    Check(occluded && occluded->PickScreen(centre,viewport,camera).id==foreground.id &&
+          occluded->SampleSplatSurface(centre,0,viewport,camera,object.id).pick.id==object.id,
+          "target-only sampling cannot take the endpoint from an unrelated foreground mesh");
+    Check(occluded && !occluded->SampleSplatSurface(centre,20,viewport,camera,foreground.id).pick.hit &&
+          !occluded->SampleSplatSurface(centre,20,viewport,camera,"missing").pick.hit,
+          "missing and non-Gaussian targets never fall back to another asset");
+
+    auto with_floater=plane;
+    Scene3DSplat floater; floater.position={0,0,2};
+    floater.covariance[0]=floater.covariance[3]=floater.covariance[5]=0;
+    with_floater.push_back(floater);
+    desc.objects={object}; desc.objects[0].splats=Scene3DSplats::Create(with_floater,error);
+    auto contaminated=Scene3DSnapshot::Create(desc,error);
+    Check(bool(contaminated),"Gaussian separated-depth fixture is valid");
+    if(!contaminated) return;
+    const auto click=contaminated->SampleSplatSurface(centre,0,viewport,camera,object.id);
+    sample=contaminated->SampleSplatSurface(centre,20,viewport,camera,object.id);
+    Check(click.pick.hit && Near(click.pick.world_point.z,2) &&
+          sample.pick.hit && Near(sample.pick.world_point.z,0) &&
+          sample.support.hit_count==25 && sample.support.support_count==24 &&
+          sample.support.splat_count>1 && Near(sample.support.depth_spread,0),
+          "patch support rejects an isolated nearer floater while single click keeps frontmost semantics");
+
+    auto split_plane=plane;
+    for(auto& point:split_plane) point.position.z=point.position.x<=0 ? 1 : -1;
+    desc.objects[0].splats=Scene3DSplats::Create(split_plane,error);
+    auto discontinuous=Scene3DSnapshot::Create(desc,error);
+    Check(bool(discontinuous),"Gaussian two-wall fixture is valid");
+    if(!discontinuous) return;
+    sample=discontinuous->SampleSplatSurface(centre,20,viewport,camera,object.id);
+    Check(sample.pick.hit && (Near(sample.pick.world_point.z,1) || Near(sample.pick.world_point.z,-1)) &&
+          sample.support.support_count<sample.support.hit_count && Near(sample.support.depth_spread,0),
+          "a patch crossing a depth discontinuity never averages its endpoint between the walls");
+
+    Scene3DSplat origin; origin.covariance[0]=origin.covariance[3]=origin.covariance[5]=.001;
+    desc.objects={object}; desc.objects[0].splats=Scene3DSplats::Create({origin},error);
+    desc.objects[0].parent_id="surface:group";
+    desc.objects[0].local=Scene3DMatrix::Translation({.5,.2,1})*Scene3DMatrix::Scale({2,3,.5});
+    auto parent=Object("surface:group",{}); parent.local=Scene3DMatrix::RotationY(.3);
+    const auto world=parent.local*desc.objects[0].local;
+    desc.objects.push_back(parent);
+    auto transformed=Scene3DSnapshot::Create(desc,error);
+    Check(bool(transformed),"Gaussian transformed sampling fixture is valid");
+    if(!transformed) return;
+    const auto expected=world.TransformPoint({0,0,0});
+    camera.roll=.2; camera.gate_aspect=1.4;
+    for(bool orthographic:{true,false}) {
+        camera.orthographic=orthographic;
+        Pointf screen; double depth=0;
+        Check(camera.Project(expected,viewport,screen,depth),"transformed fixture projects into both cameras");
+        sample=transformed->SampleSplatSurface(screen,0,viewport,camera,object.id);
+        Check(sample.pick.hit && Near(sample.pick.world_point,expected),
+              "target sampling respects parent rotation nonuniform scale film gate and camera roll");
+    }
+    camera.orthographic=true;
+    desc.objects={object}; desc.objects[0].selectable=false;
+    auto disabled=Scene3DSnapshot::Create(desc,error);
+    Check(disabled && !disabled->SampleSplatSurface(centre,20,viewport,camera,object.id).pick.hit,
+          "surface sampling respects target selectability");
+    desc.objects[0]=object; desc.objects[0].visible=false;
+    disabled=Scene3DSnapshot::Create(desc,error);
+    Check(disabled && !disabled->SampleSplatSurface(centre,20,viewport,camera,object.id).pick.hit,
+          "surface sampling respects target visibility");
+    desc.objects[0]=object; desc.objects[0].opacity=0;
+    disabled=Scene3DSnapshot::Create(desc,error);
+    Check(disabled && !disabled->SampleSplatSurface(centre,20,viewport,camera,object.id).pick.hit,
+          "surface sampling respects transparent targets");
+    for(double radius:{-1.0,std::numeric_limits<double>::infinity(),
+                       std::numeric_limits<double>::quiet_NaN()}) {
+        sample=scene->SampleSplatSurface(centre,radius,viewport,camera,object.id);
+        Check(!sample.pick.hit && sample.pick.scene_revision==43 && sample.pick.camera_revision==87 &&
+              sample.support.support_count==0,"invalid patch radii return revision-bearing misses");
+    }
+    sample=scene->SampleSplatSurface(centre,1e9,viewport,camera,object.id);
+    Check(Near(sample.support.radius_pixels,128) && sample.support.sample_count<=25,
+          "large requested patch radii and probe work are bounded");
+    sample=scene->SampleSplatSurface(Pointf(1,1),20,viewport,camera,object.id);
+    Check(sample.support.sample_count>0 && sample.support.sample_count<25,
+          "patch probes outside the viewport are excluded from evidence counts");
+    Check(!scene->SampleSplatSurface(centre,20,Size(0,0),camera,object.id).pick.hit &&
+          !scene->SampleSplatSurface(Pointf(-1,50),20,viewport,camera,object.id).pick.hit,
+          "invalid viewport and out-of-view centres do not sample hidden rays");
+}
+
+void CompactGaussianRecordTests()
+{
+    Scene3DGaussianParameters input;
+    input.center = {-.17365512, .25, .1345678431};
+    input.log_scale = {-100, -2.1234, 20};
+    input.rotation_wxyz = {.378228194, -.567342291, .189114097, -.709177864};
+    input.dc = {.25, -.5, .000001};
+    input.opacity = .76;
+    Scene3DGaussianRecord record;
+    Check(EncodeScene3DGaussian(input, record), "valid compact Gaussian encodes");
+    Scene3DGaussianParameters output;
+    Check(DecodeScene3DGaussian(record, output), "valid compact Gaussian decodes");
+    for(int i = 0; i < 3; ++i) {
+        Check(Near(input.center[i], output.center[i], 1.5e-8), "centre preserves float32 precision");
+        Check(Near(input.log_scale[i], output.log_scale[i], .000917), "log-scale error stays under one half-step");
+        Check(Near(input.dc[i], output.dc[i], 3e-8), "raw DC and binary16 subnormals survive");
+    }
+    double dot = 0, norm2 = 0;
+    for(int i = 0; i < 4; ++i) {
+        dot += input.rotation_wxyz[i] * output.rotation_wxyz[i];
+        norm2 += input.rotation_wxyz[i] * input.rotation_wxyz[i];
+        input.rotation_wxyz[i] = -input.rotation_wxyz[i];
+    }
+    Check(std::abs(dot) / std::sqrt(norm2) > std::cos(0.01 * 3.141592653589793 / 360.),
+          "compact quaternion angular error stays below 0.01 degree");
+    Check(Near(input.opacity, output.opacity, .00000763), "opacity error stays under one half-step");
+    Scene3DGaussianRecord antipodal;
+    Check(EncodeScene3DGaussian(input, antipodal) && antipodal.words == record.words,
+          "antipodal input yields identical device words");
+    const auto old = output;
+    auto damaged = record;
+    damaged.words[4] |= 0x8000;
+    Check(!DecodeScene3DGaussian(damaged, output) && output.center == old.center && output.dc == old.dc,
+          "unknown reserved bits do not publish corrupt data");
+    input.dc[1] = 70000;
+    Check(!EncodeScene3DGaussian(input, antipodal) && antipodal.words == record.words,
+          "wide DC values are rejected without clamping or modifying previous output");
+
+    Scene3DGaussianParameters axes;
+    axes.center = {1, 0, -1};
+    axes.log_scale = {-100, 20, -100};
+    axes.dc = {.25, -.5, 0};
+    axes.opacity = 1.;
+    Check(EncodeScene3DGaussian(axes, record) &&
+          record.words == std::array<uint32, 8>{0x3f800000, 0, 0xbf800000, 0xdfffbfff,
+                                                0x00000fff, 0x0000ffff, 0x3400ffff, 0x0000b800},
+          "device ABI has the fixed IEEE centre, half, quaternion and scale words");
 }
 
 }
@@ -695,7 +875,8 @@ void GaussianScenePickTests()
 CONSOLE_APP_MAIN
 {
 	MatrixTests(); MeshTests(); SceneTests(); CameraTests(); CameraAxisTests(); CameraProjectionTests(); PickTests(); MaterialCameraTests(); MaterialPickTests();
-	GaussianResourceTests(); GaussianProjectionTests(); GaussianScenePickTests();
+	CompactGaussianRecordTests();
+	GaussianResourceTests(); GaussianProjectionTests(); GaussianScenePickTests(); GaussianSurfaceSampleTests();
 	Cout() << "RenderSceneTest: " << checks << " checks, " << failures << " failures" << EOL;
 	if(!checks || failures) SetExitCode(1);
 }

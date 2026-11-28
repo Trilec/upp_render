@@ -886,6 +886,35 @@ GUI_APP_MAIN
 		auto miss = window.first.Pick(Pointf(-100000, -100000));
 		Check(!miss.hit && window.first.IsCurrentPick(miss), "current miss is a valid selection request");
 
+		// Target-only splat samples share the existing queued-pick provenance.
+		{
+			const auto saved_camera=window.first.GetCamera();
+			Scene3DSplat point; point.covariance[0]=point.covariance[3]=point.covariance[5]=.01;
+			Scene3DObjectDesc target; target.id="sample:target";
+			target.splats=Scene3DSplats::Create({point},error);
+			Scene3DSceneDesc sample_desc; sample_desc.revision=scene->GetRevision();
+			sample_desc.objects={target};
+			auto sample_scene=Scene3DSnapshot::Create(sample_desc,error);
+			Check(sample_scene && window.first.SetScene(sample_scene,error),"surface wrapper fixture is installed");
+			auto sample_camera=saved_camera;
+			sample_camera.orthographic=true; sample_camera.ortho_height=2;
+			sample_camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error);
+			Check(window.first.SetCamera(sample_camera,error),"surface wrapper uses an analytic camera");
+			const Pointf sample_centre(window.first.GetSize().cx*.5,window.first.GetSize().cy*.5);
+			const auto surface=window.first.SampleSplatSurface(sample_centre,0,target.id);
+			Check(surface.pick.hit && surface.pick.id==target.id &&
+			      window.first.IsCurrentPick(surface.pick) && !window.second.IsCurrentPick(surface.pick),
+			      "target surface result retains source-control and snapshot identity");
+			const auto missing_surface=window.first.SampleSplatSurface(sample_centre,10,"sample:missing");
+			Check(!missing_surface.pick.hit && window.first.IsCurrentPick(missing_surface.pick),
+			      "current target-only surface miss retains valid provenance");
+			sample_camera=window.first.GetCamera(); sample_camera.Orbit(.02,.01);
+			Check(window.first.SetCamera(sample_camera,error) && !window.first.IsCurrentPick(surface.pick),
+			      "camera changes invalidate queued surface samples");
+			Check(window.first.SetScene(scene,error) && window.first.SetCamera(saved_camera,error) &&
+			      !window.first.IsCurrentPick(surface.pick),"scene rebind invalidates queued surface samples");
+		}
+
 		int selections = 0;
 		window.first.SetSelection({}, error);
 		window.first.WhenSelectionRequest = [&](const Ui3DSelectionRequest& request) {

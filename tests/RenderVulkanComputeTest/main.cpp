@@ -2,6 +2,8 @@
 #include <RenderVulkan/RenderVulkanTestHooks.h>
 #include <RenderNull/RenderNull.h>
 #include "../../shaders/Quantize16Spirv.h"
+#include "VertexPullFixtureVertSpirv.h"
+#include "VertexPullFixtureFragSpirv.h"
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -48,6 +50,180 @@ static bool Compare(const Vector<byte>& bytes, const Vector<uint32_t>& source, i
 	       << " dither=" << dither << " chained=" << twice << EOL;
 	return Check(mismatches == 0, "GPU output matches independent floating reference and guard regions");
 }
+static bool CopyDeviceStorage(VulkanGpuDevice& device)
+{
+	const byte pattern[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
+	const byte guard[8] = {};
+	const byte expected[] = {0, 0x45, 0x67, 0x89, 0xab, 0, 0, 0};
+	GpuBufferId src, local, dst, indices;
+	GpuBufferDesc desc;
+	desc.size = sizeof(pattern);
+	desc.usage = GpuBufferUsage_TransferSrc;
+	if(!Check(device.CreateBuffer(desc, src) == GpuResult::Ok &&
+	          device.WriteBuffer(src, 0, pattern, sizeof(pattern)) == GpuResult::Ok,
+	          "host upload source contains the staging pattern")) return false;
+	desc.usage |= GpuBufferUsage_TransferDst;
+	if(!Check(device.CreateBuffer(desc, dst) == GpuResult::Ok &&
+	          device.WriteBuffer(dst, 0, guard, sizeof(guard)) == GpuResult::Ok,
+	          "host diagnostic destination contains guard bytes")) return false;
+	desc.usage = GpuBufferUsage_Index | GpuBufferUsage_TransferDst;
+	if(!Check(device.CreateBuffer(desc, indices) == GpuResult::Ok,
+	          "host-validated index buffer creates")) return false;
+	desc.memory = GpuBufferMemory::DeviceLocal;
+	desc.usage = GpuBufferUsage_TransferSrc | GpuBufferUsage_TransferDst | GpuBufferUsage_Storage;
+	if(!Check(device.CreateBuffer(desc, local) == GpuResult::Ok,
+	          "device-only storage allocation creates")) return false;
+
+	GpuCommandListId cmd;
+	if(!Check(device.BeginCommands(cmd) == GpuResult::Ok, "begin device-buffer transfer")) return false;
+	bool okay = Check(device.CopyBuffer(cmd, src, 0, indices, 0, 4) == GpuResult::InvalidArgument &&
+	                  device.CopyBuffer(cmd, dst, 0, dst, 4, 4) == GpuResult::InvalidArgument &&
+	                  device.CopyBuffer(cmd, src, 0, local, 4, 8) == GpuResult::InvalidArgument &&
+	                  device.CopyBuffer(cmd, src, -1, local, 0, 4) == GpuResult::InvalidArgument,
+	                  "copy rejects index writes, aliases and invalid ranges");
+	okay &= Check(device.CopyBuffer(cmd, src, 2, local, 3, 4) == GpuResult::Ok &&
+	              device.CopyBuffer(cmd, local, 3, dst, 1, 4) == GpuResult::Ok &&
+	              device.EndCommands(cmd) == GpuResult::Ok && device.Submit(cmd) == GpuResult::Ok,
+	              "staged device-local write and subsequent copy complete");
+	Vector<byte> bytes;
+	okay &= Check(device.ReadBuffer(dst, 0, sizeof(expected), bytes) == GpuResult::Ok &&
+	              bytes.GetCount() == sizeof(expected) &&
+	              std::memcmp(bytes.Begin(), expected, sizeof(expected)) == 0,
+	              "device-local round trip preserves bytes and leaves guards intact");
+	for(auto handle : {src, local, dst, indices})
+		okay &= Check(device.DestroyBuffer(handle) == GpuResult::Ok, "copy qualification buffer releases");
+	return okay;
+}
+static bool ShareImmutableVertices(VulkanGpuDevice& device, VulkanSurfaceSession& session)
+{
+	GpuBufferId first, second, peer, declined;
+	bool uploaded = true;
+	int fills = 0;
+	auto source = std::make_shared<int>(12);
+	std::weak_ptr<int> source_lifetime = source;
+	const byte data[] = {1, 2, 3, 4};
+	const GpuImmutableBufferFill fill = [&](void *dst, int64 size, String&) {
+		if(size != sizeof(data)) return false;
+		std::memcpy(dst, data, sizeof(data));
+		++fills;
+		return true;
+	};
+	const GpuImmutableBufferFill fail = [](void *, int64, String& error) {
+		error = "caller declined";
+		return false;
+	};
+	bool okay = Check(device.AcquireImmutableBuffer(source, 2, GpuBufferUsage_Vertex, sizeof(data), fail, declined, uploaded) ==
+	                  GpuResult::InvalidState && !declined.IsValid() && !uploaded &&
+	                  device.GetLastError() == "caller declined" && device.GetSharedImmutableBufferBytes() == 0,
+	                  "a failed initializer publishes no allocation");
+	okay &= Check(device.AcquireImmutableBuffer(source, 1, GpuBufferUsage_Vertex, sizeof(data), fill, first, uploaded) ==
+	              GpuResult::Ok && uploaded && fills == 1, "one immutable vertex upload creates an allocation");
+	const uint64 bytes = device.GetSharedImmutableBufferBytes();
+	okay &= Check(bytes >= sizeof(data) && device.GetLiveAllocationBytes() == 0,
+	              "shared vertex memory is reported without double counting adapter allocations");
+	okay &= Check(device.AcquireImmutableBuffer(source, 1, GpuBufferUsage_Vertex, sizeof(data), fill, second, uploaded) ==
+	              GpuResult::Ok && !uploaded && fills == 1 && first != second,
+	              "same adapter returns an independent lease without initializing again");
+	okay &= Check(device.WriteBuffer(first, 0, data, sizeof(data)) == GpuResult::InvalidState,
+	              "host writes cannot mutate immutable vertices");
+	{
+		VulkanGpuDevice other(session);
+		okay &= Check(other.AcquireImmutableBuffer(source, 1, GpuBufferUsage_Vertex, sizeof(data), fill, peer, uploaded) ==
+		              GpuResult::Ok && !uploaded && fills == 1 && other.GetSharedImmutableBufferBytes() == bytes,
+		              "another adapter on the same Vulkan device shares the immutable allocation");
+		source.reset();
+		okay &= Check(device.DestroyBuffer(first) == GpuResult::Ok &&
+		              device.DestroyBuffer(second) == GpuResult::Ok &&
+		              !source_lifetime.expired() && device.GetSharedImmutableBufferBytes() == bytes,
+		              "allocation and source survive while the peer retains a lease");
+		okay &= Check(other.DestroyBuffer(peer) == GpuResult::Ok && source_lifetime.expired() &&
+		              device.GetSharedImmutableBufferBytes() == 0, "last lease releases the vertex buffer and source");
+	}
+	return okay;
+}
+static bool DrawVertexStorage(VulkanGpuDevice& device)
+{
+	GpuVertexPullCapabilities caps;
+	if(!Check(device.GetVertexPullCapabilities(caps) == GpuResult::Ok &&
+	          caps.max_storage_buffers >= 1 && caps.max_storage_range >= 32 && caps.indirect_draw,
+	          "physical vertex-storage and non-indexed indirect draw capabilities")) return false;
+	const Size extent(64, 64);
+	GpuTextureDesc texture;
+	texture.size = extent; texture.format = GpuFormat::RGBA8;
+	texture.usage = GpuTextureUsage_ColorAttachment | GpuTextureUsage_TransferSrc;
+	GpuTextureId target;
+	if(!Check(device.CreateTexture(texture, target) == GpuResult::Ok, "vertex-pulling colour target")) return false;
+	GpuShaderDesc shader;
+	shader.format = GpuShaderFormat::SpirV;
+	shader.stage = GpuShaderStage::Vertex;
+	shader.code = String(reinterpret_cast<const char*>(kVertexPullFixtureVertex), sizeof(kVertexPullFixtureVertex));
+	GpuShaderId vs, fs;
+	if(!Check(device.CreateShader(shader, vs) == GpuResult::Ok, "vertex-pulling shader creates")) return false;
+	shader.stage = GpuShaderStage::Fragment;
+	shader.code = String(reinterpret_cast<const char*>(kVertexPullFixtureFragment), sizeof(kVertexPullFixtureFragment));
+	if(!Check(device.CreateShader(shader, fs) == GpuResult::Ok, "vertex-pulling fragment shader creates")) return false;
+	GpuPipelineDesc desc;
+	desc.vertex_layout = GpuVertexLayout::StoragePull;
+	desc.vertex_storage_count = 1;
+	desc.color_format = texture.format;
+	desc.vertex_shader = vs;
+	desc.fragment_shader = fs;
+	GpuPipelineId pipeline;
+	if(!Check(device.CreatePipeline(desc, pipeline) == GpuResult::Ok, "pipeline has storage and no vertex attributes")) return false;
+
+	const float tints[] = {1, 0, 0, 1, 0, 1, 0, 1};
+	const GpuDrawIndirectArguments args{3, 2, 0, 0};
+	GpuBufferId colors, staging, indirect;
+	GpuBufferDesc resource;
+	resource.size = sizeof(tints); resource.usage = GpuBufferUsage_Storage;
+	if(!Check(device.CreateBuffer(resource, colors) == GpuResult::Ok &&
+	          device.WriteBuffer(colors, 0, tints, sizeof(tints)) == GpuResult::Ok, "storage contains two instance tints"))
+		return false;
+	resource.size = sizeof(args); resource.usage = GpuBufferUsage_TransferSrc;
+	if(!Check(device.CreateBuffer(resource, staging) == GpuResult::Ok &&
+	          device.WriteBuffer(staging, 0, &args, sizeof(args)) == GpuResult::Ok, "staged native indirect arguments"))
+		return false;
+	resource.usage = GpuBufferUsage_Indirect | GpuBufferUsage_TransferDst;
+	resource.memory = GpuBufferMemory::DeviceLocal;
+	if(!Check(device.CreateBuffer(resource, indirect) == GpuResult::Ok, "device-local indirect draw buffer")) return false;
+
+	GpuRenderPassDesc pass;
+	pass.color_target = target;
+	pass.color_format = texture.format;
+	pass.color_load = GpuLoadOp::Clear;
+	bool ok = true;
+	for(bool use_indirect : {false, true}) {
+		GpuCommandListId list;
+		if(!Check(device.BeginCommands(list) == GpuResult::Ok &&
+		          (!use_indirect || device.CopyBuffer(list, staging, 0, indirect, 0, sizeof(args)) == GpuResult::Ok) &&
+		          device.BeginRenderPass(list, pass) == GpuResult::Ok && device.SetPipeline(list, pipeline) == GpuResult::Ok,
+		          "open vertex-pulling pass and stage any GPU arguments")) return false;
+		ok &= Check(device.DrawInstanced(list, 3, 2) == GpuResult::InvalidState &&
+		            device.SetVertexStorageBuffer(list, 1, colors) == GpuResult::InvalidArgument &&
+		            device.SetVertexStorageBuffer(list, 0, colors, 0, sizeof(tints) + 1) == GpuResult::InvalidArgument &&
+		            device.DrawIndirect(list, indirect, 1) == GpuResult::InvalidArgument,
+		            "vertex-pulling rejects missing bindings, invalid ranges and misaligned arguments");
+		const bool storage = device.SetVertexStorageBuffer(list, 0, colors) == GpuResult::Ok;
+		const auto draw = use_indirect ? device.DrawIndirect(list, indirect) : device.DrawInstanced(list, 3, 2);
+		if(!Check(storage && draw == GpuResult::Ok && device.EndRenderPass(list) == GpuResult::Ok &&
+		          device.EndCommands(list) == GpuResult::Ok && device.Submit(list) == GpuResult::Ok,
+		          "direct and indirect vertex-pulling commands complete")) return false;
+		Vector<byte> pixels;
+		if(!Check(device.ReadTexturePixels(target, pixels) && pixels.GetCount() == 64 * 64 * 4,
+		          "read vertex-pulling pixels")) return false;
+		const int left = (32 * 64 + 17) * 4, right = (32 * 64 + 47) * 4;
+		ok &= Check(pixels[left] == 255 && pixels[left + 1] == 0 &&
+		            pixels[right] == 0 && pixels[right + 1] == 255,
+		            "two GPU instances pull distinct colours from storage");
+	}
+	for(auto handle : {colors, staging, indirect})
+		ok &= Check(device.DestroyBuffer(handle) == GpuResult::Ok, "release vertex-pulling buffer");
+	ok &= Check(device.DestroyPipeline(pipeline) == GpuResult::Ok &&
+	            device.DestroyShader(vs) == GpuResult::Ok && device.DestroyShader(fs) == GpuResult::Ok &&
+	            device.DestroyTexture(target) == GpuResult::Ok, "release the vertex-pulling pipeline and target");
+	return ok;
+}
+
 static bool Exercise(VulkanGpuDevice& device)
 {
 	GpuComputeCapabilities caps;
@@ -179,13 +355,22 @@ static bool Exercise(VulkanGpuDevice& device)
 	GpuTextureDesc pixel_desc = td; pixel_desc.size = Size(1,1);
 	GpuTextureId pixel; ok &= Check(device.CreateTexture(pixel_desc, pixel) == GpuResult::Ok, "device-local qualification image");
 	GpuTextureWriteDesc pixel_region; pixel_region.size = Size(1,1); pixel_region.row_pitch = 4;
+	const GpuDispatchIndirectArguments groups{1, 1, 1};
+	GpuBufferDesc indirect_desc;
+	indirect_desc.size = sizeof(groups);
+	indirect_desc.usage = GpuBufferUsage_Indirect;
+	GpuBufferId indirect;
+	if(!Check(caps.indirect_dispatch && device.CreateBuffer(indirect_desc, indirect) == GpuResult::Ok &&
+	          device.WriteBuffer(indirect, 0, &groups, sizeof(groups)) == GpuResult::Ok,
+	          "qualify native indirect dispatch arguments on this queue")) return false;
 	for(int frame = 0; frame < 32; ++frame) {
 		ok &= Check(device.BeginCommands(command) == GpuResult::Ok &&
 		            device.SetComputePipeline(command, pipeline) == GpuResult::Ok &&
 		            device.SetStorageBuffer(command, 0, input, prefix * 4, 4) == GpuResult::Ok &&
 		            device.SetStorageBuffer(command, 1, local) == GpuResult::Ok &&
 		            device.SetComputeParameters(command, &params, sizeof(params)) == GpuResult::Ok &&
-		            device.Dispatch(command, 1) == GpuResult::Ok &&
+		            device.DispatchIndirect(command, indirect, 4) == GpuResult::InvalidArgument &&
+		            device.DispatchIndirect(command, indirect) == GpuResult::Ok &&
 		            device.CopyBufferToTexture(command, local, 0, pixel, pixel_region) == GpuResult::Ok &&
 		            device.EndCommands(command) == GpuResult::Ok && device.Submit(command) == GpuResult::Ok,
 		            "repeated device-local dispatch/copy completes");
@@ -200,7 +385,8 @@ static bool Exercise(VulkanGpuDevice& device)
 	            stats.retained_descriptor_pools == 4, "descriptor pools plateau and recycle after completion");
 	Cout() << "descriptor_pools_created=" << stats.descriptor_pools_created << " reused=" << stats.descriptor_pools_reused
 	       << " retained=" << stats.retained_descriptor_pools << EOL;
-	ok &= Check(device.DestroyBuffer(local) == GpuResult::Ok && device.DestroyTexture(pixel) == GpuResult::Ok,
+	ok &= Check(device.DestroyBuffer(local) == GpuResult::Ok && device.DestroyBuffer(indirect) == GpuResult::Ok &&
+	            device.DestroyTexture(pixel) == GpuResult::Ok,
 	            "device-local resources release");
 	ok &= Check(device.DestroyTexture(image) == GpuResult::Ok, "compute output image releases");
 	for(auto buffer : {input, output, second}) ok &= Check(device.DestroyBuffer(buffer) == GpuResult::Ok, "compute buffers release");
@@ -225,7 +411,7 @@ CONSOLE_APP_MAIN
 	VulkanSurfaceSession session;
 	GpuNativeWindowDesc native; native.kind = GpuNativeWindowKind::Win32; native.handle = (uintptr_t)window;
 	ok &= Check(window && session.Open(true, native, &Resolver), "real Vulkan session opens with validation");
-	if(session.IsReady()) { VulkanGpuDevice device(session); ok &= Exercise(device); }
+	if(session.IsReady()) { VulkanGpuDevice device(session); ok &= CopyDeviceStorage(device); ok &= ShareImmutableVertices(device, session); ok &= DrawVertexStorage(device); ok &= Exercise(device); }
 	session.Close();
 	const auto& report = session.GetReport();
 	Cout() << "validation_warnings=" << report.validation_warning_count << " errors=" << report.validation_error_count << EOL;

@@ -1,19 +1,50 @@
 #include "Ui3DViewRenderer.h"
 #include "../../shaders/Ui3DSplatVertSpirv.h"
+#include "../../shaders/Ui3DSplatPullVertSpirv.h"
 #include "../../shaders/Ui3DSplatFragSpirv.h"
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <set>
 
 namespace Upp { namespace Ui3DInternal {
 namespace {
-uint64 VertexBytes(const Scene3DSplats& source)
+uint64 VertexBytes(const Scene3DSplats& source, bool storage)
 {
-    return uint64(source.GetSplats().size())*4*sizeof(SplatVertex);
+    return uint64(source.GetSplats().size()) * (storage ? SplatStorageStride : 4 * sizeof(SplatVertex));
 }
-uint64 IndexBytes(const Scene3DSplats& source)
+uint64 IndexBytes(const Scene3DSplats& source, bool storage)
 {
-    return uint64(source.GetSplats().size())*6*sizeof(uint32);
+    return uint64(source.GetSplats().size()) * (storage ? 1 : 6) * sizeof(uint32);
+}
+} // namespace
+
+void FillSplatStorage(const Scene3DSplats& source, void *destination)
+{
+    auto *at = static_cast<byte *>(destination);
+    for(const auto& point : source.GetSplats()) {
+        const float record[] = {float(point.position.x), float(point.position.y), float(point.position.z),
+            float(point.covariance[0]), float(point.covariance[1]), float(point.covariance[2]),
+            float(point.covariance[3]), float(point.covariance[4]), float(point.covariance[5]),
+            point.r, point.g, point.b, point.a};
+        static_assert(sizeof(record) == SplatStorageStride);
+        std::memcpy(at, record, sizeof(record));
+        at += sizeof(record);
+    }
+}
+namespace {
+void FillSplatVertices(const Scene3DSplats& source, void *destination)
+{
+    auto *at = static_cast<byte *>(destination);
+    constexpr float corners[4][2] = {{-1,-1},{1,-1},{1,1},{-1,1}};
+    for(const auto& point : source.GetSplats()) for(const auto& corner : corners) {
+        const SplatVertex vertex{float(point.position.x),float(point.position.y),float(point.position.z),
+            float(point.covariance[0]),float(point.covariance[1]),float(point.covariance[2]),
+            float(point.covariance[3]),float(point.covariance[4]),float(point.covariance[5]),
+            corner[0],corner[1],point.r,point.g,point.b,point.a};
+        std::memcpy(at, &vertex, sizeof(vertex));
+        at += sizeof(vertex);
+    }
 }
 bool SameDirection(const Scene3DVec3& a,const Scene3DVec3& b)
 {
@@ -31,7 +62,7 @@ void ViewContent::PruneSplats(GpuDevice& device,const std::shared_ptr<const Scen
     for(auto it=splat_resources.begin();it!=splat_resources.end();) {
         if(used.find(it->first)==used.end()) {
             device.DestroyBuffer(it->second.vertices);
-            state->stats.resident_splat_bytes-=VertexBytes(*it->second.source);
+            state->stats.resident_splat_bytes-=VertexBytes(*it->second.source, splat_storage);
             it=splat_resources.erase(it);
         }
         else ++it;
@@ -41,7 +72,7 @@ void ViewContent::PruneSplats(GpuDevice& device,const std::shared_ptr<const Scen
         if(instances.find(it->first)==instances.end() || !object ||
            it->second.source!=object->splats) {
             device.DestroyBuffer(it->second.indices);
-            state->stats.resident_splat_bytes-=IndexBytes(*it->second.source);
+            state->stats.resident_splat_bytes-=IndexBytes(*it->second.source, splat_storage);
             it=splat_orders.erase(it);
         }
         else ++it;
@@ -53,25 +84,41 @@ void ViewContent::PruneSplats(GpuDevice& device,const std::shared_ptr<const Scen
 bool ViewContent::EnsureSplats(GpuDevice& device,const Scene3DObject& object,
                                 const Scene3DVec3& forward,String& error)
 {
+    if(!splat_storage_checked) {
+        GpuVertexPullCapabilities caps;
+        splat_storage = device.GetVertexPullCapabilities(caps) == GpuResult::Ok &&
+            caps.max_storage_buffers >= 2 && caps.max_storage_range >= uint64(Scene3DMaxSplats) * SplatStorageStride;
+        splat_storage_checked = true;
+    }
     const auto source=object.splats;
     const auto& points=source->GetSplats();
     if(splat_resources.find(source.get())==splat_resources.end()) {
         SplatGpu resource;resource.source=source;
-        std::vector<SplatVertex> vertices;
-        vertices.reserve(points.size()*4);
-        constexpr float corners[4][2]={{-1,-1},{1,-1},{1,1},{-1,1}};
-        for(const auto& point:points) for(const auto& corner:corners) {
-            SplatVertex vertex{float(point.position.x),float(point.position.y),float(point.position.z),
-                float(point.covariance[0]),float(point.covariance[1]),float(point.covariance[2]),
-                float(point.covariance[3]),float(point.covariance[4]),float(point.covariance[5]),
-                corner[0],corner[1],point.r,point.g,point.b,point.a};
-            vertices.push_back(vertex);
+        const int64 bytes = int64(VertexBytes(*source, splat_storage));
+        bool uploaded = false;
+        const int usage = splat_storage ? GpuBufferUsage_Storage : GpuBufferUsage_Vertex;
+        // Each view owns a lease; only the depth order is private to the view.
+        const auto fill = [&](void *destination, int64, String&) {
+            if(splat_storage) FillSplatStorage(*source, destination);
+            else FillSplatVertices(*source, destination);
+            return true;
+        };
+        const auto result = device.AcquireImmutableBuffer(source, SplatStorageVersion, usage, bytes,
+                                                          fill, resource.vertices, uploaded);
+        if(result == GpuResult::Unsupported) {
+            std::vector<byte> data(static_cast<size_t>(bytes));
+            String unused;
+            fill(data.data(), bytes, unused);
+            if(!Buffer(device,usage,data.data(),bytes,resource.vertices,error)) return false;
+            uploaded = true;
         }
-        if(!Buffer(device,GpuBufferUsage_Vertex,vertices.data(),VertexBytes(*source),
-                   resource.vertices,error)) return false;
+        else {
+            if(!Result(device,result,"acquire immutable Gaussian vertices",error)) return false;
+            if(uploaded) state->stats.uploaded_bytes += bytes;
+        }
         splat_resources.emplace(source.get(),std::move(resource));
-        ++state->stats.splat_uploads;
-        state->stats.resident_splat_bytes+=VertexBytes(*source);
+        if(uploaded) ++state->stats.splat_uploads;
+        state->stats.resident_splat_bytes+=VertexBytes(*source, splat_storage);
         state->stats.resident_splat_resources=int(splat_resources.size());
     }
     // Translating the camera or cloud cannot change its internal depth order.
@@ -93,23 +140,27 @@ bool ViewContent::EnsureSplats(GpuDevice& device,const Scene3DObject& object,
         return a.first!=b.first ? a.first>b.first : a.second<b.second;
     });
     std::vector<uint32> indices;
-    indices.reserve(points.size()*6);
+    indices.reserve(points.size() * (splat_storage ? 1 : 6));
     for(const auto& entry:order) {
-        const uint32 first=entry.second*4;
-        for(uint32 offset:{0u,1u,2u,0u,2u,3u}) indices.push_back(first+offset);
+        if(splat_storage) indices.push_back(entry.second);
+        else {
+            const uint32 first=entry.second*4;
+            for(uint32 offset:{0u,1u,2u,0u,2u,3u}) indices.push_back(first+offset);
+        }
     }
     if(found==splat_orders.end()) {
         SplatOrderGpu instance;instance.source=source;
-        if(!Buffer(device,GpuBufferUsage_Index,indices.data(),IndexBytes(*source),
+        if(!Buffer(device,splat_storage ? GpuBufferUsage_Storage : GpuBufferUsage_Index,
+                   indices.data(),IndexBytes(*source, splat_storage),
                    instance.indices,error)) return false;
         found=splat_orders.emplace(object.id,std::move(instance)).first;
-        state->stats.resident_splat_bytes+=IndexBytes(*source);
+        state->stats.resident_splat_bytes+=IndexBytes(*source, splat_storage);
         state->stats.resident_splat_instances=int(splat_orders.size());
     }
     else {
-        if(!Result(device,device.WriteBuffer(found->second.indices,0,indices.data(),IndexBytes(*source)),
+        if(!Result(device,device.WriteBuffer(found->second.indices,0,indices.data(),IndexBytes(*source, splat_storage)),
                    "update Gaussian depth order",error)) return false;
-        state->stats.uploaded_bytes+=IndexBytes(*source);
+        state->stats.uploaded_bytes+=IndexBytes(*source, splat_storage);
     }
     found->second.local_forward=local_forward;found->second.valid=true;
     ++state->stats.splat_sort_updates;
@@ -122,7 +173,9 @@ bool ViewContent::EnsureSplatPipeline(GpuDevice& device,GpuFormat format,GpuPipe
 {
     if(!splat_vertex_shader.IsValid()) {
         GpuShaderDesc desc;desc.stage=GpuShaderStage::Vertex;desc.format=GpuShaderFormat::SpirV;
-        desc.code=String(reinterpret_cast<const char*>(kUi3DSplatVertex),sizeof(kUi3DSplatVertex));
+        desc.code = splat_storage ?
+            String(reinterpret_cast<const char*>(kUi3DSplatPullVertex),sizeof(kUi3DSplatPullVertex)) :
+            String(reinterpret_cast<const char*>(kUi3DSplatVertex),sizeof(kUi3DSplatVertex));
         desc.label="Ui3DView full covariance Gaussian vertex";
         if(!Result(device,device.CreateShader(desc,splat_vertex_shader),"create Gaussian vertex shader",error)) return false;
     }
@@ -138,7 +191,12 @@ bool ViewContent::EnsureSplatPipeline(GpuDevice& device,GpuFormat format,GpuPipe
     if(!splat_pipeline.IsValid()) {
         GpuPipelineDesc desc;desc.color_format=format;
         desc.vertex_shader=splat_vertex_shader;desc.fragment_shader=splat_fragment_shader;
-        desc.vertex_layout=GpuVertexLayout::Position3Covariance6Corner2Color4F;
+        desc.vertex_layout = splat_storage ? GpuVertexLayout::StoragePull :
+                                             GpuVertexLayout::Position3Covariance6Corner2Color4F;
+        if(splat_storage) {
+            desc.vertex_storage_count = 2;
+            desc.topology = GpuPrimitiveTopology::TriangleStrip;
+        }
         desc.parameter_bytes=sizeof(SplatParameters);desc.sampled_texture_count=0;
         desc.blend_mode=GpuBlendMode::SourceOver;
         desc.depth_format=GpuFormat::D32F;desc.depth_test=true;desc.depth_write=false;
@@ -160,6 +218,7 @@ void ViewContent::CloseSplats(GpuDevice& device)
     if(splat_fragment_shader.IsValid()) device.DestroyShader(splat_fragment_shader);
     splat_pipeline=GpuPipelineId();splat_vertex_shader=GpuShaderId();splat_fragment_shader=GpuShaderId();
     splat_format=GpuFormat::Unknown;
+    splat_storage = splat_storage_checked = false;
     state->stats.resident_splat_resources=state->stats.resident_splat_instances=0;
     state->stats.resident_splat_bytes=0;
 }

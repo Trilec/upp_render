@@ -58,4 +58,18 @@ void main()
     gaussian=in_corner*radius;
     color=in_color*parameters.tint;
     color.a*=parameters.viewport_opacity.z;
+    // The screen-space ellipse is a first-order perspective approximation.
+    // Fade near-eye streaks and ellipses large enough to veil the frame.
+    if(dot(row_w,row_w)>0.0) {
+        vec2 span=2.0*radius*sqrt(vec2(xx,yy))/parameters.viewport_opacity.xy;
+        float wide=smoothstep(0.5,1.0,max(span.x,span.y));
+        if(wide>0.0) {
+            float forward_sigma=sqrt(max(0.0,dot(row_w,covariance*row_w)));
+            float depth_quality=smoothstep(1.0,3.0,clip.w/max(forward_sigma,1e-8));
+            float footprint=3.14159265*(radius*sqrt(major_variance)/parameters.viewport_opacity.x)*
+                                       (radius*sqrt(minor_variance)/parameters.viewport_opacity.y);
+            color.a*= (1.0-wide*(1.0-depth_quality)) * (1.0-smoothstep(0.25,0.85,footprint));
+        }
+    }
+    if(color.a<1.0/255.0) gl_Position=vec4(2.0,2.0,2.0,1.0);
 }

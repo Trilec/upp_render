@@ -186,7 +186,8 @@ Scene3DVec3 Scene3DBounds::GetCenter() const { return empty ? Scene3DVec3() : (m
 Scene3DVec3 Scene3DBounds::GetSize() const { return empty ? Scene3DVec3() : max - min; }
 
 std::shared_ptr<const Scene3DMesh> Scene3DMesh::Create(const std::vector<Scene3DVertex>& input_vertices,
-                                                   const std::vector<uint32>& input_indices, String& error)
+                                                   const std::vector<uint32>& input_indices, String& error,
+                                                  const std::vector<uint32>& outline)
 {
 	error.Clear();
 	if(input_vertices.empty() || input_vertices.size() > 1000000 || input_indices.empty() ||
@@ -206,8 +207,15 @@ std::shared_ptr<const Scene3DMesh> Scene3DMesh::Create(const std::vector<Scene3D
 		Scene3DVec3 b = input_vertices[input_indices[i+2]].position - input_vertices[input_indices[i]].position;
 		if(a.Cross(b).Length() <= a.Length() * b.Length() * 1e-12) { error = "Mesh has a degenerate triangle"; return {}; }
 	}
+	if(outline.size() > input_indices.size() || outline.size() % 2) {
+		error = "Viewport outline needs bounded index pairs"; return {};
+	}
+	for(size_t i = 0; i < outline.size(); i += 2)
+		if(outline[i] >= input_vertices.size() || outline[i+1] >= input_vertices.size() || outline[i] == outline[i+1]) {
+			error = "Invalid viewport outline segment"; return {};
+		}
 	std::shared_ptr<Scene3DMesh> mesh(new Scene3DMesh);
-	mesh->vertices = input_vertices; mesh->indices = input_indices;
+	mesh->vertices = input_vertices; mesh->indices = input_indices; mesh->viewport_outline = outline;
 	for(auto& vertex : mesh->vertices) { vertex.normal = vertex.normal.Normalized(); mesh->bounds.Add(vertex.position); }
 	return mesh;
 }
@@ -261,8 +269,12 @@ std::shared_ptr<const Scene3DSnapshot> Scene3DSnapshot::Create(const Scene3DScen
 		if(source.mesh && source.splats) { error = "A scene node cannot contain both a mesh and Gaussian points"; return {}; }
 		if(source.splats) {
 			if(source.material.color_texture) { error = "Gaussian colour is per point; mesh textures are not supported on Gaussian nodes"; return {}; }
-			splat_count += source.splats->GetSplats().size();
-			if(splat_count > Scene3DMaxSplats) { error = "Scene exceeds the 150000 instanced Gaussian point budget"; return {}; }
+			const size_t points = source.splats->GetSplats().size();
+			if(points > size_t(Scene3DMaxSplats) - splat_count) {
+				error = Format("Scene exceeds the %d instanced Gaussian point budget", Scene3DMaxSplats);
+				return {};
+			}
+			splat_count += points;
 		}
 		if(source.material.color_texture && textures.insert(source.material.color_texture.get()).second) {
 			texture_bytes += source.material.color_texture->GetPixels().size();

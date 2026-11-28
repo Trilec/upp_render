@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Core/Core.h>
+#include <functional>
+#include <memory>
 
 namespace Upp {
 
@@ -43,6 +45,7 @@ enum GpuBufferUsage {
 	GpuBufferUsage_Storage = 1 << 3,
 	GpuBufferUsage_TransferSrc = 1 << 4,
 	GpuBufferUsage_TransferDst = 1 << 5,
+	GpuBufferUsage_Indirect = 1 << 6,
 };
 
 enum GpuTextureUsage {
@@ -68,6 +71,7 @@ enum class GpuStoreOp {
 enum class GpuPrimitiveTopology {
 	TriangleList,
 	LineList,
+	TriangleStrip,
 };
 
 enum class GpuShaderStage {
@@ -92,6 +96,7 @@ enum class GpuVertexLayout {
 	Position3Normal3Color4F,
 	// Float position3, covariance6(xx,xy,xz,yy,yz,zz), corner2, linear RGBA4.
 	Position3Covariance6Corner2Color4F, // 60 bytes; unsampled Gaussian quads.
+	StoragePull, // No vertex attributes. Read-only storage in the vertex shader.
 };
 
 enum class GpuCompareOp { Never, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always };
@@ -192,6 +197,10 @@ struct GpuBufferDesc : Moveable<GpuBufferDesc> {
 	GpuBufferMemory memory = GpuBufferMemory::HostVisible;
 };
 
+// Called synchronously only for a new immutable allocation. The writer must
+// initialize the full byte range. It must not call back into the device.
+using GpuImmutableBufferFill = std::function<bool(void*, int64, String&)>;
+
 struct GpuTextureDesc : Moveable<GpuTextureDesc> {
 	Size size = Size(0, 0);
 	GpuFormat format = GpuFormat::Unknown;
@@ -240,6 +249,7 @@ struct GpuComputeCapabilities : Moveable<GpuComputeCapabilities> {
 	uint64 storage_offset_alignment = 0;
 	uint32 max_parameter_bytes = 0;
 	uint32 max_dispatches_per_command = 0;
+	bool indirect_dispatch = false;
 };
 
 struct GpuComputeStats : Moveable<GpuComputeStats> {
@@ -248,6 +258,20 @@ struct GpuComputeStats : Moveable<GpuComputeStats> {
 };
 
 // Completed sampled-image descriptor pools are bounded and reusable.
+struct GpuVertexPullCapabilities : Moveable<GpuVertexPullCapabilities> {
+	uint32 max_storage_buffers = 0;
+	uint64 max_storage_range = 0, storage_offset_alignment = 0;
+	bool indirect_draw = false;
+};
+
+// Portable layout for one command. GPU writers must provide in-bounds
+// shader work and use first_instance = 0 (always supported).
+struct GpuDrawIndirectArguments {
+	uint32 vertex_count = 0, instance_count = 0, first_vertex = 0, first_instance = 0;
+};
+struct GpuDispatchIndirectArguments { uint32 x = 0, y = 0, z = 0; };
+static_assert(sizeof(GpuDrawIndirectArguments) == 16 && sizeof(GpuDispatchIndirectArguments) == 12);
+
 struct GpuSamplingStats : Moveable<GpuSamplingStats> {
 	uint64 descriptor_pools_created = 0, descriptor_pools_reused = 0;
 	int live_commands = 0, retained_descriptor_pools = 0;
@@ -256,6 +280,7 @@ struct GpuSamplingStats : Moveable<GpuSamplingStats> {
 struct GpuComputePipelineDesc : Moveable<GpuComputePipelineDesc> {
 	GpuShaderId shader;
 	int storage_buffer_count = 0; // Set 0, consecutive storage-buffer bindings.
+	uint32 storage_read_only_mask = 0; // Bit per shader-declared read-only storage binding.
 	int parameter_bytes = 0;     // Entire push-constant payload, multiple of 4.
 	String label;
 };
@@ -301,6 +326,7 @@ struct GpuPipelineDesc : Moveable<GpuPipelineDesc> {
 	// Stage-5 starts with one conventional sampled 2D texture slot. Keeping
 	// sampler state on the pipeline avoids exposing backend descriptor objects.
 	int sampled_texture_count = 0;
+	int vertex_storage_count = 0; // StoragePull only; set 0, consecutive read-only bindings.
 	GpuSamplerFilter sampler_filter = GpuSamplerFilter::Linear;
 	GpuSamplerAddressMode sampler_address = GpuSamplerAddressMode::ClampToEdge;
 	String label;
@@ -352,6 +378,15 @@ public:
 	virtual GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) = 0;
 	virtual GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) = 0;
 	virtual GpuResult DestroyBuffer(GpuBufferId id) = 0;
+
+	// A device may share immutable vertex or read-only storage bytes across adapters on one native
+	// device. Owner/format_version identify the bytes for the lease lifetime.
+	// Each lease is independently released with DestroyBuffer.
+	virtual GpuResult AcquireImmutableBuffer(const std::shared_ptr<const void>&,
+	                                               uint32, int usage, int64, const GpuImmutableBufferFill&,
+	                                               GpuBufferId& out, bool& uploaded) {
+		out = GpuBufferId(); uploaded = false; return GpuResult::Unsupported;
+	}
 
 	// Clears out on failure. Providers without physical queries return Unsupported.
 	virtual GpuResult GetTextureCapabilities(GpuFormat, int, GpuTextureCapabilities& out) {
@@ -424,6 +459,13 @@ public:
 	virtual GpuResult SetStorageBuffer(GpuCommandListId, int, GpuBufferId, int64 = 0, int64 = 0) { return GpuResult::Unsupported; }
 	virtual GpuResult SetComputeParameters(GpuCommandListId, const void *, int) { return GpuResult::Unsupported; }
 	virtual GpuResult Dispatch(GpuCommandListId, uint32, uint32 = 1, uint32 = 1) { return GpuResult::Unsupported; }
+	// Counts produced in GpuDispatchIndirectArguments must fit the queried limits.
+	virtual GpuResult DispatchIndirect(GpuCommandListId, GpuBufferId, int64 = 0) { return GpuResult::Unsupported; }
+	// GPU transfer between distinct buffers on the graphics queue, outside a render pass.
+	// The caller keeps contents defined and waits for completion before host access.
+	// GPU writes to CPU-validated index buffers are forbidden.
+	virtual GpuResult CopyBuffer(GpuCommandListId, GpuBufferId, int64,
+	                             GpuBufferId, int64, int64) { return GpuResult::Unsupported; }
 	// GPU-resident copy. Whole uninitialized images must be defined before partial updates.
 	virtual GpuResult CopyBufferToTexture(GpuCommandListId, GpuBufferId, int64,
 	                                     GpuTextureId, const GpuTextureWriteDesc&) { return GpuResult::Unsupported; }
@@ -446,6 +488,15 @@ public:
 	// Exact parameter_bytes payload. Set again after changing the pipeline.
 	virtual GpuResult SetGraphicsParameters(GpuCommandListId, const void *, int) { return GpuResult::Unsupported; }
 	virtual GpuResult DrawIndexed(GpuCommandListId, int, int = 0) { return GpuResult::Unsupported; }
+	virtual GpuResult GetVertexPullCapabilities(GpuVertexPullCapabilities& out) {
+		out = GpuVertexPullCapabilities(); return GpuResult::Unsupported;
+	}
+	virtual GpuResult SetVertexStorageBuffer(GpuCommandListId, int, GpuBufferId, int64 = 0, int64 = 0) {
+		return GpuResult::Unsupported;
+	}
+	// StoragePull only. No indexed-buffer or vertex-attribute path is implied.
+	virtual GpuResult DrawInstanced(GpuCommandListId, int, int, int = 0) { return GpuResult::Unsupported; }
+	virtual GpuResult DrawIndirect(GpuCommandListId, GpuBufferId, int64 = 0) { return GpuResult::Unsupported; }
 	virtual GpuResult SetSampledTexture(GpuCommandListId, int, GpuTextureId) { return GpuResult::Unsupported; }
 	virtual GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) = 0;
 	virtual GpuResult EndRenderPass(GpuCommandListId list) = 0;

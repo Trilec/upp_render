@@ -34,10 +34,16 @@ public:
 	bool IsReady() const;
 	const String& GetError() const;
 	bool QueryPresentationState(VulkanPresentationState& out) const;
+	// Opt-in diagnostics for one command list at a time on the owning thread.
+	// Reports the last successfully completed timed command buffer.
+	GpuResult SetGpuSubmissionTiming(bool enable);
+	bool GetLastGpuSubmissionMilliseconds(double& out) const;
 	// VkMemoryRequirements-sized exclusive allocations owned by this adapter.
-	// Shared immutable images are counted once by GetSharedImmutableAllocationBytes.
+	// Shared images and vertex buffers have separate allocation counters.
 	// Excludes driver/swapchain memory and temporary upload staging.
 	uint64 GetLiveAllocationBytes() const;
+	// Immutable buffer bytes shared across adapters on this native device.
+	uint64 GetSharedImmutableBufferBytes() const;
 	int GetLiveBufferCount() const;
 	int GetLiveTextureCount() const;
 	int GetLiveShaderCount() const;
@@ -55,6 +61,10 @@ public:
 	GpuResult CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& out) override;
 	GpuResult WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size) override;
 	GpuResult DestroyBuffer(GpuBufferId id) override;
+	GpuResult AcquireImmutableBuffer(const std::shared_ptr<const void>& owner,
+	                                       uint32 format_version, int usage, int64 size,
+	                                       const GpuImmutableBufferFill& fill,
+	                                       GpuBufferId& out, bool& uploaded) override;
 
 	// Synchronous diagnostic readback; call only with exclusive queue access and no open commands.
 	// Owned initialized colour textures with TransferSrc only; tightly packed native bytes.
@@ -88,6 +98,9 @@ public:
 	GpuResult SetStorageBuffer(GpuCommandListId list, int slot, GpuBufferId buffer, int64 offset = 0, int64 size = 0) override;
 	GpuResult SetComputeParameters(GpuCommandListId list, const void *data, int size) override;
 	GpuResult Dispatch(GpuCommandListId list, uint32 x, uint32 y = 1, uint32 z = 1) override;
+	GpuResult DispatchIndirect(GpuCommandListId, GpuBufferId, int64 offset = 0) override;
+	GpuResult CopyBuffer(GpuCommandListId list, GpuBufferId source, int64 source_offset,
+	                     GpuBufferId target, int64 target_offset, int64 size) override;
 	GpuResult CopyBufferToTexture(GpuCommandListId list, GpuBufferId source, int64 offset,
 	                             GpuTextureId target, const GpuTextureWriteDesc& region) override;
 	GpuResult ReadBuffer(GpuBufferId buffer, int64 offset, int64 size, Vector<byte>& out) override;
@@ -101,6 +114,10 @@ public:
 	GpuResult SetIndexBuffer(GpuCommandListId list, GpuBufferId buffer, GpuIndexType type) override;
 	GpuResult SetGraphicsParameters(GpuCommandListId list, const void *data, int size) override;
 	GpuResult DrawIndexed(GpuCommandListId list, int index_count, int first_index = 0) override;
+	GpuResult GetVertexPullCapabilities(GpuVertexPullCapabilities&) override;
+	GpuResult SetVertexStorageBuffer(GpuCommandListId, int slot, GpuBufferId, int64 offset = 0, int64 size = 0) override;
+	GpuResult DrawInstanced(GpuCommandListId, int vertices, int instances, int first_vertex = 0) override;
+	GpuResult DrawIndirect(GpuCommandListId, GpuBufferId, int64 offset = 0) override;
 	GpuResult DiscardCommands(GpuCommandListId list) override;
 	GpuResult SetSampledTexture(GpuCommandListId list, int slot, GpuTextureId texture) override;
 	GpuResult Draw(GpuCommandListId list, int vertex_count, int first_vertex = 0) override;
@@ -129,6 +146,8 @@ private:
 	bool IsComputePipeline(GpuPipelineId pipeline) const;
 	GpuResult DestroyComputePipeline(GpuPipelineId pipeline);
 	void CompleteComputeCommands(GpuCommandListId list);
+	GpuResult RecordDispatch(GpuCommandListId, uint32, uint32, uint32, GpuBufferId indirect, int64 offset);
+	GpuResult BindVertexStorageForDraw(GpuCommandListId);
 
 	SampledImpl& Sampled();
 	void DestroySampledExtension();

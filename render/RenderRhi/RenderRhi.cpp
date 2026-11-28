@@ -112,10 +112,10 @@ static String DumpFlags(int flags, const char *const *names, const int *bits, in
 
 String DumpGpuBufferUsage(int usage)
 {
-	static const char *const names[] = { "Vertex", "Index", "Uniform", "Storage", "TransferSrc", "TransferDst" };
+	static const char *const names[] = { "Vertex", "Index", "Uniform", "Storage", "TransferSrc", "TransferDst", "Indirect" };
 	static const int bits[] = { GpuBufferUsage_Vertex, GpuBufferUsage_Index, GpuBufferUsage_Uniform,
-		GpuBufferUsage_Storage, GpuBufferUsage_TransferSrc, GpuBufferUsage_TransferDst };
-	return DumpFlags(usage, names, bits, 6);
+		GpuBufferUsage_Storage, GpuBufferUsage_TransferSrc, GpuBufferUsage_TransferDst, GpuBufferUsage_Indirect };
+	return DumpFlags(usage, names, bits, 7);
 }
 
 String DumpGpuTextureUsage(int usage)
@@ -150,6 +150,7 @@ String DumpGpuPrimitiveTopology(GpuPrimitiveTopology topology)
 	switch(topology) {
 	case GpuPrimitiveTopology::TriangleList: return "TriangleList";
 	case GpuPrimitiveTopology::LineList: return "LineList";
+	case GpuPrimitiveTopology::TriangleStrip: return "TriangleStrip";
 	}
 	return String("Unknown(") + AsString((int)topology) + ")";
 }
@@ -183,6 +184,7 @@ String DumpGpuVertexLayout(GpuVertexLayout layout)
 	case GpuVertexLayout::Position3Normal3Uv2Color4F: return "Position3Normal3Uv2Color4F";
 	case GpuVertexLayout::Position3Normal3Color4F: return "Position3Normal3Color4F";
 	case GpuVertexLayout::Position3Covariance6Corner2Color4F: return "Position3Covariance6Corner2Color4F";
+	case GpuVertexLayout::StoragePull: return "StoragePull";
 	}
 	return String("Unknown(") + AsString((int)layout) + ")";
 }

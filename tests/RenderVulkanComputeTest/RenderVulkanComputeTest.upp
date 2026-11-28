@@ -3,7 +3,11 @@ uses
 	RenderNull;
 
 file
-	main.cpp;
+	main.cpp,
+	VertexPullFixture.vert,
+	VertexPullFixture.frag,
+	VertexPullFixtureVertSpirv.h,
+	VertexPullFixtureFragSpirv.h;
 
 mainconfig
 	"" = "CONSOLE";

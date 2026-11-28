@@ -5,6 +5,7 @@
 #include "../../shaders/Ui3DResolveVertSpirv.h"
 #include "../../shaders/Ui3DResolveFragSpirv.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace Upp { namespace Ui3DInternal {
@@ -57,29 +58,34 @@ bool ViewContent::EnsureMesh(GpuDevice& device, std::shared_ptr<const Scene3DMes
 		vertices.push_back(vertex);
 	}
 	const auto& indices = source->GetIndices();
+	const auto& outline = source->GetViewportOutline();
 	struct Edge { uint32 a, b; };
 	static_assert(sizeof(Edge) == 2 * sizeof(uint32), "packed edge index pair");
 	std::vector<Edge> edges;
-	edges.reserve(indices.size());
-	auto edge = [&](uint32 a, uint32 b) { edges.push_back({ std::min(a, b), std::max(a, b) }); };
-	for(size_t i = 0; i < indices.size(); i += 3) {
-		edge(indices[i], indices[i + 1]); edge(indices[i + 1], indices[i + 2]); edge(indices[i + 2], indices[i]);
+	if(outline.empty()) {
+		edges.reserve(indices.size());
+		auto edge = [&](uint32 a, uint32 b) { edges.push_back({ std::min(a, b), std::max(a, b) }); };
+		for(size_t i = 0; i < indices.size(); i += 3) {
+			edge(indices[i], indices[i + 1]); edge(indices[i + 1], indices[i + 2]); edge(indices[i + 2], indices[i]);
+		}
+		std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+			return a.a < b.a || (a.a == b.a && a.b < b.b);
+		});
+		edges.erase(std::unique(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+			return a.a == b.a && a.b == b.b;
+		}), edges.end());
 	}
-	std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
-		return a.a < b.a || (a.a == b.a && a.b < b.b);
-	});
-	edges.erase(std::unique(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
-		return a.a == b.a && a.b == b.b;
-	}), edges.end());
+	const void* line_indices = outline.empty() ? static_cast<const void*>(edges.data()) : outline.data();
+	const int line_count = outline.empty() ? int(2 * edges.size()) : int(outline.size());
 	bool ok = Buffer(device, GpuBufferUsage_Vertex, vertices.data(),
 	                 (int64)vertices.size() * sizeof(MeshVertex), mesh.vertices, error) &&
 	          Buffer(device, GpuBufferUsage_Index, indices.data(),
 	                 (int64)indices.size() * sizeof(uint32), mesh.indices, error) &&
-	          Buffer(device, GpuBufferUsage_Index, edges.data(),
-	                 (int64)edges.size() * sizeof(Edge), mesh.edges, error);
+	          Buffer(device, GpuBufferUsage_Index, line_indices,
+	                 (int64)line_count * sizeof(uint32), mesh.edges, error);
 	if(!ok) { ReleaseMesh(device, mesh); return false; }
 	mesh.index_count = (int)indices.size();
-	mesh.edge_count = (int)edges.size() * 2;
+	mesh.edge_count = line_count;
 	meshes.emplace(source.get(), std::move(mesh));
 	++state->stats.mesh_uploads;
 	state->stats.resident_meshes = (int)meshes.size();
@@ -131,6 +137,79 @@ bool ViewContent::EnsureDecorations(GpuDevice& device, Size viewport, String& er
 	grid = std::move(new_grid); axes = std::move(new_axes);
 	grid_layout = next; have_grid_layout = true;
 	decoration_revision = state->decoration_revision;
+	return true;
+}
+
+bool ViewContent::EnsureGridOrigin(GpuDevice& device, Size viewport, String& error)
+{
+	const auto& camera = state->camera;
+	if(grid_origin_camera == camera.revision && grid_origin_size == viewport &&
+	   grid_origin_layout == decoration_revision) return true;
+
+	// Expand the two world-zero centerlines in screen pixels. Preserve their
+	// projected depth at both endpoints so opaque geometry still occludes them.
+	const auto eye = camera.GetEye();
+	Scene3DVec3 right, up, forward;
+	camera.GetBasis(right, up, forward);
+	std::array<MeshVertex, 24> vertices{};
+	int count = 0;
+	auto stroke = [&](Scene3DVec3 a, Scene3DVec3 b, Rgba8 color) {
+		const double za = (a - eye).Dot(forward), zb = (b - eye).Dot(forward);
+		const double inset = std::min(camera.near_plane * 1e-6, (camera.far_plane - camera.near_plane) * .01);
+		const double near_depth = camera.near_plane + inset;
+		const double far_depth = camera.far_plane - inset;
+		if(std::max(za, zb) < near_depth || std::min(za, zb) > far_depth) return;
+		const auto segment = b - a;
+		if(za != zb) {
+			a = a + segment * ((std::clamp(za, near_depth, far_depth) - za) / (zb - za));
+			b = b + segment * ((std::clamp(zb, near_depth, far_depth) - zb) / (zb - za));
+		}
+		Pointf start, end;
+		double start_depth, end_depth;
+		if(!camera.Project(a, viewport, start, start_depth) || !camera.Project(b, viewport, end, end_depth)) return;
+		const Pointf delta = end - start;
+		const double length = std::hypot(delta.x, delta.y);
+		if(length < .5) return;
+		const Pointf across(-delta.y / length, delta.x / length);
+		const float r = Linear(color.r), g = Linear(color.g), b_linear = Linear(color.b);
+		auto vertex = [&](Pointf pixel, double depth, double shift, float alpha) {
+			pixel += across * shift;
+			vertices[count++] = {(float)(2 * pixel.x / viewport.cx - 1),
+			                     (float)(2 * pixel.y / viewport.cy - 1), (float)depth,
+			                     0, 1, 0, 0, 0, r, g, b_linear, alpha};
+		};
+		auto strip = [&](double inner, double outer, float alpha) {
+			vertex(start, start_depth, inner, alpha); vertex(end, end_depth, inner, alpha);
+			vertex(end, end_depth, outer, alpha); vertex(start, start_depth, outer, alpha);
+		};
+		strip(-1.5, -.5, .28f);
+		strip(-.5, .5, .86f);
+		strip(.5, 1.5, .28f);
+	};
+	const auto& grid = grid_layout;
+	const double span = grid.extent * grid.spacing;
+	if(grid.plane != Ui3DGridPlane::YZ && std::abs(grid.center_v) <= span)
+		stroke({grid.center_u - span, 0, 0}, {grid.center_u + span, 0, 0}, Rgba8(161, 100, 96));
+	if(grid.plane != Ui3DGridPlane::XY && std::abs(grid.center_u) <= span)
+		stroke({0, 0, grid.center_v - span}, {0, 0, grid.center_v + span}, Rgba8(91, 125, 174));
+	if(count && !grid_origin.vertices.IsValid()) {
+		std::array<uint32, 36> indices{};
+		for(uint32 i = 0; i < 6; ++i) {
+			const uint32 k = i * 4;
+			const std::array<uint32, 6> quad{k, k+1, k+2, k, k+2, k+3};
+			std::copy(quad.begin(), quad.end(), indices.begin() + i * 6);
+		}
+		if(!Buffer(device, GpuBufferUsage_Vertex, vertices.data(), sizeof(vertices), grid_origin.vertices, error) ||
+		   !Buffer(device, GpuBufferUsage_Index, indices.data(), sizeof(indices), grid_origin.indices, error)) {
+			ReleaseMesh(device, grid_origin); return false;
+		}
+	} else if(count && !Result(device, device.WriteBuffer(grid_origin.vertices, 0, vertices.data(),
+	                   count * sizeof(MeshVertex)), "update grid origin strokes", error)) return false;
+
+	grid_origin.index_count = count / 4 * 6;
+	grid_origin_camera = camera.revision;
+	grid_origin_size = viewport;
+	grid_origin_layout = decoration_revision;
 	return true;
 }
 

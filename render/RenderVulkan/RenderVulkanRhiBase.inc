@@ -96,6 +96,7 @@ static VkBufferUsageFlags ToVkBufferUsage(int usage)
 	if(usage & GpuBufferUsage_Storage) out |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	if(usage & GpuBufferUsage_TransferSrc) out |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 	if(usage & GpuBufferUsage_TransferDst) out |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	if(usage & GpuBufferUsage_Indirect) out |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 	if(out == 0)
 		out = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	return out;
@@ -196,7 +197,11 @@ static VkAttachmentStoreOp ToVkStoreOp(GpuStoreOp op)
 
 static VkPrimitiveTopology ToVkTopology(GpuPrimitiveTopology topology)
 {
-	return topology == GpuPrimitiveTopology::LineList ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	switch(topology) {
+	case GpuPrimitiveTopology::LineList: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+	case GpuPrimitiveTopology::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+	default: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	}
 }
 
 static String VkFailure(const char *operation, VkResult result)
@@ -214,6 +219,25 @@ struct VulkanGpuDevice::Impl {
 		VkMemoryPropertyFlags memory_flags = 0;
 	};
 
+	struct ImmutableBufferAllocation {
+		std::shared_ptr<const void> source;
+		VkDevice device = VK_NULL_HANDLE;
+		RawBuffer raw;
+		PFN_vkDestroyBuffer destroy_buffer = nullptr;
+		PFN_vkFreeMemory free_memory = nullptr;
+		~ImmutableBufferAllocation()
+		{
+			if(raw.buffer) destroy_buffer(device, raw.buffer, nullptr);
+			if(raw.memory) free_memory(device, raw.memory, nullptr);
+		}
+	};
+	using ImmutableBufferKey = std::tuple<uintptr_t, uintptr_t, uint32, int, int64>;
+	static std::map<ImmutableBufferKey, std::weak_ptr<ImmutableBufferAllocation>>& ImmutableBuffers()
+	{
+		static std::map<ImmutableBufferKey, std::weak_ptr<ImmutableBufferAllocation>> cache;
+		return cache;
+	}
+
 	struct IndexRange : Moveable<IndexRange> {
 		int first = 0, count = 0, width = 0;
 		uint32 maximum = 0;
@@ -221,6 +245,7 @@ struct VulkanGpuDevice::Impl {
 	struct BufferState : Moveable<BufferState> {
 		GpuBufferDesc desc;
 		RawBuffer raw;
+		std::shared_ptr<ImmutableBufferAllocation> immutable;
 		// Host-authored index data only; cached maxima make retained mesh draws O(1).
 		Vector<byte> index_bytes;
 		Vector<IndexRange> index_ranges; // At most 64 queried ranges per buffer.
@@ -289,6 +314,7 @@ struct VulkanGpuDevice::Impl {
 		bool depth_store_result = false;
 		bool parameters_set = false;
 		bool submitted = false;
+		bool timed_submission = false;
 		GpuFrameId frame;
 		GpuFormat color_format = GpuFormat::Unknown;
 		VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -330,6 +356,14 @@ struct VulkanGpuDevice::Impl {
 	PFN_vkGetDeviceProcAddr get_device_proc_addr = nullptr;
 	VulkanProcResolver proc_filter = nullptr;
 	bool ready = false;
+	VkQueryPool timing_pool = VK_NULL_HANDLE;
+	PFN_vkDestroyQueryPool destroy_query_pool = nullptr;
+	PFN_vkCmdResetQueryPool reset_query_pool = nullptr;
+	PFN_vkCmdWriteTimestamp write_timestamp = nullptr;
+	PFN_vkGetQueryPoolResults get_query_results = nullptr;
+	uint64 timestamp_mask = 0;
+	double timestamp_period_ns = 0, last_gpu_ms = 0;
+	bool timing_enabled = false, have_gpu_ms = false;
 	String error;
 	GpuDeviceId device_id;
 	GpuAdapterInfo adapter_info;
@@ -374,6 +408,7 @@ struct VulkanGpuDevice::Impl {
 	PFN_vkEndCommandBuffer end_command_buffer = nullptr;
 	PFN_vkCmdPipelineBarrier cmd_pipeline_barrier = nullptr;
 	PFN_vkCmdPipelineBarrier2 cmd_pipeline_barrier_2 = nullptr;
+	PFN_vkCmdCopyBuffer cmd_copy_buffer = nullptr;
 	PFN_vkCmdCopyBufferToImage cmd_copy_buffer_to_image = nullptr;
 	PFN_vkCreateImageView create_image_view = nullptr;
 	PFN_vkDestroyImageView destroy_image_view = nullptr;
@@ -451,6 +486,7 @@ struct VulkanGpuDevice::Impl {
 		       Resolve(end_command_buffer, "vkEndCommandBuffer") &&
 		       Resolve(cmd_pipeline_barrier, "vkCmdPipelineBarrier") &&
 		       Resolve(cmd_pipeline_barrier_2, "vkCmdPipelineBarrier2") &&
+		       Resolve(cmd_copy_buffer, "vkCmdCopyBuffer") &&
 		       Resolve(cmd_copy_buffer_to_image, "vkCmdCopyBufferToImage") &&
 		       Resolve(create_image_view, "vkCreateImageView") &&
 		       Resolve(destroy_image_view, "vkDestroyImageView") &&
@@ -644,7 +680,8 @@ struct VulkanGpuDevice::Impl {
 		raw = RawBuffer();
 	}
 
-	bool WriteRawBuffer(const RawBuffer& raw, VkDeviceSize offset, const void *data, VkDeviceSize size)
+	template <class Fill>
+	bool FillRawBuffer(const RawBuffer& raw, VkDeviceSize offset, Fill&& fill)
 	{
 		void *mapped = nullptr;
 		VkResult vr = map_memory(device, raw.memory, 0, VK_WHOLE_SIZE, 0, &mapped);
@@ -652,7 +689,17 @@ struct VulkanGpuDevice::Impl {
 			error = VkFailure("vkMapMemory", vr);
 			return false;
 		}
-		std::memcpy(static_cast<byte *>(mapped) + offset, data, (size_t)size);
+		bool filled = false;
+		try {
+			filled = fill(static_cast<byte *>(mapped) + offset);
+		}
+		catch(const Exc& problem) { error = problem; }
+		catch(const std::exception& problem) { error = problem.what(); }
+		catch(...) { error = "Vulkan buffer initialization failed"; }
+		if(!filled) {
+			unmap_memory(device, raw.memory);
+			return false;
+		}
 		if((raw.memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
 			VkMappedMemoryRange range {};
 			range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -668,6 +715,14 @@ struct VulkanGpuDevice::Impl {
 		}
 		unmap_memory(device, raw.memory);
 		return true;
+	}
+
+	bool WriteRawBuffer(const RawBuffer& raw, VkDeviceSize offset, const void *data, VkDeviceSize size)
+	{
+		return FillRawBuffer(raw, offset, [&](void *destination) {
+			std::memcpy(destination, data, (size_t)size);
+			return true;
+		});
 	}
 
 	bool AllocateImageMemory(VkImage image, VkDeviceMemory& out_memory)
@@ -876,6 +931,10 @@ struct VulkanGpuDevice::Impl {
 			DestroyCommandState(commands[commands.GetCount() - 1]);
 			commands.Remove(commands.GetCount() - 1);
 		}
+		if(timing_pool) {
+			destroy_query_pool(device, timing_pool, nullptr);
+			timing_pool = VK_NULL_HANDLE;
+		}
 		while(pipelines.GetCount()) {
 			PipelineState& state = pipelines[pipelines.GetCount() - 1];
 			if(state.pipeline) destroy_pipeline(device, state.pipeline, nullptr);
@@ -908,7 +967,8 @@ struct VulkanGpuDevice::Impl {
 			textures.Remove(textures.GetCount() - 1);
 		}
 		while(buffers.GetCount()) {
-			DestroyRawBuffer(buffers[buffers.GetCount() - 1].raw);
+			auto& state = buffers[buffers.GetCount() - 1];
+			if(!state.immutable) DestroyRawBuffer(state.raw);
 			buffers.Remove(buffers.GetCount() - 1);
 		}
 	}
@@ -992,15 +1052,78 @@ bool VulkanGpuDevice::QueryPresentationState(VulkanPresentationState& out) const
 	return true;
 }
 
+GpuResult VulkanGpuDevice::SetGpuSubmissionTiming(bool enable)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(impl->HasOpenCommands()) return GpuResult::InvalidState;
+	if(enable && !impl->timing_pool) {
+		PFN_vkGetPhysicalDeviceQueueFamilyProperties queues = nullptr;
+		PFN_vkGetPhysicalDeviceProperties properties = nullptr;
+		PFN_vkCreateQueryPool create = nullptr;
+		if(!impl->ResolveInstance(queues, "vkGetPhysicalDeviceQueueFamilyProperties") ||
+		   !impl->ResolveInstance(properties, "vkGetPhysicalDeviceProperties") ||
+		   !impl->Resolve(create, "vkCreateQueryPool") ||
+		   !impl->Resolve(impl->destroy_query_pool, "vkDestroyQueryPool") ||
+		   !impl->Resolve(impl->reset_query_pool, "vkCmdResetQueryPool") ||
+		   !impl->Resolve(impl->write_timestamp, "vkCmdWriteTimestamp") ||
+		   !impl->Resolve(impl->get_query_results, "vkGetQueryPoolResults"))
+			return GpuResult::Unsupported;
+		uint32_t count = 0;
+		queues(impl->physical_device, &count, nullptr);
+		if(!count || count > 256 || impl->graphics_queue_family_index >= count)
+			return GpuResult::Unsupported;
+		Vector<VkQueueFamilyProperties> family;
+		family.SetCount(count);
+		queues(impl->physical_device, &count, family.Begin());
+		if(impl->graphics_queue_family_index >= count) return GpuResult::Unsupported;
+		const uint32 bits = family[impl->graphics_queue_family_index].timestampValidBits;
+		VkPhysicalDeviceProperties physical{};
+		properties(impl->physical_device, &physical);
+		if(!bits || bits > 64 || physical.limits.timestampPeriod <= 0) return GpuResult::Unsupported;
+		VkQueryPoolCreateInfo query{};
+		query.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		query.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		query.queryCount = 2;
+		const auto created = create(impl->device, &query, nullptr, &impl->timing_pool);
+		if(created != VK_SUCCESS) {
+			impl->error = VkFailure("vkCreateQueryPool", created);
+			return GpuResult::InvalidState;
+		}
+		impl->timestamp_mask = bits == 64 ? ~uint64(0) : (uint64(1) << bits) - 1;
+		impl->timestamp_period_ns = physical.limits.timestampPeriod;
+	}
+	impl->timing_enabled = enable;
+	impl->have_gpu_ms = false;
+	return GpuResult::Ok;
+}
+
+bool VulkanGpuDevice::GetLastGpuSubmissionMilliseconds(double& out) const
+{
+	if(!impl || !impl->have_gpu_ms) return false;
+	out = impl->last_gpu_ms;
+	return true;
+}
+
 uint64 VulkanGpuDevice::GetLiveAllocationBytes() const
 {
 	uint64 bytes = 0;
 	if(impl) {
 		for(const Impl::BufferState& buffer : impl->buffers.GetValues())
-			bytes += buffer.raw.allocation_size;
+			if(!buffer.immutable) bytes += buffer.raw.allocation_size;
 		for(const Impl::TextureState& texture : impl->textures.GetValues())
 			if(!texture.immutable) bytes += texture.allocation_size;
 	}
+	return bytes;
+}
+uint64 VulkanGpuDevice::GetSharedImmutableBufferBytes() const
+{
+	if(!impl || !impl->ready) return 0;
+	std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+	uint64 bytes = 0;
+	for(const auto& entry : Impl::ImmutableBuffers())
+		if(std::get<0>(entry.first) == (uintptr_t)impl->device)
+			if(const auto allocation = entry.second.lock())
+				bytes += allocation->raw.allocation_size;
 	return bytes;
 }
 int VulkanGpuDevice::GetLiveBufferCount() const { return impl ? impl->buffers.GetCount() : 0; }
@@ -1044,11 +1167,67 @@ GpuResult VulkanGpuDevice::CreateBuffer(const GpuBufferDesc& desc, GpuBufferId& 
 	return GpuResult::Ok;
 }
 
+GpuResult VulkanGpuDevice::AcquireImmutableBuffer(const std::shared_ptr<const void>& owner,
+                                                         uint32 format_version, int usage, int64 size,
+                                                         const GpuImmutableBufferFill& fill,
+                                                         GpuBufferId& out, bool& uploaded)
+{
+	out = GpuBufferId();
+	uploaded = false;
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(!owner || !format_version || size <= 0 || uint64(size) > std::numeric_limits<size_t>::max() || !fill ||
+	   (usage != GpuBufferUsage_Vertex && usage != GpuBufferUsage_Storage)) {
+		impl->error = "immutable buffer requires a source, format, vertex/storage usage, size and initializer";
+		return GpuResult::InvalidArgument;
+	}
+	if(impl->HasOpenCommands()) {
+		impl->error = "immutable buffer acquisition requires no live command lists";
+		return GpuResult::InvalidState;
+	}
+	std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+	auto& cache = Impl::ImmutableBuffers();
+	for(auto it = cache.begin(); it != cache.end();)
+		if(it->second.expired()) it = cache.erase(it);
+		else ++it;
+	const Impl::ImmutableBufferKey key{(uintptr_t)impl->device, (uintptr_t)owner.get(), format_version, usage, size};
+	const auto found = cache.find(key);
+	auto allocation = found == cache.end() ? std::shared_ptr<Impl::ImmutableBufferAllocation>{} : found->second.lock();
+	const bool create = !allocation;
+	if(create) {
+		allocation = std::make_shared<Impl::ImmutableBufferAllocation>();
+		allocation->device = impl->device;
+		allocation->source = owner;
+		allocation->destroy_buffer = impl->destroy_buffer;
+		allocation->free_memory = impl->free_memory;
+		if(!impl->CreateRawBuffer(VkDeviceSize(size), ToVkBufferUsage(usage), allocation->raw))
+			return GpuResult::InvalidState;
+		if(!impl->FillRawBuffer(allocation->raw, 0, [&](void *buffer) {
+			String error;
+			if(fill(buffer, size, error)) return true;
+			impl->error = error.IsEmpty() ? String("immutable buffer initializer failed") : error;
+			return false;
+		})) return GpuResult::InvalidState;
+		cache.emplace(key, allocation);
+	}
+	const int id = impl->next_buffer_id++;
+	auto& lease = impl->buffers.Add(id, Impl::BufferState());
+	lease.desc.size = size;
+	lease.desc.usage = usage;
+	lease.raw = allocation->raw;
+	lease.immutable = std::move(allocation);
+	out.value = id;
+	uploaded = create;
+	return GpuResult::Ok;
+}
+
 GpuResult VulkanGpuDevice::WriteBuffer(GpuBufferId id, int64 offset, const void *data, int64 size)
 {
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int index = impl->buffers.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "WriteBuffer received an unknown buffer"; return GpuResult::InvalidHandle; }
+	if(impl->buffers[index].immutable) {
+		impl->error = "WriteBuffer cannot mutate an immutable buffer"; return GpuResult::InvalidState;
+	}
 	if(impl->buffers[index].desc.memory == GpuBufferMemory::DeviceLocal) {
 		impl->error = "WriteBuffer cannot map a device-local buffer"; return GpuResult::InvalidState;
 	}
@@ -1081,7 +1260,12 @@ GpuResult VulkanGpuDevice::DestroyBuffer(GpuBufferId id)
 	int index = impl->buffers.Find(id.value);
 	if(!id.IsValid() || index < 0) { impl->error = "DestroyBuffer received an unknown buffer"; return GpuResult::InvalidHandle; }
 	if(impl->HasOpenCommands()) { impl->error = "DestroyBuffer is forbidden while command lists are live"; return GpuResult::InvalidState; }
-	impl->DestroyRawBuffer(impl->buffers[index].raw); impl->buffers.Remove(index);
+	if(impl->buffers[index].immutable) {
+		std::lock_guard<std::mutex> guard(Impl::ImmutableMutex());
+		impl->buffers[index].immutable.reset();
+	}
+	else impl->DestroyRawBuffer(impl->buffers[index].raw);
+	impl->buffers.Remove(index);
 	return GpuResult::Ok;
 }
 
@@ -1793,6 +1977,11 @@ GpuResult VulkanGpuDevice::BeginCommands(GpuCommandListId& out)
 	vr = impl->allocate_command_buffers(impl->device, &ai, &state.buffer);
 	if(vr == VK_SUCCESS) { VkCommandBufferBeginInfo bi {}; bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO; bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; vr = impl->begin_command_buffer(state.buffer, &bi); }
 	if(vr != VK_SUCCESS) { impl->DestroyCommandState(state); impl->error = VkFailure("begin command list", vr); return GpuResult::InvalidState; }
+	if(impl->timing_enabled && !impl->HasOpenCommands()) {
+		state.timed_submission = true;
+		impl->reset_query_pool(state.buffer, impl->timing_pool, 0, 2);
+		impl->write_timestamp(state.buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, impl->timing_pool, 0);
+	}
 	GpuCommandListId id; id.value = impl->next_command_id++; impl->commands.Add(id.value, pick(state)); out = id;
 	return GpuResult::Ok;
 }
@@ -2012,6 +2201,8 @@ GpuResult VulkanGpuDevice::EndCommands(GpuCommandListId list)
 	if(!list.IsValid() || ci < 0) { impl->error = "EndCommands received an unknown command list"; return GpuResult::InvalidHandle; }
 	Impl::CommandState& command = impl->commands[ci];
 	if(command.pass_active || command.ended) { impl->error = "EndCommands command state is invalid"; return GpuResult::InvalidState; }
+	if(command.timed_submission)
+		impl->write_timestamp(command.buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, impl->timing_pool, 1);
 	VkResult vr = impl->end_command_buffer(command.buffer);
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("vkEndCommandBuffer", vr); return GpuResult::InvalidState; }
 	command.ended = true;
@@ -2034,6 +2225,16 @@ GpuResult VulkanGpuDevice::Submit(GpuCommandListId list)
 	VkResult vr = impl->queue_submit(impl->graphics_queue, 1, &submit, VK_NULL_HANDLE);
 	if(vr == VK_SUCCESS) { command.submitted = true; vr = impl->queue_wait_idle(impl->graphics_queue); }
 	if(vr != VK_SUCCESS) { impl->error = VkFailure("Vulkan command submission", vr); return GpuResult::InvalidState; }
+	impl->have_gpu_ms = false;
+	if(command.timed_submission) {
+		uint64 ticks[2]{};
+		if(impl->get_query_results(impl->device, impl->timing_pool, 0, 2, sizeof(ticks),
+		                           ticks, sizeof(ticks[0]), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
+			const uint64 elapsed = (ticks[1] - ticks[0]) & impl->timestamp_mask;
+			impl->last_gpu_ms = double(elapsed) * impl->timestamp_period_ns / 1e6;
+			impl->have_gpu_ms = true;
+		}
+	}
 	for(int i = 0; i < command.texture_layouts.GetCount(); ++i) {
 		int ti = impl->textures.Find(command.texture_layouts.GetKey(i));
 		if(ti >= 0) {

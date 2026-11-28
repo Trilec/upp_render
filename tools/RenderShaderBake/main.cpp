@@ -10,14 +10,19 @@ using namespace Upp;
 CONSOLE_APP_MAIN
 {
 	const auto& args = CommandLine();
-	if(args.GetCount() != 4) {
-		Cout() << "Usage: RenderShaderBake <shaderc_shared.dll> <source.vert|frag|comp> <output.h> <symbol>\n";
+	if(args.GetCount() != 4 && args.GetCount() != 5) {
+		Cout() << "Usage: RenderShaderBake <shaderc_shared.dll> <source.vert|frag|comp> <output.h> <symbol> [macro]\n";
 		SetExitCode(2); return;
 	}
+	const auto identifier = [](const String& text) {
+		if(text.IsEmpty()) return false;
+		for(int i = 0; i < text.GetCount(); ++i)
+			if(!IsAlpha(text[i]) && text[i] != '_' && !(i && IsDigit(text[i]))) return false;
+		return true;
+	};
 	const String& symbol = args[3];
-	bool valid_symbol = !symbol.IsEmpty();
-	for(int i = 0; i < symbol.GetCount(); ++i)
-		valid_symbol &= IsAlpha(symbol[i]) || symbol[i] == '_' || (i && IsDigit(symbol[i]));
+	const String macro = args.GetCount() == 5 ? args[4] : String();
+	const bool valid_symbol = identifier(symbol) && (args.GetCount() != 5 || identifier(macro));
 	String source = LoadFile(args[1]);
 	if(!valid_symbol || source.IsVoid() || source.GetCount() > 1024 * 1024) {
 		Cerr() << "Invalid symbol, unreadable source or source exceeds 1 MiB\n";
@@ -47,6 +52,7 @@ CONSOLE_APP_MAIN
 	LOAD_SHADERC(shaderc_compile_options_set_target_spirv)
 	LOAD_SHADERC(shaderc_compile_options_set_optimization_level)
 	LOAD_SHADERC(shaderc_compile_options_set_warnings_as_errors)
+	LOAD_SHADERC(shaderc_compile_options_add_macro_definition)
 	LOAD_SHADERC(shaderc_compile_into_spv)
 	LOAD_SHADERC(shaderc_result_get_compilation_status)
 	LOAD_SHADERC(shaderc_result_get_error_message)
@@ -63,6 +69,8 @@ CONSOLE_APP_MAIN
 		shaderc_compile_options_set_target_spirv_fn(options, shaderc_spirv_version_1_3);
 		shaderc_compile_options_set_optimization_level_fn(options, shaderc_optimization_level_performance);
 		shaderc_compile_options_set_warnings_as_errors_fn(options);
+		if(!macro.IsEmpty())
+			shaderc_compile_options_add_macro_definition_fn(options, macro.Begin(), macro.GetCount(), "1", 1);
 		result = shaderc_compile_into_spv_fn(compiler, source.Begin(), source.GetCount(),
 		                                    kind, args[1].Begin(), "main", options);
 		ok = result && shaderc_result_get_compilation_status_fn(result) == shaderc_compilation_status_success;

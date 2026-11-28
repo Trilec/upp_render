@@ -8,6 +8,7 @@ bool ComputeUi3DViewGateLayout(const Scene3DCamera& camera,const Ui3DViewOptions
 {
     out=Ui3DViewGateLayout();
     if(!std::isfinite(options.matte_opacity) || options.matte_opacity<0 || options.matte_opacity>1 ||
+       !std::isfinite(options.guide_opacity) || options.guide_opacity<0 || options.guide_opacity>1 ||
        !std::isfinite(options.action_safe) || !std::isfinite(options.title_safe) ||
        options.title_safe<=0 || options.title_safe>options.action_safe || options.action_safe>1)
         return false;
@@ -27,7 +28,7 @@ bool ViewContent::DrawGate(GpuDevice& device,const GpuFrameInfo& frame,String& e
 {
     state->stats.gate_draws_last_frame=0;
     const auto& options=state->options;
-    if(!options.show_gate && !options.show_safe) return true;
+    if(!options.show_gate && (!options.show_safe || options.guide_opacity == 0)) return true;
     Ui3DViewGateLayout layout;
     if(!ComputeUi3DViewGateLayout(state->camera,options,frame.size,layout)) {
         error=state->error="Invalid film/safe guide projection."; return false;
@@ -49,8 +50,46 @@ bool ViewContent::DrawGate(GpuDevice& device,const GpuFrameInfo& frame,String& e
             builder.StrokeRect(Rectf(rect.left+.5,rect.top+.5,rect.right-.5,rect.bottom-.5),1,color);
     };
     if(options.show_gate) outline(layout.gate,options.gate_color);
-    if(options.show_safe) {
-        outline(layout.action_safe,options.safe_color); outline(layout.title_safe,options.safe_color);
+    if(options.show_safe && options.guide_opacity > 0) {
+        auto guide = options.safe_color;
+        guide.a = byte(std::lround(options.guide_opacity * 255));
+        const Rect& gate = layout.gate;
+        auto guide_grid = [&](double fraction) {
+            for(double position : {fraction, 1. - fraction}) {
+                const int x = gate.left + int(std::lround((gate.Width() - 1) * position));
+                const int y = gate.top + int(std::lround((gate.Height() - 1) * position));
+                builder.FillRect(Rectf(x, gate.top, x + 1, gate.bottom), guide);
+                builder.FillRect(Rectf(gate.left, y, gate.right, y + 1), guide);
+            }
+        };
+        switch(options.framing_guide) {
+        case Ui3DFramingGuide::SafeAreas:
+            outline(layout.action_safe, guide);
+            if(layout.title_safe != layout.action_safe) outline(layout.title_safe, guide);
+            break;
+        case Ui3DFramingGuide::TitleSafe:
+            outline(layout.title_safe, guide);
+            break;
+        case Ui3DFramingGuide::ActionSafe:
+            outline(layout.action_safe, guide);
+            break;
+        case Ui3DFramingGuide::Crosshair: {
+            const Point middle = gate.CenterPoint();
+            const int reach = std::min({12, (gate.Width() - 1) / 2, (gate.Height() - 1) / 2});
+            if(reach > 0) {
+                builder.FillRect(Rectf(middle.x - reach, middle.y, middle.x + reach + 1, middle.y + 1), guide);
+                builder.FillRect(Rectf(middle.x, middle.y - reach, middle.x + 1, middle.y), guide);
+                builder.FillRect(Rectf(middle.x, middle.y + 1, middle.x + 1, middle.y + reach + 1), guide);
+            }
+            break;
+        }
+        case Ui3DFramingGuide::Thirds:
+            guide_grid(1. / 3);
+            break;
+        case Ui3DFramingGuide::GoldenRatio:
+            guide_grid(.381966011250105);
+            break;
+        }
     }
     UiDisplayList list;
     if(!builder.Finish(list)) { error=state->error=builder.GetError(); return false; }

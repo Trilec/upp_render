@@ -24,6 +24,8 @@ struct MeshGpu {
     GpuBufferId vertices,indices,edges;
     int index_count=0,edge_count=0;
 };
+constexpr size_t SplatStorageStride = 13 * sizeof(float);
+constexpr uint32 SplatStorageVersion = 1;
 struct SplatVertex {
     float x,y,z,xx,xy,xz,yy,yz,zz,corner_x,corner_y,r,g,b,a;
 };
@@ -42,6 +44,33 @@ struct SplatOrderGpu {
     Scene3DVec3 local_forward;
     bool valid=false;
 };
+// Mirrors the std430 instance record shared by depth generation and pulling.
+struct alignas(16) GlobalSplatInstance {
+    float projection[16]{}, tint[4]{}, highlight[4]{}, depth[4]{};
+    uint32 source=0, first=0, count=0, opacity=0;
+};
+static_assert(sizeof(GlobalSplatInstance) == 128 && offsetof(GlobalSplatInstance, source) == 112);
+
+struct GlobalSplatAtlas;
+struct GlobalSplatGpu {
+    std::shared_ptr<const GlobalSplatAtlas> atlas;
+    GpuBufferId source, instances, anchors, a, b, histogram, runs;
+    int64 instance_bytes=0, key_bytes=0, histogram_bytes=0;
+    GpuShaderId sort_shader, vertex_shader, fragment_shader;
+    GpuPipelineId compute, graphics;
+    GpuFormat format=GpuFormat::Unknown;
+    GpuComputeCapabilities compute_caps;
+    GpuVertexPullCapabilities draw_caps;
+    bool checked=false, available=false;
+    bool sort_pending=false, runs_pending=false;
+    uint32 count=0, run_count=0;
+    int64 cpu_update_us=0;
+    std::vector<GlobalSplatInstance> previous_instances;
+    std::vector<uint32> previous_anchors;
+    Vector<String> instance_ids;
+};
+void FillSplatStorage(const Scene3DSplats&, void *destination);
+
 struct TextureGpu {
     std::shared_ptr<const Scene3DTexture> source;
     GpuTextureId texture;
@@ -62,10 +91,14 @@ private:
     std::map<const Scene3DTexture*,TextureGpu> textures;
     std::map<const Scene3DSplats*,SplatGpu> splat_resources;
     std::map<String,SplatOrderGpu> splat_orders;
+    GlobalSplatGpu global_splats;
     GpuShaderId splat_vertex_shader,splat_fragment_shader;
     GpuPipelineId splat_pipeline;
     GpuFormat splat_format=GpuFormat::Unknown;
-    MeshGpu grid,axes;
+    bool splat_storage = false, splat_storage_checked = false;
+    MeshGpu grid,axes,grid_origin;
+    Size grid_origin_size;
+    uint64 grid_origin_camera = 0,grid_origin_layout = 0;
     uint64 decoration_revision=0,selection_revision=0;
     Index<String> selected;
     GpuShaderId vertex_shader,surface_shader,edge_shader,resolve_vertex_shader,resolve_fragment_shader;
@@ -86,11 +119,22 @@ private:
     bool EnsureMesh(GpuDevice&,std::shared_ptr<const Scene3DMesh>,String&);
     bool EnsureTexture(GpuDevice&,std::shared_ptr<const Scene3DTexture>,GpuTextureId&,String&);
     bool EnsureDecorations(GpuDevice&,Size,String&);
+    bool EnsureGridOrigin(GpuDevice&,Size,String&);
     bool EnsureShaders(GpuDevice&,String&);
     bool EnsureSplats(GpuDevice&,const Scene3DObject&,const Scene3DVec3&,String&);
     bool EnsureSplatPipeline(GpuDevice&,GpuFormat,GpuPipelineId&,String&);
     void PruneSplats(GpuDevice&,const std::shared_ptr<const Scene3DSnapshot>&);
     void CloseSplats(GpuDevice&);
+    bool PrepareGlobalSplats(GpuDevice&, std::vector<const Scene3DObject*>&,
+                            const std::vector<const Scene3DObject*>& anchors,
+                            const Scene3DVec3& forward, const Scene3DMatrix& projection,
+                            GpuFormat, bool& active, String&);
+    bool RecordGlobalSplatOrder(GpuDevice&, GpuCommandListId, String&);
+    bool DrawGlobalSplats(GpuDevice&, GpuCommandListId, GpuPipelineId&,
+                          uint32 run, Size, String&);
+    void CommitGlobalSplatOrder();
+    void ReleaseGlobalSplatBuffers(GpuDevice&);
+    void CloseGlobalSplats(GpuDevice&);
     bool EnsurePipeline(GpuDevice&,GpuFormat,int,bool,bool,bool,GpuPipelineId&,String&);
     bool EnsureDepth(GpuDevice&,Size,String&);
     bool EnsureTarget(GpuDevice&,const GpuFrameInfo&,GpuFrameInfo&,String&);

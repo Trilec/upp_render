@@ -5,4 +5,6 @@ file
 	Scene3D.h,
 	Scene3D.cpp,
 	Scene3DTexture.cpp,
-	Scene3DSplats.cpp;
+	Scene3DSplats.cpp,
+	Scene3DGaussianRecord.h,
+	Scene3DGaussianRecord.cpp;

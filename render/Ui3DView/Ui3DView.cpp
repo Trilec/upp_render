@@ -115,6 +115,8 @@ bool Ui3DView::SetOptions(const Ui3DViewOptions& options, String& error)
 	}
 	if(options.matte_color.a != 255 || options.gate_color.a != 255 || options.safe_color.a != 255 ||
 	   !std::isfinite(options.matte_opacity) || options.matte_opacity < 0 || options.matte_opacity > 1 ||
+	   !std::isfinite(options.guide_opacity) || options.guide_opacity < 0 || options.guide_opacity > 1 ||
+	   options.framing_guide < Ui3DFramingGuide::SafeAreas || options.framing_guide > Ui3DFramingGuide::GoldenRatio ||
 	   !std::isfinite(options.action_safe) || !std::isfinite(options.title_safe) ||
 	   options.title_safe <= 0 || options.title_safe > options.action_safe || options.action_safe > 1) {
 		error = "Film guides require opaque palette colors, opacity 0..1 and 0<title safe<=action safe<=1";
@@ -134,12 +136,15 @@ bool Ui3DView::SetOptions(const Ui3DViewOptions& options, String& error)
 	if(old.background == options.background && old.grid_color == options.grid_color &&
 	   old.selection_color == options.selection_color && old.edge_color == options.edge_color &&
 	   old.show_grid == options.show_grid && old.show_selection == options.show_selection &&
-	   old.show_axes == options.show_axes && old.wireframe == options.wireframe &&
+	   old.show_axes == options.show_axes && old.show_grid_origin == options.show_grid_origin &&
+	   old.wireframe == options.wireframe && old.orbit_about_eye == options.orbit_about_eye &&
+	   old.translation_locked == options.translation_locked &&
 	   old.solid_edges == options.solid_edges && old.adaptive_grid == options.adaptive_grid &&
 	   old.grid_plane == options.grid_plane && old.orbit_leaves_axis_view == options.orbit_leaves_axis_view &&
 	   old.lighting == options.lighting && old.grid_extent == options.grid_extent &&
 	   old.grid_spacing == options.grid_spacing && old.show_gate == options.show_gate &&
 	   old.show_safe == options.show_safe && old.matte_opacity == options.matte_opacity &&
+	   old.framing_guide == options.framing_guide && old.guide_opacity == options.guide_opacity &&
 	   old.action_safe == options.action_safe && old.title_safe == options.title_safe &&
 	   old.matte_color == options.matte_color && old.gate_color == options.gate_color &&
 	   old.safe_color == options.safe_color) { error.Clear(); return true; }
@@ -286,6 +291,38 @@ Ui3DViewPick Ui3DView::Pick(Pointf point) const
 	    (point.x<gate.left || point.y<gate.top || point.x>=gate.right || point.y>=gate.bottom);
 	if(scene && !hidden_by_matte)
 		static_cast<Scene3DPick&>(result) = scene->PickScreen(point,result.viewport_size,state->camera);
+	return result;
+}
+
+Ui3DSplatSurfaceSample Ui3DView::SampleSplatSurface(Pointf point, double radius_pixels,
+                                                 const String& object_id) const
+{
+	Ui3DSplatSurfaceSample result;
+	auto& pick=result.pick;
+	pick.source_view=state;
+	const auto scene=state->GetRenderScene();
+	pick.sampled_scene=scene;
+	pick.scene_binding_revision=scene_binding_revision;
+	pick.viewport_size=GetSize();
+	pick.camera_revision=state->camera.revision;
+	pick.scene_revision=scene ? scene->GetRevision() : 0;
+	const Rect gate=state->camera.GetGateRect(pick.viewport_size);
+	if(state->options.show_gate && state->options.matte_opacity>=1) {
+		if(point.x<gate.left || point.y<gate.top || point.x>=gate.right || point.y>=gate.bottom)
+			return result;
+		// Keep every probe inside the visible film gate, not just its centre.
+		if(std::isfinite(radius_pixels) && radius_pixels>=0) {
+			const double inset=std::min(std::min(point.x-gate.left,gate.right-point.x),
+			                            std::min(point.y-gate.top,gate.bottom-point.y));
+			radius_pixels=std::min(radius_pixels,std::max(0.0,inset-1e-6));
+		}
+	}
+	if(scene) {
+		const auto sample=scene->SampleSplatSurface(point,radius_pixels,pick.viewport_size,
+		                                         state->camera,object_id);
+		static_cast<Scene3DPick&>(pick)=sample.pick;
+		result.support=sample.support;
+	}
 	return result;
 }
 
@@ -526,10 +563,14 @@ void Ui3DView::LeftDown(Point p, dword flags)
 	Ptr<Ui3DView> alive(this);
 	FlushNavigationNotice();
 	if(!alive || !IsEnabled() || !IsVisible() || !IsOpen()) return;
+	// Alt-left is reserved for camera orbit. Avoid the scene pick needed to start an editing tool.
+	if(flags & K_ALT) {
+		BeginNavigation(Ui3DNavigationMode::Orbit, 1, p); return;
+	}
 	if(BeginToolPointer(p, flags) || !alive) return;
 	// Select this press's mode before focus/capture callbacks can change the toolbar.
 	const Ui3DNavigationTool tool = navigation_tool;
-	if((flags & K_ALT) || tool == Ui3DNavigationTool::Orbit) {
+	if(tool == Ui3DNavigationTool::Orbit) {
 		BeginNavigation(Ui3DNavigationMode::Orbit, 1, p); return;
 	}
 	if(tool == Ui3DNavigationTool::Pan) { BeginNavigation(Ui3DNavigationMode::Pan, 1, p); return; }
@@ -553,10 +594,13 @@ void Ui3DView::LeftDouble(Point p, dword flags)
 	Ptr<Ui3DView> alive(this);
 	FlushNavigationNotice();
 	if(!alive || !IsEnabled() || !IsVisible() || !IsOpen() || IsNavigating()) return;
+	if((flags & K_ALT) && !click_pending) {
+		BeginNavigation(Ui3DNavigationMode::Orbit, 1, p); return;
+	}
 	if(BeginToolPointer(p, flags) || !alive) return;
 	// A pending click was begun in Select. A later tool change cannot reinterpret
 	// that already captured press; otherwise this double-press uses the current tool.
-	if(!click_pending && ((flags & K_ALT) || navigation_tool != Ui3DNavigationTool::Select)) {
+	if(!click_pending && navigation_tool != Ui3DNavigationTool::Select) {
 		LeftDown(p, flags); return;
 	}
 	const uint64 binding = binding_generation, previous_gesture = gesture_id;
@@ -621,6 +665,7 @@ void Ui3DView::MiddleUp(Point, dword)
 void Ui3DView::RightDown(Point p, dword flags)
 {
 	if(flags & K_ALT) BeginNavigation(Ui3DNavigationMode::Dolly, 3, p);
+	else WhenContextMenu(p);
 }
 void Ui3DView::RightUp(Point, dword)
 {
@@ -642,12 +687,15 @@ void Ui3DView::MouseMove(Point p, dword flags)
 		   next.orthographic && next.GetViewDirection() != Scene3DViewDirection::User)
 			if(!next.SetOrthographic(false)) return;
 		changed = next.Orbit(-dx * 0.007, dy * 0.007);
+		if(changed && state->options.orbit_about_eye)
+			next.target = next.target + navigation_start.GetEye() - next.GetEye();
 		break;
-	case Ui3DNavigationMode::Pan: changed = next.Pan(dx, dy, GetSize()); break;
-	case Ui3DNavigationMode::Dolly: changed = next.Dolly(-dy * 0.015); break;
+	case Ui3DNavigationMode::Pan: changed = !state->options.translation_locked && next.Pan(dx, dy, GetSize()); break;
+	case Ui3DNavigationMode::Dolly: changed = !state->options.translation_locked && next.Dolly(-dy * 0.015); break;
 	default: break;
 	}
 	if(!changed || state->camera.revision == std::numeric_limits<uint64>::max()) return;
+	if(WhenNavigationPreview && !WhenNavigationPreview(next, navigation)) return;
 	const auto& current = state->camera;
 	if(next.orthographic == current.orthographic && next.yaw == current.yaw && next.pitch == current.pitch &&
 	   next.distance == current.distance && next.ortho_height == current.ortho_height &&
@@ -665,7 +713,9 @@ void Ui3DView::MouseWheel(Point, int zdelta, dword)
 	FlushNavigationNotice();
 	if(!alive || !IsEnabled() || !IsVisible() || !IsOpen() || IsNavigating() || tool_pointer_active || !zdelta) return;
 	Scene3DCamera next = state->camera;
-	if(!next.Dolly(zdelta / 120.0 * 0.16) || next.revision == state->camera.revision) return;
+	if(state->options.translation_locked || !next.Dolly(zdelta / 120.0 * 0.16) ||
+	   next.revision == state->camera.revision) return;
+	if(WhenNavigationPreview && !WhenNavigationPreview(next, Ui3DNavigationMode::Dolly)) return;
 	const uint64 start = state->camera.revision;
 	state->camera = next;
 	++gesture_id;

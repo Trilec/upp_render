@@ -1,0 +1,159 @@
+#version 450
+// Four-bit stable LSD ordering. Two 32-bit words per record hold view depth
+// and the immutable instance/point reference. Every pass preserves input order
+// within a key, independent of lane scheduling and physical subgroup width.
+layout(local_size_x=256) in;
+layout(std430, set=0, binding=0) readonly buffer Input { uint input_words[]; };
+layout(std430, set=0, binding=1) readonly buffer Metadata { uint metadata[]; };
+layout(std430, set=0, binding=2) buffer Output { uint output_words[]; };
+layout(std430, set=0, binding=3) buffer Histogram { uint histogram[]; };
+layout(push_constant) uniform Parameters {
+    uint count;
+    uint groups;
+    uint digit_shift;
+    uint mode;
+    uint instances;
+    uint anchors;
+} parameters;
+
+shared uint masks[16 * 8];
+shared uint scan[256];
+shared uvec2 small_order[256];
+shared uint totals[16];
+uint ordered_depth(float value)
+{
+    uint bits = floatBitsToUint(value == 0.0 ? 0.0 : value);
+    return (bits & 0x80000000u) != 0u ? bits : ~(bits ^ 0x80000000u);
+}
+
+uvec2 make_key(uint ordinal)
+{
+    uint lo = 0u, hi = parameters.instances;
+    while(lo + 1u < hi) {
+        uint mid = (lo + hi) >> 1u;
+        if(metadata[mid * 32u + 29u] <= ordinal) lo = mid; else hi = mid;
+    }
+    uint base = lo * 32u;
+    uint row = ordinal - metadata[base + 29u];
+    uint point = 13u * (metadata[base + 28u] + row);
+    vec3 centre = vec3(uintBitsToFloat(input_words[point]), uintBitsToFloat(input_words[point+1u]),
+                       uintBitsToFloat(input_words[point+2u]));
+    vec3 direction = vec3(uintBitsToFloat(metadata[base+24u]), uintBitsToFloat(metadata[base+25u]),
+                          uintBitsToFloat(metadata[base+26u]));
+    float depth = dot(centre, direction) + uintBitsToFloat(metadata[base+27u]);
+    return uvec2(ordered_depth(depth), (lo << 20u) | row);
+}
+
+void store_key(uint row, uvec2 key)
+{
+    output_words[row * 2u] = key.x;
+    output_words[row * 2u + 1u] = key.y;
+}
+
+void sort_small(uint lane)
+{
+    small_order[lane] = lane < parameters.count ? make_key(lane) : uvec2(0xffffffffu);
+    barrier();
+    for(uint width = 2u; width <= 256u; width <<= 1u) {
+        for(uint step = width >> 1u; step > 0u; step >>= 1u) {
+            uint partner = lane ^ step;
+            uvec2 own = small_order[lane], other = small_order[partner];
+            bool less = own.x < other.x || (own.x == other.x && own.y < other.y);
+            bool take_min = ((lane & width) == 0u) == ((lane & step) == 0u);
+            barrier();
+            small_order[lane] = less == take_min ? own : other;
+            barrier();
+        }
+    }
+    if(lane < parameters.count) store_key(lane, small_order[lane]);
+}
+
+void prefix_digit(uint digit, uint lane)
+{
+    uint start = digit * parameters.groups;
+    uint carry = 0u;
+    for(uint block = 0u; block < parameters.groups; block += 256u) {
+        uint row = block + lane;
+        uint value = row < parameters.groups ? histogram[start + row] : 0u;
+        scan[lane] = value;
+        barrier();
+        for(uint step = 1u; step < 256u; step <<= 1u) {
+            uint addend = lane >= step ? scan[lane - step] : 0u;
+            barrier();
+            scan[lane] += addend;
+            barrier();
+        }
+        if(row < parameters.groups) histogram[start + row] = carry + scan[lane] - value;
+        carry += scan[255];
+        barrier();
+    }
+    if(lane == 0u) histogram[16u * parameters.groups + digit] = carry;
+}
+
+void radix_group(uint row, uint lane, bool scatter)
+{
+    if(lane < 128u) masks[lane] = 0u;
+    if(scatter && lane < 16u) totals[lane] = histogram[16u * parameters.groups + lane];
+    barrier();
+    uint key = 0u, digit = 0u;
+    if(row < parameters.count) {
+        key = input_words[2u * row];
+        digit = (key >> parameters.digit_shift) & 15u;
+        atomicOr(masks[digit * 8u + (lane >> 5u)], 1u << (lane & 31u));
+    }
+    barrier();
+    if(!scatter) {
+        if(lane >= 16u) return;
+        uint count = 0u;
+        for(uint word = 0u; word < 8u; ++word) count += bitCount(masks[lane * 8u + word]);
+        histogram[lane * parameters.groups + gl_WorkGroupID.x] = count;
+        return;
+    }
+    if(row >= parameters.count) return;
+    uint destination = histogram[digit * parameters.groups + gl_WorkGroupID.x];
+    for(uint n = 0u; n < digit; ++n) destination += totals[n];
+    uint word = lane >> 5u, at = digit * 8u;
+    for(uint n = 0u; n < word; ++n) destination += bitCount(masks[at+n]);
+    destination += bitCount(masks[at+word] & ((1u << (lane & 31u)) - 1u));
+    store_key(destination, uvec2(key, input_words[2u * row + 1u]));
+}
+
+uint boundary(uint anchor)
+{
+    // Metadata pairs carry the anchor key and an optional legacy endpoint
+    // for a one-cloud view. A multi-cloud view splits the global sequence.
+    uint endpoint = metadata[2u * anchor + 1u];
+    if(endpoint <= parameters.count) return endpoint;
+    uint key = metadata[2u * anchor], low = 0u, high = parameters.count;
+    while(low < high) {
+        uint mid = (low + high) >> 1u;
+        if(input_words[mid * 2u] < key) low = mid + 1u; else high = mid;
+    }
+    return low;
+}
+
+void make_run(uint run)
+{
+    if(run > parameters.anchors) return;
+    uint start = run == 0u ? 0u : boundary(run - 1u);
+    uint end = run == parameters.anchors ? parameters.count : boundary(run);
+    uint at = run * 8u;
+    output_words[at] = 4u;
+    output_words[at+1u] = end - start;
+    output_words[at+2u] = 0u;
+    output_words[at+3u] = 0u;
+    output_words[at+4u] = start;
+}
+
+void main()
+{
+    uint row = gl_GlobalInvocationID.x, lane = gl_LocalInvocationID.x;
+    switch(parameters.mode) {
+    case 0u: if(row < parameters.count) store_key(row, make_key(row)); break;
+    case 1u: radix_group(row, lane, false); break;
+    case 2u: prefix_digit(gl_WorkGroupID.x, lane); break;
+    case 3u: radix_group(row, lane, true); break;
+    case 4u: make_run(row); break;
+    case 5u: sort_small(lane); break;
+    }
+}

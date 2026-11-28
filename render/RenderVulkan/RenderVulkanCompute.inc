@@ -66,6 +66,7 @@ struct VulkanGpuDevice::ComputeImpl {
 	uint64 pools_created = 0, pools_reused = 0;
 	PFN_vkCreateComputePipelines create_pipelines = nullptr;
 	PFN_vkCmdDispatch dispatch = nullptr;
+	PFN_vkCmdDispatchIndirect dispatch_indirect = nullptr;
 	PFN_vkCmdPushConstants push_constants = nullptr;
 	PFN_vkCreateDescriptorSetLayout create_layout = nullptr;
 	PFN_vkDestroyDescriptorSetLayout destroy_layout = nullptr;
@@ -131,6 +132,7 @@ struct VulkanGpuDevice::ComputeImpl {
 		caps.storage_offset_alignment = max<uint64>(1, limits.minStorageBufferOffsetAlignment);
 		caps.max_parameter_bytes = min<uint32>(128, limits.maxPushConstantsSize);
 		caps.max_dispatches_per_command = 256;
+		caps.indirect_dispatch = core->Resolve(dispatch_indirect, "vkCmdDispatchIndirect");
 		available = true;
 		return true;
 	}
@@ -250,6 +252,7 @@ GpuResult VulkanGpuDevice::CreateComputePipeline(const GpuComputePipelineDesc& d
 	int si = impl->shaders.Find(desc.shader.value);
 	if(si < 0) { impl->error = "compute pipeline received an unknown shader"; return GpuResult::InvalidHandle; }
 	if(desc.storage_buffer_count < 1 || desc.storage_buffer_count > (int)caps.max_storage_buffers ||
+	   (desc.storage_read_only_mask >> desc.storage_buffer_count) != 0 ||
 	   desc.parameter_bytes < 0 || (desc.parameter_bytes & 3) || desc.parameter_bytes > (int)caps.max_parameter_bytes) {
 		impl->error = "compute binding/parameter limits exceeded"; return GpuResult::InvalidArgument;
 	}
@@ -331,6 +334,9 @@ GpuResult VulkanGpuDevice::SetStorageBuffer(GpuCommandListId list, int slot, Gpu
 	   offset < 0 || offset >= desc.size || size < 0) {
 		impl->error = "invalid compute storage binding"; return GpuResult::InvalidArgument;
 	}
+	if(impl->buffers[bi].immutable && !(p->desc.storage_read_only_mask & (uint32(1) << slot))) {
+		impl->error = "immutable storage requires a shader-declared read-only binding"; return GpuResult::InvalidState;
+	}
 	if(size == 0) size = desc.size - offset;
 	const auto& caps = compute_impl->caps;
 	if(size > desc.size - offset || (uint64)size > caps.max_storage_range ||
@@ -357,6 +363,18 @@ GpuResult VulkanGpuDevice::SetComputeParameters(GpuCommandListId list, const voi
 }
 GpuResult VulkanGpuDevice::Dispatch(GpuCommandListId list, uint32 x, uint32 y, uint32 z)
 {
+	return RecordDispatch(list, x, y, z, GpuBufferId(), 0);
+}
+
+GpuResult VulkanGpuDevice::DispatchIndirect(GpuCommandListId list, GpuBufferId indirect, int64 offset)
+{
+	if(!indirect.IsValid()) return GpuResult::InvalidHandle;
+	return RecordDispatch(list, 0, 0, 0, indirect, offset);
+}
+
+GpuResult VulkanGpuDevice::RecordDispatch(GpuCommandListId list, uint32 x, uint32 y, uint32 z,
+                                         GpuBufferId indirect, int64 offset)
+{
 	if(!impl->CheckReady()) return GpuResult::InvalidState;
 	int ci = impl->commands.Find(list.value);
 	if(ci < 0) { impl->error = "unknown compute command"; return GpuResult::InvalidHandle; }
@@ -366,7 +384,19 @@ GpuResult VulkanGpuDevice::Dispatch(GpuCommandListId list, uint32 x, uint32 y, u
 		impl->error = "dispatch requires an open compute pipeline and parameters"; return GpuResult::InvalidState;
 	}
 	const auto& caps = compute_impl->caps;
-	if(!x || !y || !z || x > caps.max_group_count[0] || y > caps.max_group_count[1] || z > caps.max_group_count[2]) {
+	VkBuffer args = VK_NULL_HANDLE;
+	if(indirect.IsValid()) {
+		if(!caps.indirect_dispatch) return GpuResult::Unsupported;
+		const int index = impl->buffers.Find(indirect.value);
+		if(index < 0) return GpuResult::InvalidHandle;
+		const auto& buffer = impl->buffers[index];
+		if(!(buffer.desc.usage & GpuBufferUsage_Indirect) || offset < 0 || offset % 4 ||
+		   offset > buffer.desc.size || int64(sizeof(GpuDispatchIndirectArguments)) > buffer.desc.size - offset) {
+			impl->error = "invalid indirect dispatch buffer usage or arguments range"; return GpuResult::InvalidArgument;
+		}
+		args = buffer.raw.buffer;
+	}
+	else if(!x || !y || !z || x > caps.max_group_count[0] || y > caps.max_group_count[1] || z > caps.max_group_count[2]) {
 		impl->error = "compute workgroup count exceeds device limits"; return GpuResult::InvalidArgument;
 	}
 	if(state->dispatches >= (int)caps.max_dispatches_per_command) {
@@ -394,14 +424,88 @@ GpuResult VulkanGpuDevice::Dispatch(GpuCommandListId list, uint32 x, uint32 y, u
 	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
 	barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT;
 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+	VkPipelineStageFlags destination = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	if(args) {
+		barrier.dstAccessMask |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+		destination |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+	}
 	impl->cmd_pipeline_barrier(impl->commands[ci].buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-	                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
-	compute_impl->dispatch(impl->commands[ci].buffer, x, y, z);
+	                          destination, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	if(args) compute_impl->dispatch_indirect(impl->commands[ci].buffer, args, VkDeviceSize(offset));
+	else compute_impl->dispatch(impl->commands[ci].buffer, x, y, z);
 	barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 	barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_READ_BIT;
 	impl->cmd_pipeline_barrier(impl->commands[ci].buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 	                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 	++state->dispatches;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::CopyBuffer(GpuCommandListId list, GpuBufferId source, int64 source_offset,
+                                      GpuBufferId target, int64 target_offset, int64 size)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value);
+	const int si = impl->buffers.Find(source.value), ti = impl->buffers.Find(target.value);
+	if(ci < 0 || si < 0 || ti < 0) {
+		impl->error = "unknown GPU buffer-copy handle";
+		return GpuResult::InvalidHandle;
+	}
+	const auto& command = impl->commands[ci];
+	const auto& src = impl->buffers[si];
+	const auto& dst = impl->buffers[ti];
+	if(command.pass_active || command.ended) {
+		impl->error = "GPU buffer copy requires an open command outside a render pass";
+		return GpuResult::InvalidState;
+	}
+	if(src.raw.buffer == dst.raw.buffer || !(src.desc.usage & GpuBufferUsage_TransferSrc) ||
+	   !(dst.desc.usage & GpuBufferUsage_TransferDst) || (dst.desc.usage & GpuBufferUsage_Index) ||
+	   size <= 0 || source_offset < 0 || target_offset < 0 || source_offset > src.desc.size ||
+	   target_offset > dst.desc.size || size > src.desc.size - source_offset ||
+	   size > dst.desc.size - target_offset) {
+		impl->error = "invalid GPU buffer-copy usage, alias or range";
+		return GpuResult::InvalidArgument;
+	}
+
+	// Scope dependencies to the copied ranges so unrelated buffers need no memory barrier.
+	VkBufferMemoryBarrier2 before[2]{};
+	for(auto& barrier : before) {
+		barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+		barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+		barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+		barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.size = VkDeviceSize(size);
+	}
+	before[0].buffer = src.raw.buffer;
+	before[0].offset = VkDeviceSize(source_offset);
+	before[0].srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+	before[0].dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+	before[1].buffer = dst.raw.buffer;
+	before[1].offset = VkDeviceSize(target_offset);
+	before[1].srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+	before[1].dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+	VkDependencyInfo dependency{};
+	dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+	dependency.bufferMemoryBarrierCount = 2;
+	dependency.pBufferMemoryBarriers = before;
+	impl->cmd_pipeline_barrier_2(command.buffer, &dependency);
+	const VkBufferCopy copy{VkDeviceSize(source_offset), VkDeviceSize(target_offset), VkDeviceSize(size)};
+	impl->cmd_copy_buffer(command.buffer, src.raw.buffer, dst.raw.buffer, 1, &copy);
+
+	// A later command on this queue may read the range as vertex or storage data
+	// or copy it again. Diagnostic host readback remains completion-gated.
+	auto after = before[1];
+	after.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+	after.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+	after.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+	after.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+	if(dst.desc.memory == GpuBufferMemory::HostVisible) {
+		after.dstStageMask |= VK_PIPELINE_STAGE_2_HOST_BIT;
+		after.dstAccessMask |= VK_ACCESS_2_HOST_READ_BIT;
+	}
+	dependency.bufferMemoryBarrierCount = 1;
+	dependency.pBufferMemoryBarriers = &after;
+	impl->cmd_pipeline_barrier_2(command.buffer, &dependency);
 	return GpuResult::Ok;
 }
 

@@ -15,5 +15,6 @@ file
 	Ui3DViewRenderer.h,
 	Ui3DViewResources.cpp,
 	Ui3DViewSplats.cpp,
+	Ui3DViewGlobalSplats.cpp,
 	Ui3DViewGrid.cpp,
 	Ui3DViewGate.cpp;

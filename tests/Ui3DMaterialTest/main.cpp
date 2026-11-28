@@ -571,8 +571,81 @@ void TestGaussianDepthAndPicking(Fixture& fixture)
     Check(view.SetCamera(camera,error) && !view.IsCurrentPick(hit),"changed camera invalidates prior Gaussian view picks");
     camera.roll=0; camera.gate_aspect=0; ++camera.revision;
 }
+void TestGlobalGaussianOrder(Fixture& fixture)
+{
+    auto& camera=fixture.state->camera;
+    camera.orthographic=true; camera.ortho_height=2; camera.roll=0; camera.gate_aspect=0;
+    String error;
+    Check(camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error),"set global Gaussian test camera");
+    auto rear_point=RedGaussian(), front_point=rear_point, middle=rear_point;
+    for(auto* point : {&rear_point,&front_point,&middle}) {
+        point->covariance[1]=0;
+        point->covariance[3]=.04;
+        point->a=.5f;
+    }
+    rear_point.position.z=-.75; front_point.position.z=.75;
+    front_point.r=.1f; front_point.b=.7f;
+    middle.r=0; middle.g=1;
+    auto glass=Object("mesh:glass",Quad(),Texture(225,184,70,100));
+    glass.material.alpha_mode=Scene3DAlphaMode::Blend;
+    glass.local=Scene3DMatrix::Translation({0,0,.25});
+
+    const auto translate=Scene3DMatrix::Translation({0,0,.125});
+    auto reference_a=GaussianObject("test:rear_point",GaussianCloud({rear_point}));
+    auto reference_b=GaussianObject("test:front_point",GaussianCloud({front_point}));
+    reference_a.local=reference_b.local=translate;
+    auto other=GaussianObject("test:middle",GaussianCloud({middle}));
+    fixture.state->options.gpu_splat_sort=false;
+    if(!fixture.SetScene({reference_a,glass,other,reference_b}) || !fixture.Render()) return;
+    const Vector<byte> reference=clone(fixture.pixels);
+    fixture.state->options.gpu_splat_sort=true;
+    for(bool large : {false,true}) {
+        std::vector<Scene3DSplat> red={front_point,rear_point};
+        if(large) {
+            auto off=rear_point;
+            off.position={4,5,.25};
+            off.covariance[0]=off.covariance[3]=off.covariance[5]=1e-6;
+            red.insert(red.end(),300,off);
+        }
+        auto joined=GaussianObject("density:straddles another cloud and the mesh",GaussianCloud(red));
+        joined.local=translate;
+        std::vector<Scene3DObjectDesc> scene={joined,glass,other};
+        if(!fixture.SetScene(scene) || !fixture.Render(GpuFormat::RGBA8Srgb,
+                                                large?"gaussian-global-radix":"gaussian-global-small")) return;
+        const auto stats=fixture.state->stats;
+        Check(stats.global_splat_order && stats.resident_splat_resources==2 &&
+              stats.resident_splat_instances==2 && stats.splats_last_frame==int(red.size()+1),
+              "one GPU sequence spans two different Gaussian source buffers");
+        Check(SamePixels(reference,fixture.pixels),
+              "global points on both sides of another cloud and mesh match the analytic painter order");
+        std::reverse(scene.begin(),scene.end());
+        if(!fixture.SetScene(scene) || !fixture.Render()) return;
+        Check(SamePixels(reference,fixture.pixels) &&
+              fixture.state->stats.splat_sort_updates==stats.splat_sort_updates &&
+              fixture.state->stats.splat_uploads==stats.splat_uploads,
+              "reordering unchanged scene rows keeps global pixels, sort and source residency");
+    }
+
+    // An exact depth tie is resolved by stable instance ID and source ordinal.
+    rear_point.position.z=front_point.position.z=0;
+    auto tie1=GaussianObject("test:a",GaussianCloud({rear_point,front_point}));
+    auto tie2=GaussianObject("test:z",GaussianCloud({middle}));
+    auto tie_copy=tie1; tie_copy.id="test:b"; tie_copy.local=Scene3DMatrix::Translation({.7,0,0});
+    if(!fixture.SetScene({tie2,tie1,tie_copy}) || !fixture.Render()) return;
+    const auto tied=clone(fixture.pixels);
+    if(!fixture.SetScene({tie_copy,tie1,tie2}) || !fixture.Render()) return;
+    Check(SamePixels(tied,fixture.pixels) && fixture.state->stats.resident_splat_resources==2 &&
+          fixture.state->stats.resident_splat_instances==3,
+          "equal-depth order is deterministic and repeated instances share source rows");
+    fixture.SetScene({});
+    fixture.Render();
+    Check(fixture.state->stats.resident_splat_bytes==0 &&
+          fixture.device.GetSharedImmutableBufferBytes()==0,"clearing the scene releases global source and sort buffers");
+}
 void TestGaussianRetentionAndBudget(Fixture& fixture)
 {
+    // Preserve the exact retained-byte assertions for the compatibility implementation.
+    fixture.state->options.gpu_splat_sort=false;
     auto& camera=fixture.state->camera; String error;
     camera.orthographic=true; camera.ortho_height=2; camera.roll=0; camera.gate_aspect=0;
     camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error);
@@ -582,7 +655,7 @@ void TestGaussianRetentionAndBudget(Fixture& fixture)
     auto baseline=fixture.state->stats;
     const uint64 allocations=fixture.device.GetLiveAllocationBytes();
     Check(baseline.resident_splat_resources==1 && baseline.resident_splat_instances==1 &&
-          baseline.resident_splat_bytes==264,"one Gaussian retains four 60-byte vertices and six 32-bit indices");
+          baseline.resident_splat_bytes==56,"one Gaussian retains a 52-byte source record and one 32-bit ordered reference");
     for(int i=0;i<3;++i) fixture.Render();
     Check(fixture.state->stats.splat_uploads==baseline.splat_uploads &&
           fixture.state->stats.splat_sort_updates==baseline.splat_sort_updates &&
@@ -601,7 +674,7 @@ void TestGaussianRetentionAndBudget(Fixture& fixture)
     auto second=object; second.id="density:second"; second.local=Scene3DMatrix::Translation({-.3,0,0});
     fixture.SetScene({object,second}); fixture.Render();
     Check(fixture.state->stats.resident_splat_resources==1 && fixture.state->stats.resident_splat_instances==2 &&
-          fixture.state->stats.resident_splat_bytes==288,"shared Gaussian source uploads once with separate per-view instance order");
+          fixture.state->stats.resident_splat_bytes==60,"shared Gaussian source uploads once with separate per-view instance order");
     object.visible=false; second.visible=false; fixture.SetScene({object,second}); fixture.Render();
     Check(fixture.state->stats.resident_splat_resources==0 && fixture.state->stats.resident_splat_instances==0 &&
           fixture.state->stats.resident_splat_bytes==0,"hidden Gaussian instances release GPU buffers while CPU owners remain alive");
@@ -609,51 +682,91 @@ void TestGaussianRetentionAndBudget(Fixture& fixture)
     auto replacement=point; replacement.b=1;
     object.splats=GaussianCloud({replacement}); fixture.SetScene({object}); fixture.Render();
     Check(fixture.state->stats.resident_splat_resources==1 && fixture.state->stats.resident_splat_instances==1 &&
-          fixture.state->stats.resident_splat_bytes==264,"replacing a retained source releases the superseded Gaussian allocation");
+          fixture.state->stats.resident_splat_bytes==56,"replacing a retained source releases the superseded Gaussian allocation");
     fixture.SetScene({}); fixture.Render();
     Check(fixture.state->stats.resident_splat_bytes==0,"deleting Gaussian objects releases all retained cloud allocations");
 
-    camera.roll=0; camera.fov_y=1.57079632679489661923;
-    camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error);
-    std::vector<Scene3DSplat> points(Scene3DMaxSplats);
-    for(int i=0;i<Scene3DMaxSplats;++i) {
-        auto& p=points[i];
-        p.position={((i%400)+.5)/400.0*1.8-.9,(((i/400)%375)+.5)/375.0*1.8-.9,0};
-        p.covariance[0]=p.covariance[3]=p.covariance[5]=1e-6;
-        p.r=.7f; p.g=.2f; p.b=.1f; p.a=.03f;
-    }
-    object=GaussianObject("density:bounded-150k",GaussianCloud(points));
-    const auto start=std::chrono::steady_clock::now();
-    fixture.SetScene({object}); const bool first=fixture.Render(GpuFormat::RGBA8Srgb,"gaussian-150000");
-    const double first_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
-    if(first) {
-        const auto before=fixture.state->stats;
-        Check(before.splats_last_frame==150000 && before.splat_draws_last_frame==1 &&
-              before.resident_splat_resources==1 && before.resident_splat_instances==1 &&
-              before.resident_splat_bytes==39600000,"bounded 150000-point cloud uses actual Gaussian draws and explicit 39.6 MB buffers");
-        double maximum_ms=0; const auto steady_start=std::chrono::steady_clock::now();
-        for(int i=0;i<12;++i) {
-            const auto frame_start=std::chrono::steady_clock::now();
-            fixture.SubmitOnly();
-            maximum_ms=std::max(maximum_ms,std::chrono::duration<double,std::milli>(
-                std::chrono::steady_clock::now()-frame_start).count());
+    // Retain the former workload and qualify the expanded ceiling separately.
+    // These are bounded measurements, not a promised interactive frame rate.
+    for(const int point_count:{150000,Scene3DMaxSplats}) {
+        camera.roll=0; camera.fov_y=1.57079632679489661923;
+        camera.SetLookAt({0,0,5},{0,0,0},{0,1,0},error);
+        const int columns=point_count==150000?400:1000;
+        const int rows=(point_count+columns-1)/columns;
+        std::vector<Scene3DSplat> points(point_count);
+        for(int i=0;i<point_count;++i) {
+            auto& p=points[i];
+            p.position={((i%columns)+.5)/columns*1.8-.9,
+                        ((i/columns)+.5)/rows*1.8-.9,0};
+            p.covariance[0]=p.covariance[3]=p.covariance[5]=1e-6;
+            p.r=.7f; p.g=.2f; p.b=.1f; p.a=.03f;
         }
-        const double steady_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-steady_start).count();
-        const auto after=fixture.state->stats;
-        Check(after.splat_uploads==before.splat_uploads && after.splat_sort_updates==before.splat_sort_updates &&
-              after.resident_splat_bytes==before.resident_splat_bytes && fixture.device.GetLiveCommandCount()==0,
-              "150000-point steady frames retain uploads order and bounded ownership");
-        ValueMap measurement; measurement.Add("points",150000); measurement.Add("retained_bytes",(int64)before.resident_splat_bytes);
-        measurement.Add("first_frame_including_publish_readback_ms",first_ms);
-        measurement.Add("sort_microseconds",(int64)before.splat_sort_us_last_frame);
-        measurement.Add("steady_frames",12); measurement.Add("steady_cpu_submit_total_ms",steady_ms);
-        measurement.Add("steady_cpu_submit_max_ms",maximum_ms);
-        measurement.Add("timing_scope","Native CPU submission wall time; no separate GPU timestamp or scan-out claim.");
-        gaussian_measurements.Add(measurement);
+        object=GaussianObject("density:bounded-"+AsString(point_count),GaussianCloud(points));
+        const auto start=std::chrono::steady_clock::now();
+        if(!fixture.SetScene({object})) return;
+        const bool first=fixture.Render(GpuFormat::RGBA8Srgb,"gaussian-"+AsString(point_count));
+        const double first_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+        if(first) {
+            const auto before=fixture.state->stats;
+            Check(before.splats_last_frame==point_count && before.splat_draws_last_frame==1 &&
+                  before.resident_splat_resources==1 && before.resident_splat_instances==1 &&
+                  before.resident_splat_bytes==uint64(point_count)*56,
+                  "bounded cloud uses actual Gaussian draws and exact retained buffer bytes");
+            double maximum_ms=0; const auto steady_start=std::chrono::steady_clock::now();
+            for(int i=0;i<12;++i) {
+                const auto frame_start=std::chrono::steady_clock::now();
+                fixture.SubmitOnly();
+                maximum_ms=std::max(maximum_ms,std::chrono::duration<double,std::milli>(
+                    std::chrono::steady_clock::now()-frame_start).count());
+            }
+            const double steady_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-steady_start).count();
+            const auto after=fixture.state->stats;
+            Check(after.splat_uploads==before.splat_uploads && after.splat_sort_updates==before.splat_sort_updates &&
+                  after.resident_splat_bytes==before.resident_splat_bytes && fixture.device.GetLiveCommandCount()==0,
+                  "bounded steady frames retain uploads order and ownership");
+
+            camera.yaw+=.2; ++camera.revision;
+            const auto rotation_start=std::chrono::steady_clock::now();
+            if(!fixture.SubmitOnly()) return;
+            const double rotation_ms=std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-rotation_start).count();
+            const auto rotated=fixture.state->stats;
+            Check(rotated.splat_sort_updates==after.splat_sort_updates+1 &&
+                  rotated.splat_uploads==after.splat_uploads &&
+                  rotated.resident_splat_bytes==before.resident_splat_bytes,
+                  "bounded rotation updates the retained depth order without vertex re-upload");
+
+            const Pointf centre(fixture.size.cx*.5,fixture.size.cy*.5);
+            const auto pick_start=std::chrono::steady_clock::now();
+            const auto hit=fixture.state->scene->PickScreen(centre,fixture.size,camera);
+            const double pick_ms=std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-pick_start).count();
+            const auto sample_start=std::chrono::steady_clock::now();
+            const auto sample=fixture.state->scene->SampleSplatSurface(centre,8,fixture.size,camera,object.id);
+            const double sample_ms=std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-sample_start).count();
+            Check(hit.hit && hit.id==object.id && sample.pick.hit && sample.pick.id==object.id &&
+                  sample.support.sample_count==25 && sample.support.support_count>0 &&
+                  !sample.support.normal_valid,
+                  "expanded working cloud retains native click and bounded patch sampling");
+
+            ValueMap measurement; measurement.Add("points",point_count);
+            measurement.Add("retained_bytes",(int64)before.resident_splat_bytes);
+            measurement.Add("first_frame_including_publish_readback_ms",first_ms);
+            measurement.Add("sort_microseconds",(int64)before.splat_sort_us_last_frame);
+            measurement.Add("steady_frames",12); measurement.Add("steady_cpu_submit_total_ms",steady_ms);
+            measurement.Add("steady_cpu_submit_max_ms",maximum_ms);
+            measurement.Add("rotation_cpu_submit_ms",rotation_ms);
+            measurement.Add("rotation_sort_microseconds",(int64)rotated.splat_sort_us_last_frame);
+            measurement.Add("screen_pick_ms",pick_ms); measurement.Add("patch_sample_ms",sample_ms);
+            measurement.Add("patch_support",sample.support.support_count);
+            measurement.Add("timing_scope","Native CPU submission and picking wall time; no separate GPU timestamp or scan-out claim.");
+            gaussian_measurements.Add(measurement);
+        }
+        fixture.SetScene({}); fixture.Render();
+        Check(fixture.state->stats.resident_splat_bytes==0 && fixture.state->stats.resident_splat_resources==0 &&
+              fixture.state->stats.resident_splat_instances==0,"bounded cloud cleanup releases all source and instance GPU buffers");
     }
-    fixture.SetScene({}); fixture.Render();
-    Check(fixture.state->stats.resident_splat_bytes==0 && fixture.state->stats.resident_splat_resources==0 &&
-          fixture.state->stats.resident_splat_instances==0,"bounded cloud cleanup releases all source and instance GPU buffers");
 }
 
 }
@@ -682,7 +795,7 @@ GUI_APP_MAIN
                         TestOrderingAndCull(fixture); TestCameraAndGuides(fixture); TestRetention(fixture);
                         TestGaussianBlendPrecision(fixture);
                         TestGaussianPixels(fixture); TestGaussianDepthAndPicking(fixture);
-                        TestGaussianRetentionAndBudget(fixture);
+                        TestGlobalGaussianOrder(fixture); TestGaussianRetentionAndBudget(fixture);
                     }
                     Check(device.GetLiveBufferCount()==0 && device.GetLiveTextureCount()==0 &&
                           device.GetLiveShaderCount()==0 && device.GetLivePipelineCount()==0 &&
@@ -702,8 +815,8 @@ GUI_APP_MAIN
           live.surface_live_count==0 && live.device_live_count==0 && live.swapchain_live_count==0,
           "finite fixture releases Vulkan session ownership");
     Check(rendered>=37 && pixel_checks>=50,"actual renderer and pixel oracles executed");
-    Check(gaussian_pixel_checks>=32 && gaussian_measurements.GetCount()==1,
-          "Gaussian analytical pixels and the bounded 150000-point native measurement executed");
+    Check(gaussian_pixel_checks>=32 && gaussian_measurements.GetCount()==2,
+          "Gaussian analytical pixels and both 150000-point and maximum-budget native measurements executed");
     Cout()<<"Ui3DMaterialTest: "<<checks<<" checks, "<<pixel_checks<<" pixel checks, "<<rendered
           <<" actual GPU frames, "<<failures<<" failures"<<EOL;
     if(!output_folder.IsEmpty()) {

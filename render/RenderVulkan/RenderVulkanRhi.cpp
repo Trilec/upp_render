@@ -47,6 +47,7 @@ static VkSamplerAddressMode ToVkSamplerAddress(GpuSamplerAddressMode mode)
 }
 
 struct VulkanGpuDevice::SampledImpl {
+	static constexpr int MaxVertexStorage = 4;
 	struct PipelineState : Moveable<PipelineState> {
 		GpuPipelineDesc desc;
 		VkDescriptorSetLayout descriptor_layout = VK_NULL_HANDLE;
@@ -58,6 +59,9 @@ struct VulkanGpuDevice::SampledImpl {
 	struct CommandState : Moveable<CommandState> {
 		GpuPipelineId pipeline;
 		GpuTextureId bound_texture;
+		VkDescriptorBufferInfo vertex_storage[MaxVertexStorage]{};
+		bool storage_dirty = true;
+		int storage_sets = 0;
 		Vector<VkDescriptorPool> pools;
 		Vector<int> pool_allocations;
 	};
@@ -67,7 +71,9 @@ struct VulkanGpuDevice::SampledImpl {
 	VectorMap<int, CommandState> commands;
 	Vector<VkDescriptorPool> idle_pools;
 	uint64 pools_created = 0, pools_reused = 0;
-	bool resolved = false;
+	bool resolved = false, vertex_caps_known = false;
+	GpuVertexPullCapabilities vertex_caps;
+	PFN_vkCmdDrawIndirect draw_indirect = nullptr;
 
 	PFN_vkCreateSampler create_sampler = nullptr;
 	PFN_vkDestroySampler destroy_sampler = nullptr;
@@ -107,6 +113,24 @@ struct VulkanGpuDevice::SampledImpl {
 		           core->Resolve(update_descriptor_sets, "vkUpdateDescriptorSets") &&
 		           core->Resolve(cmd_bind_descriptor_sets, "vkCmdBindDescriptorSets");
 		return resolved;
+	}
+
+	bool QueryVertexStorage()
+	{
+		if(vertex_caps_known) return true;
+		if(!Resolve()) return false;
+		PFN_vkGetPhysicalDeviceProperties properties = nullptr;
+		if(!core->ResolveInstance(properties, "vkGetPhysicalDeviceProperties")) return false;
+		VkPhysicalDeviceProperties device{};
+		properties(core->physical_device, &device);
+		const auto& lim = device.limits;
+		vertex_caps.max_storage_buffers = min<uint32>(MaxVertexStorage,
+		       min(lim.maxPerStageDescriptorStorageBuffers, lim.maxDescriptorSetStorageBuffers));
+		vertex_caps.max_storage_range = lim.maxStorageBufferRange;
+		vertex_caps.storage_offset_alignment = max<uint64>(1, lim.minStorageBufferOffsetAlignment);
+		vertex_caps.indirect_draw = lim.maxDrawIndirectCount && core->Resolve(draw_indirect, "vkCmdDrawIndirect");
+		vertex_caps_known = true;
+		return true;
 	}
 
 	PipelineState *FindPipeline(GpuPipelineId id)
@@ -195,14 +219,15 @@ struct VulkanGpuDevice::SampledImpl {
 
 	bool CreateDescriptorPool(CommandState& command)
 	{
-		VkDescriptorPoolSize size {};
-		size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		size.descriptorCount = 64;
+		const VkDescriptorPoolSize sizes[] = {
+			{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64},
+			{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 64 * MaxVertexStorage}
+		};
 		VkDescriptorPoolCreateInfo ci {};
 		ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		ci.maxSets = 64;
-		ci.poolSizeCount = 1;
-		ci.pPoolSizes = &size;
+		ci.poolSizeCount = 2;
+		ci.pPoolSizes = sizes;
 		VkDescriptorPool pool = VK_NULL_HANDLE;
 		if(!idle_pools.IsEmpty()) {
 			pool = idle_pools.Pop();
@@ -303,16 +328,19 @@ GpuResult VulkanGpuDevice::DestroyShader(GpuShaderId id)
 GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipelineId& out)
 {
 	out = GpuPipelineId();
-	if(desc.sampled_texture_count == 0)
+	const bool pull = desc.vertex_layout == GpuVertexLayout::StoragePull;
+	if(!pull && desc.sampled_texture_count == 0 && desc.vertex_storage_count == 0)
 		return CreatePipelineBase(desc, out);
 	if(!impl->CheckReady())
 		return GpuResult::InvalidState;
 	const bool mesh = desc.vertex_layout == GpuVertexLayout::Position3Normal3Uv2Color4F;
-	if(desc.sampled_texture_count != 1 ||
-	   (!mesh && desc.vertex_layout != GpuVertexLayout::Position2Uv2Color4F) ||
-	   !ValidDepthState(desc) ||
-	   (desc.topology != GpuPrimitiveTopology::TriangleList && desc.topology != GpuPrimitiveTopology::LineList)) {
-		impl->error = "sampled pipeline requires one texture, a supported UV layout and valid graphics state";
+	const bool sampled_layout = desc.sampled_texture_count == 1 && desc.vertex_storage_count == 0 &&
+	                            (mesh || desc.vertex_layout == GpuVertexLayout::Position2Uv2Color4F);
+	const bool pull_layout = pull && desc.sampled_texture_count == 0 && desc.vertex_storage_count > 0;
+	if(!(sampled_layout || pull_layout) || !ValidDepthState(desc) ||
+	   (desc.topology != GpuPrimitiveTopology::TriangleList && desc.topology != GpuPrimitiveTopology::LineList &&
+	    !(pull && desc.topology == GpuPrimitiveTopology::TriangleStrip))) {
+		impl->error = "descriptor graphics pipeline requires a valid sampled or vertex-storage layout";
 		return GpuResult::InvalidArgument;
 	}
 	if(desc.depth_format != GpuFormat::Unknown) {
@@ -350,41 +378,51 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	}
 
 	SampledImpl& sampled = Sampled();
-	if(!sampled.Resolve())
-		return GpuResult::InvalidState;
+	if(!sampled.Resolve()) return GpuResult::InvalidState;
+	if(pull && (!sampled.QueryVertexStorage() ||
+	            uint32(desc.vertex_storage_count) > sampled.vertex_caps.max_storage_buffers)) {
+		impl->error = "vertex-storage bindings exceed supported device limits";
+		return GpuResult::Unsupported;
+	}
 
 	SampledImpl::PipelineState state;
 	state.desc = desc;
 
-	VkSamplerCreateInfo sci {};
-	sci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	sci.magFilter = ToVkSamplerFilter(desc.sampler_filter);
-	sci.minFilter = ToVkSamplerFilter(desc.sampler_filter);
-	sci.mipmapMode = ToVkMipmapMode(desc.sampler_filter);
-	sci.addressModeU = ToVkSamplerAddress(desc.sampler_address);
-	sci.addressModeV = ToVkSamplerAddress(desc.sampler_address);
-	sci.addressModeW = ToVkSamplerAddress(desc.sampler_address);
-	sci.minLod = 0.0f;
-	sci.maxLod = 0.0f;
-	sci.maxAnisotropy = 1.0f;
-	VkResult vr = sampled.create_sampler(impl->device, &sci, nullptr, &state.sampler);
-	if(vr != VK_SUCCESS) {
-		impl->error = VkFailure("vkCreateSampler", vr);
-		return GpuResult::InvalidState;
+	VkResult vr;
+	if(!pull) {
+		VkSamplerCreateInfo sci {};
+		sci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sci.magFilter = ToVkSamplerFilter(desc.sampler_filter);
+		sci.minFilter = ToVkSamplerFilter(desc.sampler_filter);
+		sci.mipmapMode = ToVkMipmapMode(desc.sampler_filter);
+		sci.addressModeU = ToVkSamplerAddress(desc.sampler_address);
+		sci.addressModeV = ToVkSamplerAddress(desc.sampler_address);
+		sci.addressModeW = ToVkSamplerAddress(desc.sampler_address);
+		sci.minLod = 0.0f;
+		sci.maxLod = 0.0f;
+		sci.maxAnisotropy = 1.0f;
+		vr = sampled.create_sampler(impl->device, &sci, nullptr, &state.sampler);
+		if(vr != VK_SUCCESS) {
+			impl->error = VkFailure("vkCreateSampler", vr);
+			return GpuResult::InvalidState;
+		}
 	}
-
-	VkDescriptorSetLayoutBinding descriptor_binding {};
-	descriptor_binding.binding = 0;
-	descriptor_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptor_binding.descriptorCount = 1;
-	descriptor_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-	VkDescriptorSetLayoutCreateInfo dlci {};
+	const int binding_count = pull ? desc.vertex_storage_count : 1;
+	VkDescriptorSetLayoutBinding bindings[SampledImpl::MaxVertexStorage]{};
+	for(int slot = 0; slot < binding_count; ++slot) {
+		auto& binding = bindings[slot];
+		binding.binding = uint32(slot);
+		binding.descriptorType = pull ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		binding.descriptorCount = 1;
+		binding.stageFlags = pull ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT;
+	}
+	VkDescriptorSetLayoutCreateInfo dlci{};
 	dlci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	dlci.bindingCount = 1;
-	dlci.pBindings = &descriptor_binding;
+	dlci.bindingCount = uint32(binding_count);
+	dlci.pBindings = bindings;
 	vr = sampled.create_descriptor_set_layout(impl->device, &dlci, nullptr, &state.descriptor_layout);
 	if(vr != VK_SUCCESS) {
-		sampled.destroy_sampler(impl->device, state.sampler, nullptr);
+		sampled.DestroyPipelineState(state);
 		impl->error = VkFailure("vkCreateDescriptorSetLayout", vr);
 		return GpuResult::InvalidState;
 	}
@@ -431,10 +469,12 @@ GpuResult VulkanGpuDevice::CreatePipeline(const GpuPipelineDesc& desc, GpuPipeli
 	attrs[3].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[3].offset = 32;
 	VkPipelineVertexInputStateCreateInfo vertex {};
 	vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertex.vertexBindingDescriptionCount = 1;
-	vertex.pVertexBindingDescriptions = &binding;
-	vertex.vertexAttributeDescriptionCount = mesh ? 4 : 3;
-	vertex.pVertexAttributeDescriptions = attrs;
+	if(!pull) {
+		vertex.vertexBindingDescriptionCount = 1;
+		vertex.pVertexBindingDescriptions = &binding;
+		vertex.vertexAttributeDescriptionCount = mesh ? 4 : 3;
+		vertex.pVertexAttributeDescriptions = attrs;
+	}
 	VkPipelineInputAssemblyStateCreateInfo assembly {};
 	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	assembly.topology = ToVkTopology(desc.topology);
@@ -608,6 +648,8 @@ GpuResult VulkanGpuDevice::SetPipeline(GpuCommandListId list, GpuPipelineId pipe
 	SampledImpl::CommandState& sampled_command = Sampled().GetCommand(list);
 	sampled_command.pipeline = pipeline;
 	sampled_command.bound_texture = GpuTextureId();
+	for(auto& range : sampled_command.vertex_storage) range = VkDescriptorBufferInfo{};
+	sampled_command.storage_dirty = true;
 	return GpuResult::Ok;
 }
 
@@ -717,6 +759,8 @@ GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int fir
 	SampledImpl::PipelineState *pipeline = sampled_impl ? sampled_impl->FindPipeline(command.pipeline) : nullptr;
 	if(!pipeline)
 		return DrawBase(list, vertex_count, first_vertex);
+	if(pipeline->desc.vertex_layout == GpuVertexLayout::StoragePull)
+		return DrawInstanced(list, vertex_count, 1, first_vertex);
 	if(vertex_count <= 0 || first_vertex < 0) {
 		impl->error = "Draw received an invalid vertex range";
 		return GpuResult::InvalidArgument;
@@ -734,6 +778,117 @@ GpuResult VulkanGpuDevice::Draw(GpuCommandListId list, int vertex_count, int fir
 		impl->error = "Sampled Draw exceeds the bound vertex buffer"; return GpuResult::InvalidArgument;
 	}
 	impl->cmd_draw(command.buffer, (uint32_t)vertex_count, 1, (uint32_t)first_vertex, 0);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::GetVertexPullCapabilities(GpuVertexPullCapabilities& out)
+{
+	out = GpuVertexPullCapabilities();
+	auto& descriptors = Sampled();
+	if(!descriptors.QueryVertexStorage()) return GpuResult::Unsupported;
+	out = descriptors.vertex_caps;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::SetVertexStorageBuffer(GpuCommandListId list, int slot,
+                                                 GpuBufferId buffer, int64 offset, int64 size)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int ci = impl->commands.Find(list.value), bi = impl->buffers.Find(buffer.value);
+	if(ci < 0 || bi < 0) return GpuResult::InvalidHandle;
+	const auto& command = impl->commands[ci];
+	auto *pipeline = sampled_impl ? sampled_impl->FindPipeline(command.pipeline) : nullptr;
+	auto *state = pipeline ? sampled_impl->FindCommand(list) : nullptr;
+	if(!command.pass_active || command.ended || !state ||
+	   pipeline->desc.vertex_layout != GpuVertexLayout::StoragePull) {
+		impl->error = "vertex-storage binding requires an active vertex-pulling pipeline"; return GpuResult::InvalidState;
+	}
+	const auto& resource = impl->buffers[bi];
+	const auto& caps = sampled_impl->vertex_caps;
+	if(slot < 0 || slot >= pipeline->desc.vertex_storage_count ||
+	   !(resource.desc.usage & GpuBufferUsage_Storage) || offset < 0 ||
+	   offset >= resource.desc.size || size < 0 || uint64(offset) % caps.storage_offset_alignment) {
+		impl->error = "invalid vertex-storage slot, usage, offset or alignment"; return GpuResult::InvalidArgument;
+	}
+	if(!size) size = resource.desc.size - offset;
+	if(size > resource.desc.size - offset || uint64(size) > caps.max_storage_range) {
+		impl->error = "vertex-storage range exceeds device or buffer bounds"; return GpuResult::InvalidArgument;
+	}
+	const VkDescriptorBufferInfo next{resource.raw.buffer, VkDeviceSize(offset), VkDeviceSize(size)};
+	auto& current = state->vertex_storage[slot];
+	if(current.buffer != next.buffer || current.offset != next.offset || current.range != next.range) {
+		current = next;
+		state->storage_dirty = true;
+	}
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::BindVertexStorageForDraw(GpuCommandListId list)
+{
+	const int ci = impl->commands.Find(list.value);
+	if(ci < 0) return GpuResult::InvalidHandle;
+	const auto& command = impl->commands[ci];
+	auto *pipeline = sampled_impl ? sampled_impl->FindPipeline(command.pipeline) : nullptr;
+	auto *state = pipeline ? sampled_impl->FindCommand(list) : nullptr;
+	if(!command.pass_active || command.ended || !command.parameters_set || !state ||
+	   pipeline->desc.vertex_layout != GpuVertexLayout::StoragePull) {
+		impl->error = "draw requires an active vertex-pulling pipeline and parameters"; return GpuResult::InvalidState;
+	}
+	if(!state->storage_dirty) return GpuResult::Ok;
+	const int count = pipeline->desc.vertex_storage_count;
+	for(int i = 0; i < count; ++i)
+		if(!state->vertex_storage[i].buffer) {
+			impl->error = "a declared vertex-storage binding is unset"; return GpuResult::InvalidState;
+		}
+	if(state->storage_sets >= 256) {
+		impl->error = "vertex-storage descriptor budget exceeded"; return GpuResult::InvalidState;
+	}
+	VkDescriptorSet set = VK_NULL_HANDLE;
+	if(!sampled_impl->AllocateDescriptorSet(*state, pipeline->descriptor_layout, set)) return GpuResult::InvalidState;
+	VkWriteDescriptorSet writes[SampledImpl::MaxVertexStorage]{};
+	for(int i = 0; i < count; ++i) {
+		auto& write = writes[i];
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.dstSet = set;
+		write.dstBinding = uint32(i);
+		write.descriptorCount = 1;
+		write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		write.pBufferInfo = &state->vertex_storage[i];
+	}
+	sampled_impl->update_descriptor_sets(impl->device, uint32(count), writes, 0, nullptr);
+	sampled_impl->cmd_bind_descriptor_sets(command.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+	                                      pipeline->layout, 0, 1, &set, 0, nullptr);
+	state->storage_dirty = false;
+	++state->storage_sets;
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DrawInstanced(GpuCommandListId list, int vertices, int instances, int first_vertex)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	if(vertices <= 0 || instances <= 0 || first_vertex < 0 ||
+	   int64(first_vertex) + vertices > std::numeric_limits<int>::max()) return GpuResult::InvalidArgument;
+	const auto ready = BindVertexStorageForDraw(list);
+	if(ready != GpuResult::Ok) return ready;
+	impl->cmd_draw(impl->commands.Get(list.value).buffer, uint32(vertices), uint32(instances), uint32(first_vertex), 0);
+	return GpuResult::Ok;
+}
+
+GpuResult VulkanGpuDevice::DrawIndirect(GpuCommandListId list, GpuBufferId indirect, int64 offset)
+{
+	if(!impl->CheckReady()) return GpuResult::InvalidState;
+	const int bi = impl->buffers.Find(indirect.value);
+	if(bi < 0) return GpuResult::InvalidHandle;
+	const auto& input = impl->buffers[bi];
+	if(!(input.desc.usage & GpuBufferUsage_Indirect) || offset < 0 || offset % 4 ||
+	   offset > input.desc.size || int64(sizeof(GpuDrawIndirectArguments)) > input.desc.size - offset) {
+		impl->error = "invalid indirect draw buffer usage or arguments range"; return GpuResult::InvalidArgument;
+	}
+	const auto ready = BindVertexStorageForDraw(list);
+	if(ready != GpuResult::Ok) return ready;
+	if(!sampled_impl->vertex_caps.indirect_draw) return GpuResult::Unsupported;
+	sampled_impl->draw_indirect(impl->commands.Get(list.value).buffer, input.raw.buffer,
+	                            VkDeviceSize(offset), 1, sizeof(GpuDrawIndirectArguments));
 	return GpuResult::Ok;
 }
 

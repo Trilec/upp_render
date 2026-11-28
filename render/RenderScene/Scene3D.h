@@ -66,15 +66,18 @@ struct Scene3DVertex {
 class Scene3DMesh {
 public:
 	static std::shared_ptr<const Scene3DMesh> Create(const std::vector<Scene3DVertex>& vertices,
-	                                              const std::vector<uint32>& indices, String& error);
+	                                              const std::vector<uint32>& indices, String& error,
+	                                              const std::vector<uint32>& viewport_outline = {});
 	static std::shared_ptr<const Scene3DMesh> MakeBox(const Scene3DVec3& full_size, String& error);
 	const std::vector<Scene3DVertex>& GetVertices() const { return vertices; }
 	const std::vector<uint32>& GetIndices() const { return indices; }
+	// Optional editor-only line pairs. The triangles still define the pick surface.
+	const std::vector<uint32>& GetViewportOutline() const { return viewport_outline; }
 	const Scene3DBounds& GetBounds() const { return bounds; }
 private:
 	Scene3DMesh() = default;
 	std::vector<Scene3DVertex> vertices;
-	std::vector<uint32> indices;
+	std::vector<uint32> indices, viewport_outline;
 	Scene3DBounds bounds;
 };
 
@@ -88,7 +91,9 @@ struct Scene3DSplat {
     double covariance[6] = {1, 0, 0, 1, 0, 1};
     float r = 1, g = 1, b = 1, a = 1;
 };
-constexpr int Scene3DMaxSplats = 150000;
+// Aggregate submitted working-preview points, including repeated instances.
+// Large original files belong to the host's streaming source/preview boundary.
+constexpr int Scene3DMaxSplats = 1000000;
 constexpr double Scene3DSplatAlphaCutoff = 1.0 / 255.0;
 constexpr double Scene3DSplatPixelVariance = 0.25;
 
@@ -113,7 +118,8 @@ struct Scene3DSplatProjection {
     Pointf center;
     double covariance_xx = 0, covariance_xy = 0, covariance_yy = 0;
     double depth = 0; // Vulkan normalized depth, 0..1.
-    double Coverage(Pointf point) const; // Unit peak, truncated below 1/255.
+    double opacity_scale = 1; // Perspective fade for oversized near-view footprints.
+    double Coverage(Pointf point) const; // Truncated Gaussian coverage including the viewport fade.
 };
 bool Scene3DProjectSplat(const Scene3DSplat&, const Scene3DMatrix& clip_from_local,
                          Size viewport, Scene3DSplatProjection& output);
@@ -199,6 +205,24 @@ struct Scene3DPick {
 	int splat = -1; // Resource point index for a screen-space Gaussian hit.
 };
 
+// Bounded screen-patch evidence, not a reconstruction accuracy estimate.
+// Counts describe probe rays; splat_count counts distinct source Gaussians.
+// Spreads are RMS about the retained mean (pixels/world units); depth_spread
+// is the retained camera-depth range. No geometric normal is inferred.
+struct Scene3DSplatSurfaceSupport {
+	int sample_count = 0, hit_count = 0, support_count = 0, splat_count = 0;
+	double radius_pixels = 0, screen_spread_pixels = 0, world_spread = 0, depth_spread = 0;
+	// Retained probe fraction times min(1, splat_count / 4); heuristic 0..1.
+	double confidence = 0;
+	bool normal_valid = false;
+	Scene3DVec3 world_normal;
+};
+
+struct Scene3DSplatSurfaceSample {
+	Scene3DPick pick;
+	Scene3DSplatSurfaceSupport support;
+};
+
 struct Scene3DCamera;
 
 // Validates the complete candidate before publication, preserving descriptor order.
@@ -207,7 +231,7 @@ struct Scene3DCamera;
 // Bounds/positive-determinant affine transforms are prepared once. No mutable scene
 // data is exposed. Linear RGBA factors; opaque, masked or blended surfaces.
 // At most 100000 nodes, 2M instanced vertices, 6M instanced indices and 512 MiB
-// of distinct immutable texture pixels and 150000 instanced Gaussian points. No importer, animation clock, document
+// of distinct immutable texture pixels and Scene3DMaxSplats instanced Gaussian points. No importer, animation clock, document
 // or undo authority.
 class Scene3DSnapshot {
 public:
@@ -224,6 +248,20 @@ public:
 	// Exact projected Gaussian coverage plus the existing mesh ray test. The
 	// camera provides near/far clips, roll and gate; misses retain revisions.
 	Scene3DPick PickScreen(Pointf screen, Size viewport, const Scene3DCamera&) const;
+	// Samples only this visible/selectable Gaussian object; never falls back to
+	// another object or mesh. Radius 0 is the nearest covered target hit. A
+	// finite positive radius is capped at 128 pixels and uses at most 25 probes
+	// in its circle, projecting each target Gaussian once. Separated depth
+	// groups are rejected; the dominant central group returns an actual hit
+	// (weighted medoid), not an average between surfaces. Its point may be
+	// offset from screen within the circle. pick.splat identifies that probe's
+	// Gaussian; pick.world_normal is camera-facing, not a surface normal.
+	// Invalid inputs/target or no coverage return a miss with current revisions.
+	// This ignores other-object occlusion and UI film mattes by design. Use on
+	// demand/gesture commit; the target scan is linear in its Gaussian count.
+	Scene3DSplatSurfaceSample SampleSplatSurface(Pointf screen, double radius_pixels,
+	                                            Size viewport, const Scene3DCamera&,
+	                                            const String& object_id) const;
 private:
 	Scene3DSnapshot() = default;
 	uint64 revision = 0;

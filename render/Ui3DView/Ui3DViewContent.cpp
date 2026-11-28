@@ -25,10 +25,13 @@ MeshParameters ViewContent::Parameters(const Scene3DMatrix& view_projection,
 bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& error)
 {
     state->stats.splat_sort_us_last_frame=0;
+    state->stats.global_splat_order=false;
     state->stats.splat_draws_last_frame=state->stats.splats_last_frame=0;
     if(!EnsureDepth(device,frame.size,error) || !EnsureShaders(device,error)) return false;
     GpuFrameInfo target;
     if(!EnsureTarget(device,frame,target,error) || !EnsureDecorations(device,frame.size,error)) return false;
+    const bool show_origin = state->options.show_grid && state->options.show_grid_origin;
+    if(show_origin && !EnsureGridOrigin(device, frame.size, error)) return false;
     const auto scene=state->GetRenderScene();
     if(cached_scene!=scene) {
         PruneSplats(device,scene);
@@ -65,6 +68,7 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
         double depth;
     };
     std::vector<Entry> opaque,blended;
+    std::vector<const Scene3DObject*> gaussians;
     Scene3DVec3 right,up,forward;
     state->camera.GetBasis(right,up,forward);
     const auto eye=state->camera.GetEye();
@@ -72,33 +76,49 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
     if(scene) for(const auto& object:scene->GetObjects()) {
         if(!object.visible || object.opacity<=0) continue;
         if(object.splats) {
-            GpuPipelineId pipeline;
-            if(!EnsureSplats(device,object,forward,error) ||
-               !EnsureSplatPipeline(device,target.color_format,pipeline,error)) return false;
-            blended.push_back({&object,{},pipeline,(object.bounds.GetCenter()-eye).Dot(forward)});
+            gaussians.push_back(&object);
             continue;
         }
         if(!object.mesh) continue;
         if(!EnsureMesh(device,object.mesh,error)) return false;
         GpuTextureId texture; GpuPipelineId pipeline;
         const bool blend=object.material.alpha_mode==Scene3DAlphaMode::Blend || object.opacity<1;
+        const int mesh_kind=object.mesh->GetViewportOutline().empty() ? kind : 2;
         if(!EnsureTexture(device,object.material.color_texture,texture,error) ||
-           !EnsurePipeline(device,target.color_format,kind,blend,!object.material.double_sided,
+           !EnsurePipeline(device,target.color_format,mesh_kind,blend,!object.material.double_sided,
                            object.material.repeat_uv,pipeline,error)) return false;
         Entry entry{&object,texture,pipeline,(object.bounds.GetCenter()-eye).Dot(forward)};
         (blend?blended:opaque).push_back(entry);
     }
-    // Conventional surface compositing: stable far-to-near object order.
-    // Intersecting transparent meshes require host splitting; this is not OIT.
-    std::stable_sort(blended.begin(),blended.end(),[](const Entry& a,const Entry& b) { return a.depth>b.depth; });
+    // Conventional mesh blends keep their existing bounds-depth anchors.
+    const auto farther=[](const Entry& a,const Entry& b) {
+        return a.depth!=b.depth ? a.depth>b.depth : a.object<b.object;
+    };
+    std::sort(blended.begin(),blended.end(),farther);
     if(selection_revision!=state->selection_revision) {
         selected.Clear(); for(const String& id:state->selection) selected.FindAdd(id);
         selection_revision=state->selection_revision;
     }
     const auto view_projection=state->camera.GetViewProjection(frame.size);
+    std::vector<const Scene3DObject*> anchors;
+    anchors.reserve(blended.size());
+    for(const auto& entry:blended) anchors.push_back(entry.object);
+    bool global_order=false;
+    if(!PrepareGlobalSplats(device,gaussians,anchors,forward,view_projection,target.color_format,global_order,error))
+        return false;
+    if(!global_order && !gaussians.empty()) {
+        for(const auto* object:gaussians) {
+            GpuPipelineId pipeline;
+            if(!EnsureSplats(device,*object,forward,error) ||
+               !EnsureSplatPipeline(device,target.color_format,pipeline,error)) return false;
+            blended.push_back({object,{},pipeline,(object->bounds.GetCenter()-eye).Dot(forward)});
+        }
+        std::sort(blended.begin(),blended.end(),farther);
+    }
     GpuCommandListId command;
     if(!Result(device,device.BeginCommands(command),"begin scene commands",error)) return false;
     auto fail=[&] { device.DiscardCommands(command); return false; };
+    if(global_order && !RecordGlobalSplatOrder(device,command,error)) return fail();
     GpuRenderPassDesc pass;
     pass.flip_viewport_y=false; // Projection already applies Vulkan Y orientation.
     pass.color_target=target.color_target; pass.color_format=target.color_format;
@@ -149,10 +169,16 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
             const auto& resource=splat_resources.find(object.splats.get())->second;
             const auto& order=splat_orders.find(object.id)->second;
             const int points=int(object.splats->GetSplats().size());
-            if(!Result(device,device.SetVertexBuffer(command,resource.vertices),"bind Gaussian vertices",error) ||
-               !Result(device,device.SetIndexBuffer(command,order.indices,GpuIndexType::UInt32),"bind Gaussian order",error) ||
-               !Result(device,device.SetGraphicsParameters(command,&parameters,sizeof(parameters)),"bind Gaussian parameters",error) ||
-               !Result(device,device.DrawIndexed(command,points*6),"draw Gaussian densities",error)) return false;
+            if(!Result(device,device.SetGraphicsParameters(command,&parameters,sizeof(parameters)),
+                       "bind Gaussian parameters",error)) return false;
+            if(splat_storage) {
+                if(!Result(device,device.SetVertexStorageBuffer(command,0,resource.vertices),"bind Gaussian source",error) ||
+                   !Result(device,device.SetVertexStorageBuffer(command,1,order.indices),"bind Gaussian order",error) ||
+                   !Result(device,device.DrawInstanced(command,4,points),"draw Gaussian instances",error)) return false;
+            }
+            else if(!Result(device,device.SetVertexBuffer(command,resource.vertices),"bind Gaussian vertices",error) ||
+                    !Result(device,device.SetIndexBuffer(command,order.indices,GpuIndexType::UInt32),"bind Gaussian order",error) ||
+                    !Result(device,device.DrawIndexed(command,points*6),"draw Gaussian densities",error)) return false;
             ++draws;++state->stats.splat_draws_last_frame;
             state->stats.splats_last_frame+=points;
             return true;
@@ -160,7 +186,8 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
         const auto parameters=Parameters(view_projection,object.world,object.inverse_world,
             object.r,object.g,object.b,object.a,object.opacity,object.material,state->options.lighting);
         if(object.material.color_texture) ++textured_draws;
-        return draw(meshes.find(object.mesh.get())->second,entry.pipeline,entry.texture,kind==1,parameters);
+        const bool lines=kind==1 || !object.mesh->GetViewportOutline().empty();
+        return draw(meshes.find(object.mesh.get())->second,entry.pipeline,entry.texture,lines,parameters);
     };
     for(const auto& entry:opaque) if(!surface(entry)) return fail();
 
@@ -175,7 +202,29 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
         if(state->options.show_grid && !draw(grid,helper,neutral,false,flat)) return fail();
         if(state->options.show_axes && !draw(axes,helper,neutral,false,flat)) return fail();
     }
-    for(const auto& entry:blended) if(!surface(entry)) return fail();
+    if(show_origin && grid_origin.index_count) {
+        GpuPipelineId guide;
+        if(!EnsurePipeline(device, target.color_format, 0, true, false, false, guide, error)) return fail();
+        const auto identity = Scene3DMatrix::Identity();
+        Scene3DMaterial material;
+        material.alpha_mode = Scene3DAlphaMode::Blend;
+        const auto flat = Parameters(identity, identity, identity, 1, 1, 1, 1, 1, material, false);
+        if(!draw(grid_origin, guide, neutral, false, flat)) return fail();
+    }
+    uint32 segment=0;
+    auto draw_gaussians=[&] {
+        if(!DrawGlobalSplats(device,command,current,segment++,frame.size,error)) return false;
+        ++draws; ++state->stats.splat_draws_last_frame;
+        return true;
+    };
+    for(const auto& entry:blended) {
+        if(global_order && !draw_gaussians()) return fail();
+        if(!surface(entry)) return fail();
+    }
+    if(global_order) {
+        if(!draw_gaussians()) return fail();
+        state->stats.splats_last_frame=int(global_splats.count);
+    }
 
     auto outline=[&](const Scene3DObject& object,Rgba8 color) {
         GpuPipelineId pipeline;
@@ -189,7 +238,8 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
     };
     if(!state->options.wireframe && state->options.solid_edges && scene)
         for(const auto& object:scene->GetObjects())
-            if(object.visible && object.mesh && object.opacity>0 && !outline(object,state->options.edge_color)) return fail();
+            if(object.visible && object.mesh && object.opacity>0 && object.mesh->GetViewportOutline().empty() &&
+               !outline(object,state->options.edge_color)) return fail();
     if(state->options.show_selection && scene)
         for(const auto& object:scene->GetObjects())
             if(object.visible && object.mesh && object.opacity>0 && object.selection_outline &&
@@ -197,6 +247,7 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
     if(!Result(device,device.EndRenderPass(command),"end scene pass",error) ||
        !Result(device,device.EndCommands(command),"end scene commands",error) ||
        !Result(device,device.Submit(command),"submit scene commands",error)) return fail();
+    if(global_order) CommitGlobalSplatOrder();
     if(!DrawGate(device,target,error) || !Resolve(device,frame,error)) return false;
     ++state->stats.rendered_frames;
     state->stats.target_size=frame.size; state->stats.draws_last_frame=draws;
@@ -208,12 +259,14 @@ bool ViewContent::Render(GpuDevice& device,const GpuFrameInfo& frame,String& err
 void ViewContent::Close(GpuDevice& device)
 {
     gate_renderer.reset();
+    CloseGlobalSplats(device);
     CloseSplats(device);
     for(auto& entry:meshes) ReleaseMesh(device,entry.second);
     meshes.clear(); cached_scene.reset();
     for(auto& entry:textures) device.DestroyTexture(entry.second.texture);
     textures.clear();
-    ReleaseMesh(device,grid); ReleaseMesh(device,axes);
+    ReleaseMesh(device,grid); ReleaseMesh(device,axes); ReleaseMesh(device,grid_origin);
+    grid_origin_camera = grid_origin_layout = 0;
     for(const auto& entry:pipelines) device.DestroyPipeline(entry.second);
     pipelines.clear();
     for(auto* texture:{&depth,&working_color,&white_texture}) {
